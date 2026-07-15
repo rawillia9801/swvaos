@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const dogs = sqliteTable("dogs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -68,12 +68,39 @@ export const puppies = sqliteTable("puppies", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [index("puppies_litter_idx").on(table.litterId)]);
 
+export const paymentPlans = sqliteTable("payment_plans", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  buyerId: integer("buyer_id").notNull().references(() => buyers.id, { onDelete: "cascade" }),
+  name: text("name").notNull().default("Puppy payment plan"),
+  totalAmountCents: integer("total_amount_cents").notNull(),
+  paymentAmountCents: integer("payment_amount_cents").notNull(),
+  termCount: integer("term_count").notNull(),
+  frequency: text("frequency").notNull().default("Monthly"),
+  startDate: text("start_date"),
+  nextDueDate: text("next_due_date"),
+  onTimeCreditCents: integer("on_time_credit_cents").notNull().default(0),
+  creditEligible: integer("credit_eligible", { mode: "boolean" }).notNull().default(true),
+  status: text("status").notNull().default("Active"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("payment_plans_buyer_idx").on(table.buyerId),
+  index("payment_plans_status_idx").on(table.status),
+]);
+
+export const paymentPlanPuppies = sqliteTable("payment_plan_puppies", {
+  paymentPlanId: integer("payment_plan_id").notNull().references(() => paymentPlans.id, { onDelete: "cascade" }),
+  puppyId: integer("puppy_id").notNull().references(() => puppies.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.paymentPlanId, table.puppyId] })]);
+
 export const transactions = sqliteTable("transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   type: text("type").notNull(),
   buyerId: integer("buyer_id").references(() => buyers.id, { onDelete: "set null" }),
   litterId: integer("litter_id").references(() => litters.id, { onDelete: "set null" }),
   puppyId: integer("puppy_id").references(() => puppies.id, { onDelete: "set null" }),
+  paymentPlanId: integer("payment_plan_id").references(() => paymentPlans.id, { onDelete: "set null" }),
   category: text("category"),
   description: text("description").notNull(),
   amountCents: integer("amount_cents").notNull(),
@@ -85,6 +112,29 @@ export const transactions = sqliteTable("transactions", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [index("transactions_type_idx").on(table.type)]);
+
+export const buyerDocuments = sqliteTable("buyer_documents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  buyerId: integer("buyer_id").notNull().references(() => buyers.id, { onDelete: "cascade" }),
+  paymentPlanId: integer("payment_plan_id").references(() => paymentPlans.id, { onDelete: "set null" }),
+  documentType: text("document_type").notNull(),
+  title: text("title").notNull(),
+  objectKey: text("object_key").notNull().unique(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("buyer_documents_buyer_idx").on(table.buyerId),
+  index("buyer_documents_plan_idx").on(table.paymentPlanId),
+]);
+
+export const buyerDocumentPuppies = sqliteTable("buyer_document_puppies", {
+  documentId: integer("document_id").notNull().references(() => buyerDocuments.id, { onDelete: "cascade" }),
+  puppyId: integer("puppy_id").notNull().references(() => puppies.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.documentId, table.puppyId] })]);
 
 export const events = sqliteTable("events", {
   id: integer("id").primaryKey({ autoIncrement: true }),

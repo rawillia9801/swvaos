@@ -558,6 +558,76 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .heading-actions { color: var(--muted); font-size: 8px; }
 .data-date { padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: white; }
 
+.row-actions .records-link { color: #23684f; background: #eef8f3; border-radius: 6px; padding-inline: 7px; }
+.buyer-record-backdrop { padding: 18px; }
+.buyer-record-modal { width: min(1080px, 100%); max-height: calc(100vh - 36px); overflow: hidden; border-radius: 14px; background: #f6f6f1; box-shadow: 0 28px 80px rgba(15,32,28,.28); display: flex; flex-direction: column; }
+.buyer-record-header { min-height: 92px; padding: 18px 22px; background: var(--forest); color: white; display: flex; align-items: center; justify-content: space-between; }
+.buyer-record-header > button { width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.2); border-radius: 50%; background: rgba(255,255,255,.07); color: white; font-size: 20px; cursor: pointer; }
+.buyer-record-identity { display: flex; align-items: center; gap: 13px; }
+.buyer-record-identity .avatar { width: 49px; height: 49px; font-size: 12px; }
+.buyer-record-identity h2 { margin: 2px 0 0; font: 500 25px Georgia, serif; }
+.buyer-record-identity p:last-child { color: #b9ccc6; font-size: 9px; margin: 5px 0 0; }
+.buyer-record-body { overflow-y: auto; padding: 17px; display: flex; flex-direction: column; gap: 14px; }
+.buyer-record-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.buyer-record-stats > div { min-height: 82px; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: white; display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 10px; }
+.buyer-record-stats small { grid-column: 1/-1; color: var(--muted); font-size: 7px; letter-spacing: .9px; }
+.buyer-record-stats b { font: 500 25px Georgia, serif; }
+.buyer-record-stats span { color: var(--muted); font-size: 8px; line-height: 1.4; }
+.buyer-record-section { padding: 17px; border: 1px solid var(--line); border-radius: 11px; background: white; }
+.buyer-record-section .section-heading { margin-bottom: 13px; }
+.buyer-puppy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.buyer-puppy-grid article { padding: 9px; border: 1px solid #e3e9e5; border-radius: 8px; background: #fbfcfa; display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; align-items: center; }
+.buyer-puppy-grid .record-mark { width: 34px; height: 34px; }
+.buyer-puppy-grid article > div { display: flex; flex-direction: column; gap: 3px; }
+.buyer-puppy-grid b { font-size: 9px; }
+.buyer-puppy-grid small { color: var(--muted); font-size: 7px; }
+.buyer-puppy-grid button { border: 0; background: transparent; color: var(--forest); font-size: 8px; font-weight: 700; cursor: pointer; }
+.buyer-plan-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.buyer-plan-card { padding: 14px; border: 1px solid #dfe7e2; border-radius: 10px; background: #fbfcfa; }
+.plan-card-top { display: flex; justify-content: space-between; gap: 12px; }
+.plan-card-top h3 { margin: 8px 0 0; font: 500 17px Georgia, serif; }
+.plan-card-top p { margin: 4px 0 0; color: var(--muted); font-size: 8px; }
+.plan-card-top > strong { font: 500 20px Georgia, serif; text-align: right; white-space: nowrap; }
+.plan-card-top > strong small { display: block; color: var(--muted); font: 700 7px Arial, sans-serif; text-transform: uppercase; margin-top: 3px; }
+.plan-progress { margin: 13px 0; }
+.plan-progress > span { height: 7px; border-radius: 999px; background: #e6ece8; display: block; overflow: hidden; }
+.plan-progress i { height: 100%; border-radius: inherit; background: #58a482; display: block; }
+.plan-progress small { display: block; margin-top: 5px; color: var(--muted); font-size: 7px; }
+.buyer-plan-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 13px; }
+.buyer-plan-card dl div { padding: 7px; border-radius: 6px; background: white; }
+.buyer-plan-card dt { color: var(--muted); font-size: 7px; }
+.buyer-plan-card dd { margin: 3px 0 0; font-size: 8px; }
+.document-upload-form { margin-bottom: 14px; padding: 14px; border: 1px solid #dfe7e2; border-radius: 9px; background: #fafbf9; }
+.document-puppy-picker { margin: 0 0 13px; padding: 11px; border: 1px solid #d7dfdb; border-radius: 7px; }
+.document-puppy-picker legend { padding: 0 5px; color: #5d6b66; font-size: 9px; font-weight: 700; }
+.document-puppy-picker label { margin: 6px 0 0; padding: 7px; border: 1px solid #e4e9e6; border-radius: 6px; background: white; display: inline-flex; flex-direction: row; align-items: center; gap: 7px; width: calc(50% - 5px); }
+.document-puppy-picker label:nth-of-type(even) { margin-left: 7px; }
+.document-puppy-picker input { width: auto; }
+.document-puppy-picker span { color: var(--ink) !important; display: flex; flex-direction: column; gap: 2px; }
+.document-puppy-picker small { color: var(--muted); font-size: 7px; font-weight: 400; }
+.upload-help { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.upload-help > span { color: var(--muted); font-size: 8px; }
+.inline-error { padding: 10px 12px; border: 1px solid #e7c9c1; border-radius: 8px; background: #fff7f5; color: #793e32; font-size: 9px; }
+.document-list { display: flex; flex-direction: column; gap: 8px; }
+.document-list article { padding: 10px; border: 1px solid #e3e9e5; border-radius: 8px; display: grid; grid-template-columns: 42px 1fr auto; gap: 10px; align-items: center; }
+.document-icon { width: 40px; height: 40px; border-radius: 8px; background: var(--mint); color: var(--forest); display: grid; place-items: center; font-size: 8px; font-weight: 800; }
+.document-list h3 { margin: 5px 0 0; font-size: 10px; }
+.document-list p { margin: 4px 0 0; color: var(--muted); font-size: 8px; }
+.document-list article > div > small { display: block; margin-top: 4px; color: #708079; font-size: 7px; }
+.document-actions { display: flex; align-items: center; gap: 7px; }
+.document-actions a, .document-actions button { border: 0; background: transparent; color: var(--forest); font-size: 8px; font-weight: 700; text-decoration: none; cursor: pointer; padding: 5px; }
+.payment-plans-overview { overflow: hidden; }
+.plan-overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.plan-overview-grid article { padding: 13px; border: 1px solid #e2e8e4; border-radius: 9px; background: #fbfcfa; display: flex; flex-direction: column; gap: 11px; }
+.plan-overview-grid h3 { margin: 8px 0 0; font: 500 16px Georgia, serif; }
+.plan-overview-grid p { margin: 4px 0 0; color: var(--muted); font-size: 8px; }
+.plan-overview-grid dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.plan-overview-grid dl div { padding: 7px; border-radius: 6px; background: white; }
+.plan-overview-grid dt { color: var(--muted); font-size: 7px; }
+.plan-overview-grid dd { margin: 3px 0 0; font-size: 8px; }
+.multi-select-field select { padding: 6px; min-height: 74px; }
+.multi-select-field small { color: var(--muted); font-size: 7px; }
+
 @media (max-width: 1180px) {
   .sidebar { width: 210px; }
   .main { margin-left: 210px; }
@@ -568,6 +638,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .portal-hero { padding-inline: 35px; }
   .real-dog-grid { grid-template-columns: 1fr 1fr; }
   .real-finance-metrics { grid-template-columns: 1fr 1fr; }
+  .plan-overview-grid { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 920px) {
@@ -664,6 +735,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .full-field { grid-column: 1; }
   .data-modal { max-height: calc(100vh - 18px); }
+  .buyer-record-backdrop { padding: 8px; }
+  .buyer-record-modal { max-height: calc(100vh - 16px); }
+  .buyer-record-header { padding: 15px; }
+  .buyer-record-identity h2 { font-size: 20px; }
+  .buyer-record-stats, .buyer-puppy-grid, .buyer-plan-list, .plan-overview-grid { grid-template-columns: 1fr; }
+  .buyer-record-body { padding: 10px; }
+  .buyer-record-section { padding: 12px; }
+  .document-puppy-picker label { width: 100%; }
+  .document-puppy-picker label:nth-of-type(even) { margin-left: 0; }
+  .document-list article { grid-template-columns: 38px 1fr; }
+  .document-actions { grid-column: 2; }
+  .upload-help { align-items: stretch; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; } }

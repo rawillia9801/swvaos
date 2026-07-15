@@ -107,6 +107,19 @@ the endpoint. Operational CRUD continues to use the existing D1 database until
 the Supabase tables, authentication, and row-level-security policies are
 explicitly migrated together.
 
+## Buyer Documents and Payment Plans
+
+Buyer records can store scanned Bills of Sale, Health Guarantees, payment-plan
+agreements, and other PDF or image documents. File bytes are kept in the
+private `DOCUMENTS` object-storage binding while D1 stores buyer, puppy, litter,
+payment-plan, and document associations. A single buyer or payment plan can be
+connected to multiple puppies from different litters.
+
+Payment plans support contract and installment amounts, number and frequency of
+payments, due dates, progress from linked transactions, and a conditional
+on-time completion credit. Supported uploads are PDF, JPG, PNG, and WebP files
+up to 20 MB.
+
 ## Learn More
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)

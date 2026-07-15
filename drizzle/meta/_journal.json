@@ -15,6 +15,13 @@
       "when": 1784067352340,
       "tag": "0001_empty_moira_mactaggert",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784141984738,
+      "tag": "0002_even_maelstrom",
+      "breakpoints": true
     }
   ]
 }

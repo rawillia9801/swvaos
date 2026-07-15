@@ -5,6 +5,7 @@ import handler from "vinext/server/app-router-entry";
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  DOCUMENTS: R2Bucket;
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   IMAGES: {
