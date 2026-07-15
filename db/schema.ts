@@ -12,12 +12,52 @@ export const dogs = sqliteTable("dogs", {
   registrationNumber: text("registration_number"),
   microchipNumber: text("microchip_number"),
   healthTesting: text("health_testing"),
+  acquiredFrom: text("acquired_from"),
+  acquisitionDate: text("acquisition_date"),
+  purchasePriceCents: integer("purchase_price_cents"),
+  acquisitionNotes: text("acquisition_notes"),
   status: text("status").notNull().default("Active"),
   nextHeatDate: text("next_heat_date"),
   notes: text("notes"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [index("dogs_name_idx").on(table.name)]);
+
+export const dogMedicalRecords = sqliteTable("dog_medical_records", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dogId: integer("dog_id").notNull().references(() => dogs.id, { onDelete: "cascade" }),
+  recordType: text("record_type").notNull(),
+  title: text("title").notNull(),
+  recordDate: text("record_date"),
+  provider: text("provider"),
+  costCents: integer("cost_cents").notNull().default(0),
+  nextDueDate: text("next_due_date"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("dog_medical_records_dog_idx").on(table.dogId),
+  index("dog_medical_records_date_idx").on(table.recordDate),
+]);
+
+export const dogDocuments = sqliteTable("dog_documents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dogId: integer("dog_id").notNull().references(() => dogs.id, { onDelete: "cascade" }),
+  documentType: text("document_type").notNull(),
+  registry: text("registry"),
+  registrationNumber: text("registration_number"),
+  title: text("title").notNull(),
+  objectKey: text("object_key").notNull().unique(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("dog_documents_dog_idx").on(table.dogId),
+  index("dog_documents_type_idx").on(table.documentType),
+]);
 
 export const buyers = sqliteTable("buyers", {
   id: integer("id").primaryKey({ autoIncrement: true }),

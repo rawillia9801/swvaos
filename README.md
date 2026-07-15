@@ -89,7 +89,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 - `npm run dev`: start local development
 - `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
+- `npm test`: build the app and verify the connected breeding-dog records
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
 ## Supabase Connection
@@ -119,6 +119,17 @@ Payment plans support contract and installment amounts, number and frequency of
 payments, due dates, progress from linked transactions, and a conditional
 on-time completion credit. Supported uploads are PDF, JPG, PNG, and WebP files
 up to 20 MB.
+
+## Breeding Dog Profiles
+
+Every breeding dog has a full profile for origin and purchase details, medical
+and vaccination history, linked litters and puppies, and paid puppy-sale
+revenue. Recorded performance is calculated from linked paid sales minus the
+dog's acquisition and recorded medical costs.
+
+Dog profiles can securely store multiple registration certificates (including
+dual registrations), pedigrees, Embark results, OFA results, genetic reports,
+health certificates, and other test documents in PDF or image format.
 
 ## Learn More
 

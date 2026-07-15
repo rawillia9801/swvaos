@@ -1,15 +1,17 @@
 import { env } from "cloudflare:workers";
 
-export type ResourceName = "dogs" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates";
+export type ResourceName = "dogs" | "dog_medical_records" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates";
 export type ResourceInput = Record<string, unknown>;
 
-const resources: ResourceName[] = ["dogs", "litters", "buyers", "puppies", "payment_plans", "transactions", "events", "updates"];
+const resources: ResourceName[] = ["dogs", "dog_medical_records", "litters", "buyers", "puppies", "payment_plans", "transactions", "events", "updates"];
 export function isResource(value: unknown): value is ResourceName {
   return typeof value === "string" && resources.includes(value as ResourceName);
 }
 
 const schemaStatements = [
-  `CREATE TABLE IF NOT EXISTS dogs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, registered_name TEXT, sex TEXT NOT NULL, role TEXT NOT NULL, date_of_birth TEXT, color TEXT, weight REAL, registration_number TEXT, microchip_number TEXT, health_testing TEXT, status TEXT NOT NULL DEFAULT 'Active', next_heat_date TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS dogs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, registered_name TEXT, sex TEXT NOT NULL, role TEXT NOT NULL, date_of_birth TEXT, color TEXT, weight REAL, registration_number TEXT, microchip_number TEXT, health_testing TEXT, acquired_from TEXT, acquisition_date TEXT, purchase_price_cents INTEGER, acquisition_notes TEXT, status TEXT NOT NULL DEFAULT 'Active', next_heat_date TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS dog_medical_records (id INTEGER PRIMARY KEY AUTOINCREMENT, dog_id INTEGER NOT NULL REFERENCES dogs(id) ON DELETE CASCADE, record_type TEXT NOT NULL, title TEXT NOT NULL, record_date TEXT, provider TEXT, cost_cents INTEGER NOT NULL DEFAULT 0, next_due_date TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS dog_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, dog_id INTEGER NOT NULL REFERENCES dogs(id) ON DELETE CASCADE, document_type TEXT NOT NULL, registry TEXT, registration_number TEXT, title TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE, file_name TEXT NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS buyers (id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT NOT NULL, last_name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT, city TEXT, state TEXT, application_status TEXT NOT NULL DEFAULT 'Inquiry', preferred_sex TEXT, preferred_color TEXT, household_notes TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS litters (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, dam_id INTEGER REFERENCES dogs(id) ON DELETE SET NULL, sire_id INTEGER REFERENCES dogs(id) ON DELETE SET NULL, breeding_date TEXT, due_date TEXT, birth_date TEXT, expected_count INTEGER, status TEXT NOT NULL DEFAULT 'Planned', notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS puppies (id INTEGER PRIMARY KEY AUTOINCREMENT, litter_id INTEGER NOT NULL REFERENCES litters(id) ON DELETE CASCADE, buyer_id INTEGER REFERENCES buyers(id) ON DELETE SET NULL, name TEXT NOT NULL, sex TEXT, color TEXT, birth_date TEXT, birth_weight REAL, current_weight REAL, status TEXT NOT NULL DEFAULT 'Available', price_cents INTEGER, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
@@ -21,6 +23,10 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, event_type TEXT NOT NULL, event_date TEXT NOT NULL, event_time TEXT, related_type TEXT, related_id INTEGER, location TEXT, status TEXT NOT NULL DEFAULT 'Scheduled', notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS puppy_updates (id INTEGER PRIMARY KEY AUTOINCREMENT, puppy_id INTEGER NOT NULL REFERENCES puppies(id) ON DELETE CASCADE, title TEXT NOT NULL, body TEXT NOT NULL, week_number INTEGER, weight REAL, published INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS dogs_name_idx ON dogs(name)`,
+  `CREATE INDEX IF NOT EXISTS dog_medical_records_dog_idx ON dog_medical_records(dog_id)`,
+  `CREATE INDEX IF NOT EXISTS dog_medical_records_date_idx ON dog_medical_records(record_date)`,
+  `CREATE INDEX IF NOT EXISTS dog_documents_dog_idx ON dog_documents(dog_id)`,
+  `CREATE INDEX IF NOT EXISTS dog_documents_type_idx ON dog_documents(document_type)`,
   `CREATE INDEX IF NOT EXISTS buyers_email_idx ON buyers(email)`,
   `CREATE INDEX IF NOT EXISTS litters_status_idx ON litters(status)`,
   `CREATE INDEX IF NOT EXISTS puppies_litter_idx ON puppies(litter_id)`,
@@ -39,8 +45,10 @@ export async function ensureDatabase() {
 
 export async function getKennelData() {
   await ensureDatabase();
-  const [dogs, litters, buyers, puppies, paymentPlans, paymentPlanPuppies, transactions, events, updates, buyerDocuments, buyerDocumentPuppies] = await Promise.all([
+  const [dogs, dogMedicalRecords, dogDocuments, litters, buyers, puppies, paymentPlans, paymentPlanPuppies, transactions, events, updates, buyerDocuments, buyerDocumentPuppies] = await Promise.all([
     env.DB.prepare("SELECT * FROM dogs ORDER BY name COLLATE NOCASE").all(),
+    env.DB.prepare("SELECT * FROM dog_medical_records ORDER BY COALESCE(record_date, created_at) DESC").all(),
+    env.DB.prepare("SELECT * FROM dog_documents ORDER BY created_at DESC").all(),
     env.DB.prepare("SELECT * FROM litters ORDER BY COALESCE(due_date, birth_date, breeding_date, created_at) DESC").all(),
     env.DB.prepare("SELECT * FROM buyers ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE").all(),
     env.DB.prepare("SELECT * FROM puppies ORDER BY litter_id DESC, name COLLATE NOCASE").all(),
@@ -56,6 +64,8 @@ export async function getKennelData() {
   const documentLinks = buyerDocumentPuppies.results as { document_id: number; puppy_id: number }[];
   return {
     dogs: dogs.results,
+    dog_medical_records: dogMedicalRecords.results,
+    dog_documents: dogDocuments.results,
     litters: litters.results,
     buyers: buyers.results,
     puppies: puppies.results,
@@ -102,8 +112,11 @@ export async function createResource(resource: ResourceName, data: ResourceInput
   const now = new Date().toISOString();
   switch (resource) {
     case "dogs":
-      return env.DB.prepare("INSERT INTO dogs (name, registered_name, sex, role, date_of_birth, color, weight, registration_number, microchip_number, health_testing, status, next_heat_date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
-        .bind(str(data,"name"), nullable(data,"registered_name"), str(data,"sex"), str(data,"role"), nullable(data,"date_of_birth"), nullable(data,"color"), num(data,"weight"), nullable(data,"registration_number"), nullable(data,"microchip_number"), nullable(data,"health_testing"), str(data,"status") || "Active", nullable(data,"next_heat_date"), nullable(data,"notes"), now, now).first();
+      return env.DB.prepare("INSERT INTO dogs (name, registered_name, sex, role, date_of_birth, color, weight, registration_number, microchip_number, health_testing, acquired_from, acquisition_date, purchase_price_cents, acquisition_notes, status, next_heat_date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
+        .bind(str(data,"name"), nullable(data,"registered_name"), str(data,"sex"), str(data,"role"), nullable(data,"date_of_birth"), nullable(data,"color"), num(data,"weight"), nullable(data,"registration_number"), nullable(data,"microchip_number"), nullable(data,"health_testing"), nullable(data,"acquired_from"), nullable(data,"acquisition_date"), cents(data,"purchase_price") || null, nullable(data,"acquisition_notes"), str(data,"status") || "Active", nullable(data,"next_heat_date"), nullable(data,"notes"), now, now).first();
+    case "dog_medical_records":
+      return env.DB.prepare("INSERT INTO dog_medical_records (dog_id, record_type, title, record_date, provider, cost_cents, next_due_date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
+        .bind(id(data,"dog_id"), str(data,"record_type"), str(data,"title"), nullable(data,"record_date"), nullable(data,"provider"), cents(data,"cost"), nullable(data,"next_due_date"), nullable(data,"notes"), now, now).first();
     case "litters":
       return env.DB.prepare("INSERT INTO litters (name, dam_id, sire_id, breeding_date, due_date, birth_date, expected_count, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
         .bind(str(data,"name"), id(data,"dam_id"), id(data,"sire_id"), nullable(data,"breeding_date"), nullable(data,"due_date"), nullable(data,"birth_date"), num(data,"expected_count"), str(data,"status") || "Planned", nullable(data,"notes"), now, now).first();
@@ -143,8 +156,11 @@ export async function updateResource(resource: ResourceName, recordId: number, d
   const now = new Date().toISOString();
   switch (resource) {
     case "dogs":
-      return env.DB.prepare("UPDATE dogs SET name=?, registered_name=?, sex=?, role=?, date_of_birth=?, color=?, weight=?, registration_number=?, microchip_number=?, health_testing=?, status=?, next_heat_date=?, notes=?, updated_at=? WHERE id=? RETURNING *")
-        .bind(str(data,"name"), nullable(data,"registered_name"), str(data,"sex"), str(data,"role"), nullable(data,"date_of_birth"), nullable(data,"color"), num(data,"weight"), nullable(data,"registration_number"), nullable(data,"microchip_number"), nullable(data,"health_testing"), str(data,"status") || "Active", nullable(data,"next_heat_date"), nullable(data,"notes"), now, recordId).first();
+      return env.DB.prepare("UPDATE dogs SET name=?, registered_name=?, sex=?, role=?, date_of_birth=?, color=?, weight=?, registration_number=?, microchip_number=?, health_testing=?, acquired_from=?, acquisition_date=?, purchase_price_cents=?, acquisition_notes=?, status=?, next_heat_date=?, notes=?, updated_at=? WHERE id=? RETURNING *")
+        .bind(str(data,"name"), nullable(data,"registered_name"), str(data,"sex"), str(data,"role"), nullable(data,"date_of_birth"), nullable(data,"color"), num(data,"weight"), nullable(data,"registration_number"), nullable(data,"microchip_number"), nullable(data,"health_testing"), nullable(data,"acquired_from"), nullable(data,"acquisition_date"), cents(data,"purchase_price") || null, nullable(data,"acquisition_notes"), str(data,"status") || "Active", nullable(data,"next_heat_date"), nullable(data,"notes"), now, recordId).first();
+    case "dog_medical_records":
+      return env.DB.prepare("UPDATE dog_medical_records SET dog_id=?, record_type=?, title=?, record_date=?, provider=?, cost_cents=?, next_due_date=?, notes=?, updated_at=? WHERE id=? RETURNING *")
+        .bind(id(data,"dog_id"), str(data,"record_type"), str(data,"title"), nullable(data,"record_date"), nullable(data,"provider"), cents(data,"cost"), nullable(data,"next_due_date"), nullable(data,"notes"), now, recordId).first();
     case "litters":
       return env.DB.prepare("UPDATE litters SET name=?, dam_id=?, sire_id=?, breeding_date=?, due_date=?, birth_date=?, expected_count=?, status=?, notes=?, updated_at=? WHERE id=? RETURNING *")
         .bind(str(data,"name"), id(data,"dam_id"), id(data,"sire_id"), nullable(data,"breeding_date"), nullable(data,"due_date"), nullable(data,"birth_date"), num(data,"expected_count"), str(data,"status") || "Planned", nullable(data,"notes"), now, recordId).first();
@@ -185,8 +201,12 @@ export async function deleteResource(resource: ResourceName, recordId: number) {
     const documents = await env.DB.prepare("SELECT COUNT(*) AS count FROM buyer_documents WHERE buyer_id = ?").bind(recordId).first<{ count: number }>();
     if (Number(documents?.count) > 0) throw new Error("Delete this buyer's stored documents before deleting the buyer record.");
   }
+  if (resource === "dogs") {
+    const documents = await env.DB.prepare("SELECT COUNT(*) AS count FROM dog_documents WHERE dog_id = ?").bind(recordId).first<{ count: number }>();
+    if (Number(documents?.count) > 0) throw new Error("Delete this dog's stored documents before deleting the dog record.");
+  }
   const table = resource === "updates" ? "puppy_updates" : resource;
-  const allowedTables = ["dogs", "litters", "buyers", "puppies", "payment_plans", "transactions", "events", "puppy_updates"];
+  const allowedTables = ["dogs", "dog_medical_records", "litters", "buyers", "puppies", "payment_plans", "transactions", "events", "puppy_updates"];
   if (!allowedTables.includes(table)) throw new Error("Unsupported resource");
   await env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(recordId).run();
 }
