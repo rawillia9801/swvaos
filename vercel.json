@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "node scripts/build-vercel-redirect.mjs",
+  "outputDirectory": "vercel-static",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "destination": "https://southwest-virginia-chihuahua-os.dswillia74.chatgpt.site/:path*",
+      "permanent": false
+    }
+  ]
+}

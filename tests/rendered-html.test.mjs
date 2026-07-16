@@ -55,3 +55,17 @@ test("persists dog medical records and private documents", async () => {
   assert.match(registrationsMigration, /CREATE TABLE `dog_registrations`/);
   assert.match(registrationsMigration, /ALTER TABLE `transactions` ADD `dog_id`/);
 });
+
+test("provides a safe Vercel handoff to the private Cloudflare application", async () => {
+  const [configuration, redirectBuilder] = await Promise.all([
+    readFile(new URL("vercel.json", root), "utf8"),
+    readFile(new URL("scripts/build-vercel-redirect.mjs", root), "utf8"),
+  ]);
+
+  const vercel = JSON.parse(configuration);
+  assert.equal(vercel.framework, null);
+  assert.equal(vercel.outputDirectory, "vercel-static");
+  assert.equal(vercel.buildCommand, "node scripts/build-vercel-redirect.mjs");
+  assert.match(vercel.redirects[0].destination, /southwest-virginia-chihuahua-os\.dswillia74\.chatgpt\.site/);
+  assert.match(redirectBuilder, /Southwest Virginia Operating System/);
+});
