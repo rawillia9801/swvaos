@@ -40,9 +40,22 @@ export const dogMedicalRecords = sqliteTable("dog_medical_records", {
   index("dog_medical_records_date_idx").on(table.recordDate),
 ]);
 
+export const dogRegistrations = sqliteTable("dog_registrations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dogId: integer("dog_id").notNull().references(() => dogs.id, { onDelete: "cascade" }),
+  registry: text("registry").notNull(),
+  registrationNumber: text("registration_number").notNull(),
+  registeredName: text("registered_name"),
+  issueDate: text("issue_date"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [index("dog_registrations_dog_idx").on(table.dogId)]);
+
 export const dogDocuments = sqliteTable("dog_documents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   dogId: integer("dog_id").notNull().references(() => dogs.id, { onDelete: "cascade" }),
+  registrationId: integer("registration_id").references(() => dogRegistrations.id, { onDelete: "set null" }),
   documentType: text("document_type").notNull(),
   registry: text("registry"),
   registrationNumber: text("registration_number"),
@@ -56,6 +69,7 @@ export const dogDocuments = sqliteTable("dog_documents", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   index("dog_documents_dog_idx").on(table.dogId),
+  index("dog_documents_registration_idx").on(table.registrationId),
   index("dog_documents_type_idx").on(table.documentType),
 ]);
 
@@ -137,6 +151,7 @@ export const paymentPlanPuppies = sqliteTable("payment_plan_puppies", {
 export const transactions = sqliteTable("transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   type: text("type").notNull(),
+  dogId: integer("dog_id").references(() => dogs.id, { onDelete: "set null" }),
   buyerId: integer("buyer_id").references(() => buyers.id, { onDelete: "set null" }),
   litterId: integer("litter_id").references(() => litters.id, { onDelete: "set null" }),
   puppyId: integer("puppy_id").references(() => puppies.id, { onDelete: "set null" }),

@@ -131,6 +131,15 @@ Dog profiles can securely store multiple registration certificates (including
 dual registrations), pedigrees, Embark results, OFA results, genetic reports,
 health certificates, and other test documents in PDF or image format.
 
+Each dog can also have multiple structured registry records (for example AKC,
+CKC, or UKC), with uploaded certificates linked to the matching registry.
+Ledger costs can be assigned directly to a dog and are included with acquisition
+and medical costs on the dog card and full performance profile.
+
+The Reminders panel includes upcoming birthdays for puppies with both a birth
+date and assigned buyer, helping the kennel plan cards, family check-ins, and
+other marketing follow-up.
+
 ## Learn More
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)

@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
 
-export type ResourceName = "dogs" | "dog_medical_records" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates";
+export type ResourceName = "dogs" | "dog_medical_records" | "dog_registrations" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates";
 export type ResourceInput = Record<string, unknown>;
 
-const resources: ResourceName[] = ["dogs", "dog_medical_records", "litters", "buyers", "puppies", "payment_plans", "transactions", "events", "updates"];
+const resources: ResourceName[] = ["dogs", "dog_medical_records", "dog_registrations", "litters", "buyers", "puppies", "payment_plans", "transactions", "events", "updates"];
 export function isResource(value: unknown): value is ResourceName {
   return typeof value === "string" && resources.includes(value as ResourceName);
 }
@@ -11,13 +11,14 @@ export function isResource(value: unknown): value is ResourceName {
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS dogs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, registered_name TEXT, sex TEXT NOT NULL, role TEXT NOT NULL, date_of_birth TEXT, color TEXT, weight REAL, registration_number TEXT, microchip_number TEXT, health_testing TEXT, acquired_from TEXT, acquisition_date TEXT, purchase_price_cents INTEGER, acquisition_notes TEXT, status TEXT NOT NULL DEFAULT 'Active', next_heat_date TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS dog_medical_records (id INTEGER PRIMARY KEY AUTOINCREMENT, dog_id INTEGER NOT NULL REFERENCES dogs(id) ON DELETE CASCADE, record_type TEXT NOT NULL, title TEXT NOT NULL, record_date TEXT, provider TEXT, cost_cents INTEGER NOT NULL DEFAULT 0, next_due_date TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS dog_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, dog_id INTEGER NOT NULL REFERENCES dogs(id) ON DELETE CASCADE, document_type TEXT NOT NULL, registry TEXT, registration_number TEXT, title TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE, file_name TEXT NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS dog_registrations (id INTEGER PRIMARY KEY AUTOINCREMENT, dog_id INTEGER NOT NULL REFERENCES dogs(id) ON DELETE CASCADE, registry TEXT NOT NULL, registration_number TEXT NOT NULL, registered_name TEXT, issue_date TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS dog_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, dog_id INTEGER NOT NULL REFERENCES dogs(id) ON DELETE CASCADE, registration_id INTEGER REFERENCES dog_registrations(id) ON DELETE SET NULL, document_type TEXT NOT NULL, registry TEXT, registration_number TEXT, title TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE, file_name TEXT NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS buyers (id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT NOT NULL, last_name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT, city TEXT, state TEXT, application_status TEXT NOT NULL DEFAULT 'Inquiry', preferred_sex TEXT, preferred_color TEXT, household_notes TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS litters (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, dam_id INTEGER REFERENCES dogs(id) ON DELETE SET NULL, sire_id INTEGER REFERENCES dogs(id) ON DELETE SET NULL, breeding_date TEXT, due_date TEXT, birth_date TEXT, expected_count INTEGER, status TEXT NOT NULL DEFAULT 'Planned', notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS puppies (id INTEGER PRIMARY KEY AUTOINCREMENT, litter_id INTEGER NOT NULL REFERENCES litters(id) ON DELETE CASCADE, buyer_id INTEGER REFERENCES buyers(id) ON DELETE SET NULL, name TEXT NOT NULL, sex TEXT, color TEXT, birth_date TEXT, birth_weight REAL, current_weight REAL, status TEXT NOT NULL DEFAULT 'Available', price_cents INTEGER, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS payment_plans (id INTEGER PRIMARY KEY AUTOINCREMENT, buyer_id INTEGER NOT NULL REFERENCES buyers(id) ON DELETE CASCADE, name TEXT NOT NULL DEFAULT 'Puppy payment plan', total_amount_cents INTEGER NOT NULL, payment_amount_cents INTEGER NOT NULL, term_count INTEGER NOT NULL, frequency TEXT NOT NULL DEFAULT 'Monthly', start_date TEXT, next_due_date TEXT, on_time_credit_cents INTEGER NOT NULL DEFAULT 0, credit_eligible INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'Active', notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS payment_plan_puppies (payment_plan_id INTEGER NOT NULL REFERENCES payment_plans(id) ON DELETE CASCADE, puppy_id INTEGER NOT NULL REFERENCES puppies(id) ON DELETE CASCADE, PRIMARY KEY (payment_plan_id, puppy_id))`,
-  `CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, buyer_id INTEGER REFERENCES buyers(id) ON DELETE SET NULL, litter_id INTEGER REFERENCES litters(id) ON DELETE SET NULL, puppy_id INTEGER REFERENCES puppies(id) ON DELETE SET NULL, payment_plan_id INTEGER REFERENCES payment_plans(id) ON DELETE SET NULL, category TEXT, description TEXT NOT NULL, amount_cents INTEGER NOT NULL, due_date TEXT, paid_date TEXT, status TEXT NOT NULL DEFAULT 'Pending', method TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, dog_id INTEGER REFERENCES dogs(id) ON DELETE SET NULL, buyer_id INTEGER REFERENCES buyers(id) ON DELETE SET NULL, litter_id INTEGER REFERENCES litters(id) ON DELETE SET NULL, puppy_id INTEGER REFERENCES puppies(id) ON DELETE SET NULL, payment_plan_id INTEGER REFERENCES payment_plans(id) ON DELETE SET NULL, category TEXT, description TEXT NOT NULL, amount_cents INTEGER NOT NULL, due_date TEXT, paid_date TEXT, status TEXT NOT NULL DEFAULT 'Pending', method TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS buyer_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, buyer_id INTEGER NOT NULL REFERENCES buyers(id) ON DELETE CASCADE, payment_plan_id INTEGER REFERENCES payment_plans(id) ON DELETE SET NULL, document_type TEXT NOT NULL, title TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE, file_name TEXT NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS buyer_document_puppies (document_id INTEGER NOT NULL REFERENCES buyer_documents(id) ON DELETE CASCADE, puppy_id INTEGER NOT NULL REFERENCES puppies(id) ON DELETE CASCADE, PRIMARY KEY (document_id, puppy_id))`,
   `CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, event_type TEXT NOT NULL, event_date TEXT NOT NULL, event_time TEXT, related_type TEXT, related_id INTEGER, location TEXT, status TEXT NOT NULL DEFAULT 'Scheduled', notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
@@ -25,7 +26,9 @@ const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS dogs_name_idx ON dogs(name)`,
   `CREATE INDEX IF NOT EXISTS dog_medical_records_dog_idx ON dog_medical_records(dog_id)`,
   `CREATE INDEX IF NOT EXISTS dog_medical_records_date_idx ON dog_medical_records(record_date)`,
+  `CREATE INDEX IF NOT EXISTS dog_registrations_dog_idx ON dog_registrations(dog_id)`,
   `CREATE INDEX IF NOT EXISTS dog_documents_dog_idx ON dog_documents(dog_id)`,
+  `CREATE INDEX IF NOT EXISTS dog_documents_registration_idx ON dog_documents(registration_id)`,
   `CREATE INDEX IF NOT EXISTS dog_documents_type_idx ON dog_documents(document_type)`,
   `CREATE INDEX IF NOT EXISTS buyers_email_idx ON buyers(email)`,
   `CREATE INDEX IF NOT EXISTS litters_status_idx ON litters(status)`,
@@ -45,9 +48,10 @@ export async function ensureDatabase() {
 
 export async function getKennelData() {
   await ensureDatabase();
-  const [dogs, dogMedicalRecords, dogDocuments, litters, buyers, puppies, paymentPlans, paymentPlanPuppies, transactions, events, updates, buyerDocuments, buyerDocumentPuppies] = await Promise.all([
+  const [dogs, dogMedicalRecords, dogRegistrations, dogDocuments, litters, buyers, puppies, paymentPlans, paymentPlanPuppies, transactions, events, updates, buyerDocuments, buyerDocumentPuppies] = await Promise.all([
     env.DB.prepare("SELECT * FROM dogs ORDER BY name COLLATE NOCASE").all(),
     env.DB.prepare("SELECT * FROM dog_medical_records ORDER BY COALESCE(record_date, created_at) DESC").all(),
+    env.DB.prepare("SELECT * FROM dog_registrations ORDER BY registry COLLATE NOCASE, registration_number COLLATE NOCASE").all(),
     env.DB.prepare("SELECT * FROM dog_documents ORDER BY created_at DESC").all(),
     env.DB.prepare("SELECT * FROM litters ORDER BY COALESCE(due_date, birth_date, breeding_date, created_at) DESC").all(),
     env.DB.prepare("SELECT * FROM buyers ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE").all(),
@@ -65,6 +69,7 @@ export async function getKennelData() {
   return {
     dogs: dogs.results,
     dog_medical_records: dogMedicalRecords.results,
+    dog_registrations: dogRegistrations.results,
     dog_documents: dogDocuments.results,
     litters: litters.results,
     buyers: buyers.results,
@@ -117,6 +122,9 @@ export async function createResource(resource: ResourceName, data: ResourceInput
     case "dog_medical_records":
       return env.DB.prepare("INSERT INTO dog_medical_records (dog_id, record_type, title, record_date, provider, cost_cents, next_due_date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
         .bind(id(data,"dog_id"), str(data,"record_type"), str(data,"title"), nullable(data,"record_date"), nullable(data,"provider"), cents(data,"cost"), nullable(data,"next_due_date"), nullable(data,"notes"), now, now).first();
+    case "dog_registrations":
+      return env.DB.prepare("INSERT INTO dog_registrations (dog_id, registry, registration_number, registered_name, issue_date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
+        .bind(id(data,"dog_id"), str(data,"registry"), str(data,"registration_number"), nullable(data,"registered_name"), nullable(data,"issue_date"), nullable(data,"notes"), now, now).first();
     case "litters":
       return env.DB.prepare("INSERT INTO litters (name, dam_id, sire_id, breeding_date, due_date, birth_date, expected_count, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
         .bind(str(data,"name"), id(data,"dam_id"), id(data,"sire_id"), nullable(data,"breeding_date"), nullable(data,"due_date"), nullable(data,"birth_date"), num(data,"expected_count"), str(data,"status") || "Planned", nullable(data,"notes"), now, now).first();
@@ -140,8 +148,8 @@ export async function createResource(resource: ResourceName, data: ResourceInput
       return { ...plan, puppy_ids: puppyIds };
     }
     case "transactions":
-      return env.DB.prepare("INSERT INTO transactions (type, buyer_id, litter_id, puppy_id, payment_plan_id, category, description, amount_cents, due_date, paid_date, status, method, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
-        .bind(str(data,"type"), id(data,"buyer_id"), id(data,"litter_id"), id(data,"puppy_id"), id(data,"payment_plan_id"), nullable(data,"category"), str(data,"description"), dollars(data), nullable(data,"due_date"), nullable(data,"paid_date"), str(data,"status") || "Pending", nullable(data,"method"), nullable(data,"notes"), now, now).first();
+      return env.DB.prepare("INSERT INTO transactions (type, dog_id, buyer_id, litter_id, puppy_id, payment_plan_id, category, description, amount_cents, due_date, paid_date, status, method, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
+        .bind(str(data,"type"), id(data,"dog_id"), id(data,"buyer_id"), id(data,"litter_id"), id(data,"puppy_id"), id(data,"payment_plan_id"), nullable(data,"category"), str(data,"description"), dollars(data), nullable(data,"due_date"), nullable(data,"paid_date"), str(data,"status") || "Pending", nullable(data,"method"), nullable(data,"notes"), now, now).first();
     case "events":
       return env.DB.prepare("INSERT INTO events (title, event_type, event_date, event_time, related_type, related_id, location, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
         .bind(str(data,"title"), str(data,"event_type"), str(data,"event_date"), nullable(data,"event_time"), nullable(data,"related_type"), id(data,"related_id"), nullable(data,"location"), str(data,"status") || "Scheduled", nullable(data,"notes"), now, now).first();
@@ -161,6 +169,9 @@ export async function updateResource(resource: ResourceName, recordId: number, d
     case "dog_medical_records":
       return env.DB.prepare("UPDATE dog_medical_records SET dog_id=?, record_type=?, title=?, record_date=?, provider=?, cost_cents=?, next_due_date=?, notes=?, updated_at=? WHERE id=? RETURNING *")
         .bind(id(data,"dog_id"), str(data,"record_type"), str(data,"title"), nullable(data,"record_date"), nullable(data,"provider"), cents(data,"cost"), nullable(data,"next_due_date"), nullable(data,"notes"), now, recordId).first();
+    case "dog_registrations":
+      return env.DB.prepare("UPDATE dog_registrations SET dog_id=?, registry=?, registration_number=?, registered_name=?, issue_date=?, notes=?, updated_at=? WHERE id=? RETURNING *")
+        .bind(id(data,"dog_id"), str(data,"registry"), str(data,"registration_number"), nullable(data,"registered_name"), nullable(data,"issue_date"), nullable(data,"notes"), now, recordId).first();
     case "litters":
       return env.DB.prepare("UPDATE litters SET name=?, dam_id=?, sire_id=?, breeding_date=?, due_date=?, birth_date=?, expected_count=?, status=?, notes=?, updated_at=? WHERE id=? RETURNING *")
         .bind(str(data,"name"), id(data,"dam_id"), id(data,"sire_id"), nullable(data,"breeding_date"), nullable(data,"due_date"), nullable(data,"birth_date"), num(data,"expected_count"), str(data,"status") || "Planned", nullable(data,"notes"), now, recordId).first();
@@ -184,8 +195,8 @@ export async function updateResource(resource: ResourceName, recordId: number, d
       return { ...plan, puppy_ids: puppyIds };
     }
     case "transactions":
-      return env.DB.prepare("UPDATE transactions SET type=?, buyer_id=?, litter_id=?, puppy_id=?, payment_plan_id=?, category=?, description=?, amount_cents=?, due_date=?, paid_date=?, status=?, method=?, notes=?, updated_at=? WHERE id=? RETURNING *")
-        .bind(str(data,"type"), id(data,"buyer_id"), id(data,"litter_id"), id(data,"puppy_id"), id(data,"payment_plan_id"), nullable(data,"category"), str(data,"description"), dollars(data), nullable(data,"due_date"), nullable(data,"paid_date"), str(data,"status") || "Pending", nullable(data,"method"), nullable(data,"notes"), now, recordId).first();
+      return env.DB.prepare("UPDATE transactions SET type=?, dog_id=?, buyer_id=?, litter_id=?, puppy_id=?, payment_plan_id=?, category=?, description=?, amount_cents=?, due_date=?, paid_date=?, status=?, method=?, notes=?, updated_at=? WHERE id=? RETURNING *")
+        .bind(str(data,"type"), id(data,"dog_id"), id(data,"buyer_id"), id(data,"litter_id"), id(data,"puppy_id"), id(data,"payment_plan_id"), nullable(data,"category"), str(data,"description"), dollars(data), nullable(data,"due_date"), nullable(data,"paid_date"), str(data,"status") || "Pending", nullable(data,"method"), nullable(data,"notes"), now, recordId).first();
     case "events":
       return env.DB.prepare("UPDATE events SET title=?, event_type=?, event_date=?, event_time=?, related_type=?, related_id=?, location=?, status=?, notes=?, updated_at=? WHERE id=? RETURNING *")
         .bind(str(data,"title"), str(data,"event_type"), str(data,"event_date"), nullable(data,"event_time"), nullable(data,"related_type"), id(data,"related_id"), nullable(data,"location"), str(data,"status") || "Scheduled", nullable(data,"notes"), now, recordId).first();
@@ -206,7 +217,7 @@ export async function deleteResource(resource: ResourceName, recordId: number) {
     if (Number(documents?.count) > 0) throw new Error("Delete this dog's stored documents before deleting the dog record.");
   }
   const table = resource === "updates" ? "puppy_updates" : resource;
-  const allowedTables = ["dogs", "dog_medical_records", "litters", "buyers", "puppies", "payment_plans", "transactions", "events", "puppy_updates"];
+  const allowedTables = ["dogs", "dog_medical_records", "dog_registrations", "litters", "buyers", "puppies", "payment_plans", "transactions", "events", "puppy_updates"];
   if (!allowedTables.includes(table)) throw new Error("Unsupported resource");
   await env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(recordId).run();
 }

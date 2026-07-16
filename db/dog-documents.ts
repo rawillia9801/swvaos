@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { ensureDatabase } from "./kennel";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const documentTypes = new Set(["Registration Certificate", "Pedigree", "Embark Results", "OFA Test Results", "Genetic Test Results", "Health Test Results", "Health Certificate", "Other"]);
+const documentTypes = new Set(["Registration Certificate", "Pedigree", "Embark Results", "OFA Test Results", "Genetic Test Results", "Health Test Results", "Health Certificate", "Medical Documentation", "Other"]);
 const contentTypesByExtension: Record<string, string> = {
   pdf: "application/pdf",
   jpg: "image/jpeg",
@@ -14,6 +14,7 @@ const contentTypesByExtension: Record<string, string> = {
 type DogDocumentRecord = {
   id: number;
   dog_id: number;
+  registration_id: number | null;
   document_type: string;
   registry: string | null;
   registration_number: string | null;
@@ -49,9 +50,10 @@ function contentTypeFor(file: File) {
 export async function uploadDogDocument(form: FormData) {
   await ensureDatabase();
   const dogId = positiveId(form.get("dog_id"));
+  const registrationId = positiveId(form.get("registration_id"));
   const documentType = String(form.get("document_type") ?? "").trim();
-  const registry = String(form.get("registry") ?? "").trim().slice(0, 100) || null;
-  const registrationNumber = String(form.get("registration_number") ?? "").trim().slice(0, 100) || null;
+  let registry = String(form.get("registry") ?? "").trim().slice(0, 100) || null;
+  let registrationNumber = String(form.get("registration_number") ?? "").trim().slice(0, 100) || null;
   const notes = String(form.get("notes") ?? "").trim().slice(0, 2000) || null;
   const file = form.get("file");
 
@@ -61,6 +63,12 @@ export async function uploadDogDocument(form: FormData) {
   if (file.size > MAX_FILE_SIZE) throw new Error("Documents must be 20 MB or smaller.");
   const dog = await env.DB.prepare("SELECT id FROM dogs WHERE id = ?").bind(dogId).first();
   if (!dog) throw new Error("Breeding dog not found.");
+  if (registrationId) {
+    const registration = await env.DB.prepare("SELECT registry, registration_number FROM dog_registrations WHERE id = ? AND dog_id = ?").bind(registrationId, dogId).first<{ registry: string; registration_number: string }>();
+    if (!registration) throw new Error("The selected registration does not belong to this dog.");
+    registry ||= registration.registry;
+    registrationNumber ||= registration.registration_number;
+  }
 
   const contentType = contentTypeFor(file);
   const fileName = safeFileName(file.name);
@@ -73,8 +81,8 @@ export async function uploadDogDocument(form: FormData) {
   });
 
   try {
-    const document = await env.DB.prepare("INSERT INTO dog_documents (dog_id, document_type, registry, registration_number, title, object_key, file_name, content_type, size_bytes, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
-      .bind(dogId, documentType, registry, registrationNumber, title, objectKey, fileName, contentType, file.size, notes, now, now).first<DogDocumentRecord>();
+    const document = await env.DB.prepare("INSERT INTO dog_documents (dog_id, registration_id, document_type, registry, registration_number, title, object_key, file_name, content_type, size_bytes, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *")
+      .bind(dogId, registrationId, documentType, registry, registrationNumber, title, objectKey, fileName, contentType, file.size, notes, now, now).first<DogDocumentRecord>();
     if (!document) throw new Error("Unable to save document details.");
     return document;
   } catch (error) {
