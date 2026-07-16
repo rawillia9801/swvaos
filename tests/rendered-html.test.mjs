@@ -20,12 +20,19 @@ test("includes the connected breeding-dog profile experience", async () => {
 });
 
 test("includes birthday marketing reminders and Southwest branding", async () => {
-  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const [page, css] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
 
-  assert.match(page, /UPCOMING BIRTHDAYS/);
+  assert.match(page, /PUPPY BIRTHDAYS/);
   assert.match(page, /birthdayReminders/);
-  assert.match(page, /birthday cards, check-ins, and family marketing follow-up/);
-  assert.match(page, /southwest-wordmark">Southwest/);
+  assert.match(page, /Birthday card and family follow-up schedule/);
+  assert.match(page, /brand-lockup/);
+  assert.match(page, /<b>Southwest<\/b><strong>Virginia<\/strong><small>Operating System<\/small>/);
+  assert.match(css, /High-tech operations interface/);
+  assert.match(css, /--electric: #16d6a0/);
+  assert.match(css, /\.reminder-label/);
 });
 
 test("persists dog medical records and private documents", async () => {
