@@ -306,8 +306,30 @@ main { min-width: 0; }
 .metric-row span { color: var(--muted); font: 700 9px var(--font-geist-mono), monospace; text-transform: uppercase; letter-spacing: .16em; }
 .metric-row b { display: block; margin: 13px 0 5px; font: 760 28px var(--font-geist-mono), monospace; letter-spacing: -.06em; }
 .metric-row small { color: var(--dim); }
+.ops-strip {
+  grid-column: 1 / -1;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.ops-strip button {
+  min-height: 82px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px 3px 14px 3px;
+  background: linear-gradient(145deg, rgba(156,124,255,.1), rgba(85,214,255,.04));
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  text-align: left;
+  cursor: pointer;
+  padding: 14px;
+}
+.ops-strip button:hover { border-color: var(--line-strong); background: rgba(85,214,255,.08); transform: translateY(-2px); }
+.ops-strip b { font: 780 24px var(--font-geist-mono), monospace; color: var(--cyan); }
+.ops-strip span { color: var(--muted); font-size: 12px; }
 .signal-list, .table-list, .event-stack, .mini-list, .vault-list { display: grid; gap: 8px; }
-.signal-list button, .table-list button, .event-stack button, .vault-list a {
+.signal-list button, .table-list button, .event-stack button, .vault-list a, .ops-list button {
   min-height: 58px;
   border: 1px solid rgba(255,255,255,.07);
   border-radius: 12px 3px 12px 3px;
@@ -322,10 +344,11 @@ main { min-width: 0; }
   text-decoration: none;
   color: inherit;
 }
-.signal-list button:hover, .table-list button:hover, .event-stack button:hover, .vault-list a:hover { border-color: var(--line-strong); background: rgba(85,214,255,.07); }
-.signal-list span:not(.status), .table-list span, .event-stack p, .vault-list span { min-width: 0; }
-.signal-list b, .table-list b, .event-stack b, .vault-list b, .mini-list b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.signal-list small, .table-list small, .event-stack small, .vault-list small, .mini-list small { color: var(--muted); }
+.ops-list { display: grid; gap: 8px; }
+.signal-list button:hover, .table-list button:hover, .event-stack button:hover, .vault-list a:hover, .ops-list button:hover { border-color: var(--line-strong); background: rgba(85,214,255,.07); }
+.signal-list span:not(.status), .table-list span, .event-stack p, .vault-list span, .ops-list span { min-width: 0; }
+.signal-list b, .table-list b, .event-stack b, .vault-list b, .mini-list b, .ops-list b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.signal-list small, .table-list small, .event-stack small, .vault-list small, .mini-list small, .ops-list small { color: var(--muted); }
 .status {
   display: inline-grid;
   place-items: center;
@@ -413,6 +436,76 @@ main { min-width: 0; }
   border-radius: 11px 3px 11px 3px;
   background: rgba(255,255,255,.035);
 }
+.matrix-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.matrix-list span {
+  min-height: 72px;
+  padding: 13px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 13px 3px 13px 3px;
+  background: rgba(255,255,255,.035);
+}
+.matrix-list b, .matrix-list small { display: block; }
+.matrix-list small, .matrix-list a { color: var(--muted); }
+.stage-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+.stage-board > div {
+  min-height: 220px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 14px 3px 14px 3px;
+  background: rgba(255,255,255,.035);
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+.stage-board > div > b { color: var(--cyan); font: 760 10px var(--font-geist-mono), monospace; text-transform: uppercase; letter-spacing: .12em; }
+.stage-board button {
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 10px 2px 10px 2px;
+  background: rgba(255,255,255,.04);
+  color: white;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+  text-align: left;
+}
+.stage-board button:hover { border-color: var(--line-strong); background: rgba(85,214,255,.07); }
+.stage-board small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.report-card {
+  min-height: 140px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 16px 3px 16px 3px;
+  background: linear-gradient(145deg, rgba(85,214,255,.08), rgba(156,124,255,.06));
+}
+.report-card span { color: var(--muted); font: 740 9px var(--font-geist-mono), monospace; text-transform: uppercase; letter-spacing: .16em; }
+.report-card b { display: block; margin: 18px 0 6px; font: 780 30px var(--font-geist-mono), monospace; letter-spacing: -.06em; }
+.report-card small { color: var(--muted); }
+.progress-list { display: grid; gap: 12px; }
+.progress-list span {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  position: relative;
+  padding: 0 12px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 12px 3px 12px 3px;
+  overflow: hidden;
+}
+.progress-list span::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--value);
+  background: linear-gradient(90deg, rgba(67,240,181,.18), rgba(85,214,255,.12));
+}
+.progress-list b, .progress-list i { position: relative; z-index: 1; font-style: normal; }
 .calendar-list { display: grid; gap: 10px; }
 .calendar-list article {
   display: grid;
@@ -594,7 +687,8 @@ main { min-width: 0; }
   .system-card { left: 12px; right: 12px; display: grid; place-items: center; }
   .hero { grid-template-columns: 1fr; }
   .readiness { width: 170px; height: 170px; }
-  .metric-row { grid-template-columns: repeat(2, 1fr); }
+  .metric-row, .ops-strip { grid-template-columns: repeat(2, 1fr); }
+  .stage-board, .report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .command-grid > .panel, .two-one > .panel, .two-one > .panel:first-child, .two-one > .panel:nth-child(2) { grid-column: 1 / -1; }
   .card-grid, .card-grid.compact { grid-template-columns: 1fr; }
 }
@@ -609,7 +703,7 @@ main { min-width: 0; }
   .search { width: 100%; }
   .top-actions { flex-wrap: wrap; }
   .content { padding: 18px 14px 90px; }
-  .metric-row { grid-template-columns: 1fr; }
+  .metric-row, .ops-strip, .matrix-list, .stage-board, .report-grid { grid-template-columns: 1fr; }
   .hero { padding: 20px; }
   .hero h1 { font-size: 40px; }
   .form-grid { grid-template-columns: 1fr; }

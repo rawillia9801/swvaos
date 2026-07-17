@@ -12,6 +12,10 @@ test("ships a high-tech Supabase command surface", async () => {
   assert.match(page, /Risk Radar/);
   assert.match(page, /Document Vault/);
   assert.match(page, /Supabase command center/);
+  assert.match(page, /Care operations/);
+  assert.match(page, /Inventory control/);
+  assert.match(page, /Communications hub/);
+  assert.match(page, /Reports and intelligence/);
   assert.match(page, /\/api\/dog-documents/);
 });
 
@@ -24,11 +28,17 @@ test("includes the redesigned operations styling", async () => {
   assert.match(page, /Command/);
   assert.match(page, /Breeding/);
   assert.match(page, /Families/);
+  assert.match(page, /Care/);
   assert.match(page, /Finance/);
+  assert.match(page, /Inventory/);
+  assert.match(page, /Comms/);
   assert.match(page, /Calendar/);
+  assert.match(page, /Reports/);
   assert.match(css, /--cyan: #55d6ff/);
   assert.match(css, /--mint: #43f0b5/);
   assert.match(css, /\.command-grid/);
+  assert.match(css, /\.stage-board/);
+  assert.match(css, /\.report-grid/);
 });
 
 test("persists dog medical records and private documents through Supabase", async () => {

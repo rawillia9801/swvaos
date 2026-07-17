@@ -19,29 +19,44 @@ type DogDocument = StoredDocument & { dog_id: number; registration_id: number | 
 type BuyerDocument = StoredDocument & { buyer_id: number; payment_plan_id: number | null; puppy_ids: number[] };
 type DataSet = { dogs: Dog[]; litters: Litter[]; buyers: Buyer[]; puppies: Puppy[]; payment_plans: PaymentPlan[]; transactions: Transaction[]; events: KennelEvent[]; updates: PuppyUpdate[]; dog_medical_records: DogMedicalRecord[]; dog_registrations: DogRegistration[]; dog_documents: DogDocument[]; buyer_documents: BuyerDocument[] };
 type ModalState = { resource: Resource; record?: Record<string, unknown>; preset?: Record<string, unknown> } | null;
-type View = "Command" | "Breeding" | "Families" | "Finance" | "Calendar" | "Vault";
+type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "Calendar" | "Vault" | "Reports";
 
 const emptyData: DataSet = { dogs: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], buyer_documents: [] };
 const views: { id: View; label: string; code: string }[] = [
   { id: "Command", label: "Command", code: "01" },
   { id: "Breeding", label: "Breeding", code: "02" },
   { id: "Families", label: "Families", code: "03" },
+  { id: "Care", label: "Care", code: "04" },
   { id: "Finance", label: "Finance", code: "$" },
-  { id: "Calendar", label: "Calendar", code: "05" },
-  { id: "Vault", label: "Vault", code: "06" },
+  { id: "Inventory", label: "Inventory", code: "06" },
+  { id: "Comms", label: "Comms", code: "07" },
+  { id: "Calendar", label: "Calendar", code: "08" },
+  { id: "Vault", label: "Vault", code: "09" },
+  { id: "Reports", label: "Reports", code: "10" },
 ];
 
 const money = (cents: number | null | undefined) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents ?? 0) / 100);
 const shortDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "Not set";
 const today = () => new Date().toISOString().slice(0, 10);
+const addDays = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+const daysUntil = (value: string | null | undefined) => value ? Math.ceil((new Date(`${value}T12:00:00`).getTime() - new Date(`${today()}T12:00:00`).getTime()) / 86400000) : null;
 const fullName = (buyer: Buyer) => `${buyer.first_name} ${buyer.last_name}`;
 const initials = (value: string) => value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
 const fileSize = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 const valueOf = (record: Record<string, unknown> | undefined, key: string, fallback = "") => String(record?.[key] ?? fallback);
+const includesAny = (value: string | null | undefined, terms: string[]) => terms.some((term) => (value ?? "").toLowerCase().includes(term));
 
 function pct(value: number, total: number) {
   if (!total) return 0;
   return Math.max(0, Math.min(100, Math.round((value / total) * 100)));
+}
+
+function sumBy<T>(items: T[], amount: (item: T) => number) {
+  return items.reduce((total, item) => total + amount(item), 0);
 }
 
 function Status({ children, tone = "neutral" }: { children: string; tone?: "good" | "warn" | "bad" | "neutral" }) {
@@ -71,10 +86,21 @@ function useAnalytics(data: DataSet) {
     const pendingBuyers = data.buyers.filter((item) => !["Approved", "Declined", "Archived"].includes(item.application_status));
     const registryCoverage = pct(data.dogs.filter((dog) => data.dog_registrations.some((registration) => registration.dog_id === dog.id)).length, data.dogs.length);
     const docs = data.buyer_documents.length + data.dog_documents.length;
-    const readiness = Math.max(0, Math.min(100, Math.round(46 + Math.min(activeLitters.length, 4) * 8 + Math.min(approvedBuyers.length, 8) * 3 + Math.min(docs, 12) * 1.4 + registryCoverage * 0.12 - overdue.length * 8 - dueHealth.length * 5 - unmatched.length * 2)));
+    const microchipCoverage = pct(data.dogs.filter((dog) => dog.microchip_number).length, data.dogs.length);
+    const activePuppies = data.puppies.filter((item) => !["Placed", "Archived"].includes(item.status));
+    const readyPuppies = data.puppies.filter((item) => item.status === "Available");
+    const careEvents = data.events.filter((item) => includesAny(`${item.event_type} ${item.title}`, ["vet", "vaccine", "medical", "care", "groom", "task", "pickup", "whelp"]));
+    const openTasks = data.events.filter((item) => item.status !== "Completed");
+    const upcomingCare = careEvents.filter((item) => item.event_date >= today() && item.event_date <= addDays(30) && item.status !== "Completed");
+    const supplyCosts = data.transactions.filter((item) => item.type === "Cost" && includesAny(`${item.category} ${item.description}`, ["food", "supply", "med", "vaccine", "equipment", "groom", "clean"]));
+    const inventorySpend = sumBy(supplyCosts, (item) => item.amount_cents);
+    const draftUpdates = data.updates.filter((item) => !item.published);
+    const publishedUpdates = data.updates.filter((item) => item.published);
+    const docsNeeded = Math.max(0, data.dogs.length * 2 + data.buyers.length - docs);
+    const readiness = Math.max(0, Math.min(100, Math.round(46 + Math.min(activeLitters.length, 4) * 8 + Math.min(approvedBuyers.length, 8) * 3 + Math.min(docs, 12) * 1.4 + registryCoverage * 0.12 + microchipCoverage * 0.08 - overdue.length * 8 - dueHealth.length * 5 - unmatched.length * 2 - draftUpdates.length)));
     const upcoming = data.events.filter((item) => item.event_date >= today() && item.status !== "Completed").sort((a, b) => `${a.event_date}${a.event_time ?? ""}`.localeCompare(`${b.event_date}${b.event_time ?? ""}`));
     const activePlanValue = data.payment_plans.filter((item) => item.status === "Active").reduce((sum, item) => sum + item.total_amount_cents, 0);
-    return { activeLitters, paid, costs, outstanding, overdue, dueHealth, unmatched, placed, approvedBuyers, pendingBuyers, registryCoverage, docs, readiness, upcoming, activePlanValue };
+    return { activeLitters, paid, costs, outstanding, overdue, dueHealth, unmatched, placed, approvedBuyers, pendingBuyers, registryCoverage, microchipCoverage, docs, docsNeeded, readiness, upcoming, activePlanValue, activePuppies, readyPuppies, careEvents, openTasks, upcomingCare, supplyCosts, inventorySpend, draftUpdates, publishedUpdates };
   }, [data]);
 }
 
@@ -95,6 +121,12 @@ function CommandView({ data, openCreate, setView }: { data: DataSet; openCreate:
       <button onClick={() => setView("Families")}><span>Placement rate</span><b>{pct(a.placed.length, data.puppies.length)}%</b><small>{a.unmatched.length} unmatched puppies</small></button>
       <button onClick={() => setView("Finance")}><span>Net recorded</span><b>{money(a.paid - a.costs)}</b><small>{money(a.outstanding)} outstanding</small></button>
       <button onClick={() => setView("Vault")}><span>Vault files</span><b>{a.docs}</b><small>{a.registryCoverage}% registry coverage</small></button>
+    </div>
+    <div className="ops-strip panel-wide">
+      <button onClick={() => setView("Care")}><b>{a.upcomingCare.length}</b><span>Care tasks due in 30 days</span></button>
+      <button onClick={() => setView("Inventory")}><b>{money(a.inventorySpend)}</b><span>Supply and medical spend</span></button>
+      <button onClick={() => setView("Comms")}><b>{a.draftUpdates.length}</b><span>Family updates waiting</span></button>
+      <button onClick={() => setView("Reports")}><b>{a.docsNeeded}</b><span>Estimated missing documents</span></button>
     </div>
     <Section eyebrow="Risk Radar" title="Attention queue" action={<button className="ghost" onClick={() => openCreate("events")}>Schedule</button>}>
       {alerts.length ? <div className="signal-list">{alerts.slice(0, 7).map((item, index) => <button key={`${item.title}-${index}`} onClick={() => setView(item.view)}><Status tone={item.tone}>{item.tone.toUpperCase()}</Status><span><b>{item.title}</b><small>{item.detail}</small></span></button>)}</div> : <Empty title="No immediate risks" text="No overdue balances, care deadlines, or unassigned puppy records are currently flagged." action="Add event" onAction={() => openCreate("events")} />}
@@ -138,6 +170,70 @@ function FamiliesView({ data, openCreate, openEdit, remove }: ViewProps) {
   </div>;
 }
 
+function CareView({ data, openCreate, openEdit }: ViewProps) {
+  const a = useAnalytics(data);
+  const careRecords = [...data.dog_medical_records].sort((left, right) => String(left.next_due_date ?? "9999").localeCompare(String(right.next_due_date ?? "9999")));
+  const heatWatch = data.dogs.filter((dog) => dog.next_heat_date).sort((left, right) => String(left.next_heat_date).localeCompare(String(right.next_heat_date)));
+  return <div className="grid two-one">
+    <div className="metric-row panel-wide"><button><span>Open tasks</span><b>{a.openTasks.length}</b><small>Scheduled items not completed</small></button><button><span>Care due</span><b>{a.dueHealth.length}</b><small>Medical records at or past due</small></button><button><span>30-day care</span><b>{a.upcomingCare.length}</b><small>Upcoming care and pickup signals</small></button><button><span>Microchips</span><b>{a.microchipCoverage}%</b><small>Dog microchip coverage</small></button></div>
+    <Section eyebrow="Medical Control" title="Care schedule" action={<button className="ghost" onClick={() => openCreate("dog_medical_records")}>Add care</button>}>
+      {careRecords.length ? <div className="ops-list">{careRecords.map((item) => {
+        const dog = data.dogs.find((candidate) => candidate.id === item.dog_id);
+        const days = daysUntil(item.next_due_date);
+        const tone = days !== null && days <= 0 ? "bad" : days !== null && days <= 14 ? "warn" : "neutral";
+        return <button key={item.id} onClick={() => openEdit("dog_medical_records", item as unknown as Record<string, unknown>)}><Status tone={tone}>{days === null ? "File" : days <= 0 ? "Due" : `${days}d`}</Status><span><b>{item.title}</b><small>{dog?.name ?? `Dog #${item.dog_id}`} / {item.record_type} / next {shortDate(item.next_due_date)}</small></span><strong>{money(item.cost_cents)}</strong></button>;
+      })}</div> : <Empty title="No care records" text="Add vaccinations, exams, health tests, medication, and recurring due dates." action="Add care" onAction={() => openCreate("dog_medical_records")} />}
+    </Section>
+    <Section eyebrow="Heat And Breeding Watch" title="Female readiness">
+      {heatWatch.length ? <div className="ops-list">{heatWatch.map((dog) => {
+        const days = daysUntil(dog.next_heat_date);
+        return <button key={dog.id} onClick={() => openEdit("dogs", dog as unknown as Record<string, unknown>)}><Status tone={days !== null && days <= 7 ? "warn" : "neutral"}>{days === null ? "Watch" : `${days}d`}</Status><span><b>{dog.name}</b><small>{dog.role} / next heat {shortDate(dog.next_heat_date)}</small></span></button>;
+      })}</div> : <Empty title="No heat dates tracked" text="Add next heat dates on dam profiles to activate breeding readiness watch." action="Add dog" onAction={() => openCreate("dogs")} />}
+    </Section>
+    <Section eyebrow="Operations Queue" title="Tasks and reminders" action={<button className="ghost" onClick={() => openCreate("events", { event_type: "Task", status: "Scheduled" })}>New task</button>}>
+      {a.openTasks.length ? <div className="calendar-list">{a.openTasks.slice(0, 10).map((event) => <article key={event.id}><time><b>{new Date(`${event.event_date}T12:00:00`).getDate()}</b><small>{new Date(`${event.event_date}T12:00:00`).toLocaleString("en-US", { month: "short" })}</small></time><div><h3>{event.title}</h3><p>{[event.event_type, event.event_time, event.location].filter(Boolean).join(" / ")}</p></div><Status tone={event.event_date < today() ? "bad" : "neutral"}>{event.status}</Status><footer><button onClick={() => openEdit("events", event as unknown as Record<string, unknown>)}>Edit</button></footer></article>)}</div> : <Empty title="No open tasks" text="Schedule kennel chores, appointment reminders, whelping prep, pickups, and follow-up work." action="New task" onAction={() => openCreate("events", { event_type: "Task" })} />}
+    </Section>
+  </div>;
+}
+
+function InventoryView({ data, openCreate, openEdit }: ViewProps) {
+  const a = useAnalytics(data);
+  const categories = ["Food", "Medical", "Supplies", "Equipment", "Cleaning", "Grooming"].map((name) => {
+    const items = data.transactions.filter((item) => item.type === "Cost" && includesAny(`${item.category} ${item.description}`, [name.toLowerCase(), name === "Medical" ? "vaccine" : ""]));
+    return { name, count: items.length, amount: sumBy(items, (item) => item.amount_cents) };
+  });
+  const total = sumBy(categories, (item) => item.amount);
+  return <div className="grid two-one">
+    <div className="metric-row panel-wide"><button><span>Inventory spend</span><b>{money(a.inventorySpend)}</b><small>Tracked from cost transactions</small></button><button><span>Cost records</span><b>{a.supplyCosts.length}</b><small>Supply-like ledger entries</small></button><button><span>Highest category</span><b>{categories.sort((l, r) => r.amount - l.amount)[0]?.name ?? "None"}</b><small>{money(categories[0]?.amount ?? 0)}</small></button><button><span>Total costs</span><b>{money(a.costs)}</b><small>All expense categories</small></button></div>
+    <Section eyebrow="Supply Ledger" title="Inventory and supplies" action={<button className="ghost" onClick={() => openCreate("transactions", { type: "Cost", category: "Supplies" })}>Log supply</button>}>
+      {a.supplyCosts.length ? <div className="table-list">{a.supplyCosts.map((item) => <button key={item.id} onClick={() => openEdit("transactions", item as unknown as Record<string, unknown>)}><span><b>{item.description}</b><small>{[item.category, item.status, item.paid_date ? `Paid ${shortDate(item.paid_date)}` : null].filter(Boolean).join(" / ")}</small></span><strong>{money(item.amount_cents)}</strong></button>)}</div> : <Empty title="No supply records" text="Log food, medicine, cleaning, grooming, equipment, and whelping supplies as cost transactions." action="Log supply" onAction={() => openCreate("transactions", { type: "Cost", category: "Supplies" })} />}
+    </Section>
+    <Section eyebrow="Category Burn" title="Spend controls">
+      <div className="pulse-bars">{categories.map((item) => <span key={item.name} style={{ "--value": `${pct(item.amount, total)}%` } as React.CSSProperties}><b>{item.name}</b><i>{money(item.amount)} / {item.count}</i></span>)}</div>
+    </Section>
+    <Section eyebrow="Restock Planning" title="Suggested watchlist">
+      <div className="matrix-list">{["Food and supplements", "Vaccines and medication", "Whelping pads and heat support", "Cleaning and disinfectant", "Microchips and registry packets", "Puppy go-home bags"].map((item) => <span key={item}><b>{item}</b><small>Track purchases as Cost transactions for inventory reporting.</small></span>)}</div>
+    </Section>
+  </div>;
+}
+
+function CommunicationsView({ data, openCreate, openEdit }: ViewProps) {
+  const a = useAnalytics(data);
+  const stages = ["Inquiry", "Applied", "Approved", "Matched", "Placed"].map((stage) => ({ stage, buyers: data.buyers.filter((buyer) => buyer.application_status === stage) }));
+  return <div className="grid two-one">
+    <div className="metric-row panel-wide"><button><span>Buyers</span><b>{data.buyers.length}</b><small>{a.approvedBuyers.length} approved</small></button><button><span>Published</span><b>{a.publishedUpdates.length}</b><small>Family-facing updates</small></button><button><span>Drafts</span><b>{a.draftUpdates.length}</b><small>Updates waiting</small></button><button><span>Assigned puppies</span><b>{a.placed.length}</b><small>Buyer-connected placements</small></button></div>
+    <Section eyebrow="Family Pipeline" title="Buyer stages" action={<button className="ghost" onClick={() => openCreate("buyers")}>Add family</button>}>
+      <div className="stage-board">{stages.map((stage) => <div key={stage.stage}><b>{stage.stage}</b>{stage.buyers.length ? stage.buyers.slice(0, 5).map((buyer) => <button key={buyer.id} onClick={() => openEdit("buyers", buyer as unknown as Record<string, unknown>)}>{fullName(buyer)}<small>{buyer.email}</small></button>) : <small>No families</small>}</div>)}</div>
+    </Section>
+    <Section eyebrow="Update Studio" title="Puppy updates" action={<button className="ghost" onClick={() => openCreate("updates", { published: true })}>New update</button>}>
+      {data.updates.length ? <div className="ops-list">{data.updates.slice(0, 12).map((update) => <button key={update.id} onClick={() => openEdit("updates", update as unknown as Record<string, unknown>)}><Status tone={update.published ? "good" : "warn"}>{update.published ? "Live" : "Draft"}</Status><span><b>{update.title}</b><small>{data.puppies.find((puppy) => puppy.id === update.puppy_id)?.name ?? `Puppy #${update.puppy_id}`} / week {update.week_number ?? "n/a"} / {update.weight ?? "no"} lb</small></span></button>)}</div> : <Empty title="No updates" text="Create family-facing updates with growth notes, weights, milestones, and photos once uploads are connected." action="New update" onAction={() => openCreate("updates", { published: true })} />}
+    </Section>
+    <Section eyebrow="Contact Center" title="Quick outreach">
+      {data.buyers.length ? <div className="matrix-list">{data.buyers.slice(0, 12).map((buyer) => <span key={buyer.id}><b>{fullName(buyer)}</b><small><a href={`mailto:${buyer.email}`}>{buyer.email}</a>{buyer.phone ? ` / ${buyer.phone}` : ""}</small></span>)}</div> : <Empty title="No contacts" text="Add families to activate the contact center." action="Add family" onAction={() => openCreate("buyers")} />}
+    </Section>
+  </div>;
+}
+
 function FinanceView({ data, openCreate, openEdit }: ViewProps) {
   const a = useAnalytics(data);
   return <div className="grid">
@@ -167,6 +263,49 @@ function VaultView({ data }: { data: DataSet }) {
   return <div className="grid">
     <Section eyebrow="Document Vault" title="Stored files">
       {docs.length ? <div className="vault-list">{docs.map((doc) => <a key={`${doc.href}-${doc.id}`} href={doc.href} target="_blank" rel="noreferrer"><span><b>{doc.title}</b><small>{doc.owner} / {doc.document_type}</small></span><em>{fileSize(doc.size_bytes)}</em></a>)}</div> : <Empty title="No documents stored" text="Uploaded buyer and dog documents will appear here once Supabase Storage is configured." action="Open breeding" onAction={() => undefined} />}
+    </Section>
+  </div>;
+}
+
+function ReportsView({ data, openCreate }: Pick<ViewProps, "data" | "openCreate">) {
+  const a = useAnalytics(data);
+  const litterReports = data.litters.map((litter) => {
+    const puppies = data.puppies.filter((puppy) => puppy.litter_id === litter.id);
+    const revenue = sumBy(data.transactions.filter((item) => item.litter_id === litter.id && item.type === "Payment" && item.status === "Paid"), (item) => item.amount_cents);
+    const costs = sumBy(data.transactions.filter((item) => item.litter_id === litter.id && item.type === "Cost"), (item) => item.amount_cents);
+    return { litter, puppies, revenue, costs, net: revenue - costs };
+  }).sort((left, right) => right.net - left.net);
+  const reportCards = [
+    { label: "Readiness", value: `${a.readiness}%`, detail: "Composite program health" },
+    { label: "Revenue", value: money(a.paid), detail: `${money(a.outstanding)} outstanding` },
+    { label: "Net", value: money(a.paid - a.costs), detail: `${money(a.costs)} recorded costs` },
+    { label: "Placement", value: `${pct(a.placed.length, data.puppies.length)}%`, detail: `${a.unmatched.length} puppies unmatched` },
+    { label: "Compliance", value: `${a.registryCoverage}%`, detail: `${a.docsNeeded} estimated file gaps` },
+    { label: "Care Load", value: String(a.openTasks.length), detail: `${a.upcomingCare.length} due in 30 days` },
+  ];
+  function exportSnapshot() {
+    const payload = JSON.stringify({ exported_at: new Date().toISOString(), analytics: a, data }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `swvaos-snapshot-${today()}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+  return <div className="grid">
+    <Section eyebrow="Executive Report" title="Operating snapshot" action={<button className="ghost" onClick={exportSnapshot}>Export JSON</button>}>
+      <div className="report-grid">{reportCards.map((card) => <article key={card.label} className="report-card"><span>{card.label}</span><b>{card.value}</b><small>{card.detail}</small></article>)}</div>
+    </Section>
+    <Section eyebrow="Litter Economics" title="Profitability by litter" action={<button className="ghost" onClick={() => openCreate("transactions", { type: "Payment" })}>Add ledger</button>}>
+      {litterReports.length ? <div className="table-list">{litterReports.map((item) => <button key={item.litter.id}><span><b>{item.litter.name}</b><small>{item.puppies.length} puppies / revenue {money(item.revenue)} / costs {money(item.costs)}</small></span><strong>{money(item.net)}</strong></button>)}</div> : <Empty title="No litter reports" text="Create litters and connect transactions to see profitability." action="Create litter" onAction={() => openCreate("litters")} />}
+    </Section>
+    <Section eyebrow="Compliance Matrix" title="Documents and registrations">
+      <div className="progress-list">
+        <span style={{ "--value": `${a.registryCoverage}%` } as React.CSSProperties}><b>Registry coverage</b><i>{a.registryCoverage}%</i></span>
+        <span style={{ "--value": `${a.microchipCoverage}%` } as React.CSSProperties}><b>Microchip coverage</b><i>{a.microchipCoverage}%</i></span>
+        <span style={{ "--value": `${pct(a.docs, Math.max(1, data.dogs.length * 2 + data.buyers.length))}%` } as React.CSSProperties}><b>Document completeness</b><i>{a.docs} files</i></span>
+        <span style={{ "--value": `${pct(a.publishedUpdates.length, Math.max(1, data.puppies.length))}%` } as React.CSSProperties}><b>Family update coverage</b><i>{a.publishedUpdates.length} updates</i></span>
+      </div>
     </Section>
   </div>;
 }
@@ -288,14 +427,29 @@ export default function Home() {
       ...data.puppies.map((item) => ({ label: item.name, detail: `Puppy / ${item.status}`, view: "Families" as View })),
       ...data.transactions.map((item) => ({ label: item.description, detail: `${item.type} / ${money(item.amount_cents)}`, view: "Finance" as View })),
       ...data.events.map((item) => ({ label: item.title, detail: shortDate(item.event_date), view: "Calendar" as View })),
+      ...data.dog_medical_records.map((item) => ({ label: item.title, detail: `${item.record_type} / ${shortDate(item.next_due_date)}`, view: "Care" as View })),
+      ...data.updates.map((item) => ({ label: item.title, detail: item.published ? "Published update" : "Draft update", view: "Comms" as View })),
     ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query)).slice(0, 8);
   }, [data, search]);
 
   const activeViewProps = { data, openCreate, openEdit, remove };
+  const quickResource = view === "Calendar" || view === "Care" ? "events" : view === "Families" || view === "Comms" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
+  const viewCopy: Record<View, { title: string; text: string }> = {
+    Command: { title: "Operating command", text: "High-tech control surface for every record in the program." },
+    Breeding: { title: "Breeding control", text: "Manage dogs, litters, registrations, health context, and pairings." },
+    Families: { title: "Families and placement", text: "Manage buyer pipeline, puppy assignments, and family-facing updates." },
+    Care: { title: "Care operations", text: "Run medical schedules, open tasks, heat watch, and appointment control." },
+    Finance: { title: "Finance ledger", text: "Track payments, costs, balances, payment plans, and profitability." },
+    Inventory: { title: "Inventory control", text: "Control supply spend, restock watchlists, and cost category burn." },
+    Comms: { title: "Communications hub", text: "Manage family pipeline, puppy updates, and quick outreach." },
+    Calendar: { title: "Mission calendar", text: "Schedule care, breeding, pickup, buyer, and reminder events." },
+    Vault: { title: "Document vault", text: "Access buyer files, dog files, certificates, agreements, and reports." },
+    Reports: { title: "Reports and intelligence", text: "Review performance, compliance, profitability, and export an operating snapshot." },
+  };
   return <div className="app-shell">
     <aside className="sidebar"><button className="brand" onClick={() => setView("Command")}><span>SV</span><b>Chihuahua OS</b><small>Supabase command center</small></button><nav>{views.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><i>{item.code}</i><span>{item.label}</span></button>)}</nav><div className="system-card"><span className={error ? "offline" : ""} /><b>{error ? "Action needed" : "Supabase online"}</b><small>{analytics.readiness}% readiness / {analytics.docs} vault files</small></div></aside>
-    <main><header className="topbar"><div className="search"><span>SEARCH</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Dogs, buyers, payments, events..." />{searchResults.length > 0 && <div className="search-menu">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => { setView(item.view); setSearch(""); }}><b>{item.label}</b><small>{item.detail}</small></button>)}</div>}</div><div className="top-actions"><span>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span><button onClick={() => openCreate("transactions", { type: "Payment" })}>Log payment</button><button onClick={() => openCreate(view === "Calendar" ? "events" : view === "Families" ? "buyers" : view === "Breeding" ? "dogs" : "events")}>Quick add</button></div></header>
-      <div className="content"><div className="view-title"><span>{view.toUpperCase()}</span><h1>{view === "Command" ? "Operating command" : view}</h1><p>{view === "Command" ? "High-tech control surface for every record in the program." : "Manage records directly against Supabase."}</p></div>{error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}{loading ? <div className="loading"><span />Loading Supabase records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} />}</>}</div>
+    <main><header className="topbar"><div className="search"><span>SEARCH</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Dogs, buyers, payments, care, files..." />{searchResults.length > 0 && <div className="search-menu">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => { setView(item.view); setSearch(""); }}><b>{item.label}</b><small>{item.detail}</small></button>)}</div>}</div><div className="top-actions"><span>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span><button onClick={() => openCreate("transactions", { type: "Payment" })}>Log payment</button><button onClick={() => openCreate(quickResource)}>Quick add</button></div></header>
+      <div className="content"><div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div>{error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}{loading ? <div className="loading"><span />Loading Supabase records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}</div>
     </main>
     {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}
     {toast && <div className="toast">{toast}</div>}
