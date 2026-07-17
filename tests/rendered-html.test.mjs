@@ -56,16 +56,21 @@ test("persists dog medical records and private documents", async () => {
   assert.match(registrationsMigration, /ALTER TABLE `transactions` ADD `dog_id`/);
 });
 
-test("provides a safe Vercel handoff to the private Cloudflare application", async () => {
-  const [configuration, redirectBuilder] = await Promise.all([
+test("deploys the app directly on Vercel with a Supabase migration path", async () => {
+  const [configuration, migrationScript, supabaseSchema, dataRoute] = await Promise.all([
     readFile(new URL("vercel.json", root), "utf8"),
-    readFile(new URL("scripts/build-vercel-redirect.mjs", root), "utf8"),
+    readFile(new URL("scripts/migrate-chatgpt-site-to-supabase.mjs", root), "utf8"),
+    readFile(new URL("supabase/schema.sql", root), "utf8"),
+    readFile(new URL("app/api/data/route.ts", root), "utf8"),
   ]);
 
   const vercel = JSON.parse(configuration);
-  assert.equal(vercel.framework, null);
-  assert.equal(vercel.outputDirectory, "vercel-static");
-  assert.equal(vercel.buildCommand, "node scripts/build-vercel-redirect.mjs");
-  assert.match(vercel.redirects[0].destination, /southwest-virginia-chihuahua-os\.dswillia74\.chatgpt\.site/);
-  assert.match(redirectBuilder, /Southwest Virginia Operating System/);
+  assert.equal(vercel.framework, "nextjs");
+  assert.equal(vercel.buildCommand, "npm run build");
+  assert.equal(vercel.redirects, undefined);
+  assert.match(dataRoute, /getKennelDataFromSupabase/);
+  assert.match(migrationScript, /buyer_documents/);
+  assert.match(migrationScript, /dog_documents/);
+  assert.match(supabaseSchema, /create table if not exists dogs/);
+  assert.match(supabaseSchema, /insert into storage\.buckets/);
 });

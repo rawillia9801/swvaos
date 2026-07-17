@@ -1,9 +1,11 @@
 type SupabaseConfig = {
   url: string;
   anonKey: string;
+  serviceRoleKey?: string;
+  storageBucket: string;
 };
 
-function runtimeValue(key: "SUPABASE_URL" | "SUPABASE_ANON_KEY") {
+function runtimeValue(key: "SUPABASE_URL" | "SUPABASE_ANON_KEY" | "SUPABASE_SERVICE_ROLE_KEY" | "SUPABASE_STORAGE_BUCKET") {
   const processValue = typeof process !== "undefined" ? process.env[key] : undefined;
   return processValue?.trim() || undefined;
 }
@@ -11,6 +13,8 @@ function runtimeValue(key: "SUPABASE_URL" | "SUPABASE_ANON_KEY") {
 export function getSupabaseConfig(): SupabaseConfig {
   const url = runtimeValue("SUPABASE_URL");
   const anonKey = runtimeValue("SUPABASE_ANON_KEY");
+  const serviceRoleKey = runtimeValue("SUPABASE_SERVICE_ROLE_KEY");
+  const storageBucket = runtimeValue("SUPABASE_STORAGE_BUCKET") ?? "documents";
 
   if (!url || !anonKey) {
     throw new Error("Supabase is not configured.");
@@ -21,14 +25,15 @@ export function getSupabaseConfig(): SupabaseConfig {
     throw new Error("Supabase must use an HTTPS URL.");
   }
 
-  return { url: url.replace(/\/$/, ""), anonKey };
+  return { url: url.replace(/\/$/, ""), anonKey, serviceRoleKey, storageBucket };
 }
 
 export async function supabaseRequest(path: string, init: RequestInit = {}) {
-  const { url, anonKey } = getSupabaseConfig();
+  const { url, anonKey, serviceRoleKey } = getSupabaseConfig();
+  const token = serviceRoleKey ?? anonKey;
   const headers = new Headers(init.headers);
-  headers.set("apikey", anonKey);
-  headers.set("authorization", `Bearer ${anonKey}`);
+  headers.set("apikey", token);
+  headers.set("authorization", `Bearer ${token}`);
 
   return fetch(new URL(path.replace(/^\//, ""), `${url}/`), {
     ...init,

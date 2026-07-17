@@ -1,12 +1,6 @@
 import { env } from "cloudflare:workers";
-
-export type ResourceName = "dogs" | "dog_medical_records" | "dog_registrations" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates";
-export type ResourceInput = Record<string, unknown>;
-
-const resources: ResourceName[] = ["dogs", "dog_medical_records", "dog_registrations", "litters", "buyers", "puppies", "payment_plans", "transactions", "events", "updates"];
-export function isResource(value: unknown): value is ResourceName {
-  return typeof value === "string" && resources.includes(value as ResourceName);
-}
+import type { ResourceInput, ResourceName } from "./resources";
+export { isResource, type ResourceInput, type ResourceName } from "./resources";
 
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS dogs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, registered_name TEXT, sex TEXT NOT NULL, role TEXT NOT NULL, date_of_birth TEXT, color TEXT, weight REAL, registration_number TEXT, microchip_number TEXT, health_testing TEXT, acquired_from TEXT, acquisition_date TEXT, purchase_price_cents INTEGER, acquisition_notes TEXT, status TEXT NOT NULL DEFAULT 'Active', next_heat_date TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
