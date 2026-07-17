@@ -38,6 +38,20 @@ const ids = (data: ResourceInput, key: string) => {
   const values = Array.isArray(raw) ? raw : String(raw ?? "").split(",");
   return [...new Set(values.map(Number).filter((value) => Number.isInteger(value) && value > 0))];
 };
+const textValue = (row: Record<string, unknown>, key: string) =>
+  typeof row[key] === "string" ? String(row[key]) : "";
+
+function normalizeBuyer(row: Record<string, unknown>) {
+  const full = textValue(row, "full_name") || textValue(row, "name");
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  return {
+    ...row,
+    first_name: textValue(row, "first_name") || parts[0] || "",
+    last_name: textValue(row, "last_name") || parts.slice(1).join(" "),
+    email: textValue(row, "email"),
+    application_status: textValue(row, "application_status") || "Inquiry",
+  };
+}
 
 async function jsonRequest<T>(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
@@ -105,7 +119,7 @@ export async function getKennelDataFromSupabase() {
     selectAll<Record<string, unknown>>("dog_registrations", "select=*&order=registry.asc,registration_number.asc"),
     selectAll<Record<string, unknown>>("dog_documents", "select=*&order=created_at.desc"),
     selectAll<Record<string, unknown>>("litters", "select=*&order=created_at.desc"),
-    selectAll<Record<string, unknown>>("buyers", "select=*&order=last_name.asc,first_name.asc"),
+    selectAll<Record<string, unknown>>("buyers", "select=*&order=created_at.desc"),
     selectAll<Record<string, unknown>>("puppies", "select=*&order=litter_id.desc,name.asc"),
     selectAll<Record<string, unknown>>("payment_plans", "select=*&order=status.asc,next_due_date.asc.nullslast"),
     selectAll<{ payment_plan_id: number; puppy_id: number }>("payment_plan_puppies"),
@@ -122,7 +136,7 @@ export async function getKennelDataFromSupabase() {
     dog_registrations: dogRegistrations,
     dog_documents: dogDocuments,
     litters,
-    buyers,
+    buyers: buyers.map(normalizeBuyer),
     puppies,
     payment_plans: paymentPlans.map((plan: Record<string, unknown>) => ({
       ...plan,

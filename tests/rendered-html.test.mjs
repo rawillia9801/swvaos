@@ -75,3 +75,15 @@ test("deploys the app directly without redirects", async () => {
   assert.match(supabaseSchema, /create table if not exists dogs/);
   assert.match(supabaseSchema, /insert into storage\.buckets/);
 });
+
+test("includes buyer schema repair for existing projects", async () => {
+  const [repairSql, kennel] = await Promise.all([
+    readFile(new URL("supabase/repair-buyers-schema.sql", root), "utf8"),
+    readFile(new URL("db/supabase-kennel.ts", root), "utf8"),
+  ]);
+
+  assert.match(repairSql, /add column if not exists last_name/);
+  assert.match(repairSql, /full_name/);
+  assert.match(repairSql, /create index if not exists buyers_email_idx/);
+  assert.doesNotMatch(kennel, /order=last_name/);
+});

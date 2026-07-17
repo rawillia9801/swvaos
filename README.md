@@ -24,6 +24,8 @@ The default storage bucket name is `documents` if `SUPABASE_STORAGE_BUCKET` is n
 
 Run [supabase/schema.sql](./supabase/schema.sql) in the database SQL editor. It creates the kennel tables, document metadata tables, and the storage bucket policy shape used by the API routes.
 
+If this project already has older buyer/family records, run [supabase/repair-buyers-schema.sql](./supabase/repair-buyers-schema.sql). It adds the buyer columns SWVAOS expects and backfills names from existing `name` or `full_name` values when present.
+
 ## App Surface
 
 - `app/page.tsx` is the SWVAOS interface.
