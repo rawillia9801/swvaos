@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-const sourceUrl = process.env.SOURCE_SITE_URL ?? "https://southwest-virginia-chihuahua-os.dswillia74.chatgpt.site";
+const sourceUrl = process.env.SOURCE_SITE_URL;
 const sourceCookie = process.env.SOURCE_COOKIE;
 const sourceAuthorization = process.env.SOURCE_AUTHORIZATION;
 const sourceBackupDir = process.env.SOURCE_BACKUP_DIR;
@@ -18,8 +18,12 @@ const sourceHeaders = new Headers();
 if (sourceCookie) sourceHeaders.set("cookie", sourceCookie);
 if (sourceAuthorization) sourceHeaders.set("authorization", sourceAuthorization);
 
+if (!sourceBackupDir && !sourceUrl) {
+  throw new Error("Set SOURCE_BACKUP_DIR or SOURCE_SITE_URL before running this migration.");
+}
+
 if (!sourceBackupDir && !sourceCookie && !sourceAuthorization) {
-  throw new Error("Set SOURCE_BACKUP_DIR, SOURCE_COOKIE, or SOURCE_AUTHORIZATION so the migration can read the private ChatGPT/Sites app.");
+  throw new Error("Set SOURCE_COOKIE or SOURCE_AUTHORIZATION so the migration can read the private legacy app.");
 }
 
 const supabaseHeaders = {

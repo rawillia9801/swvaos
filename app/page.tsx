@@ -1,374 +1,228 @@
 "use client";
 
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-type Resource = "dogs" | "dog_medical_records" | "dog_registrations" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates";
+type Resource = "dogs" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates" | "dog_medical_records" | "dog_registrations";
 type BaseRecord = { id: number; created_at: string; updated_at: string };
-type Dog = BaseRecord & { name: string; registered_name: string | null; sex: string; role: string; date_of_birth: string | null; color: string | null; weight: number | null; registration_number: string | null; microchip_number: string | null; health_testing: string | null; acquired_from: string | null; acquisition_date: string | null; purchase_price_cents: number | null; acquisition_notes: string | null; status: string; next_heat_date: string | null; notes: string | null };
+type Dog = BaseRecord & { name: string; registered_name: string | null; sex: string; role: string; date_of_birth: string | null; color: string | null; weight: number | null; status: string; registration_number: string | null; microchip_number: string | null; health_testing: string | null; next_heat_date: string | null; notes: string | null; purchase_price_cents: number | null };
+type Litter = BaseRecord & { name: string; dam_id: number | null; sire_id: number | null; breeding_date: string | null; due_date: string | null; birth_date: string | null; expected_count: number | null; status: string; notes: string | null };
+type Buyer = BaseRecord & { first_name: string; last_name: string; email: string; phone: string | null; city: string | null; state: string | null; application_status: string; preferred_sex: string | null; preferred_color: string | null; notes: string | null };
+type Puppy = BaseRecord & { litter_id: number; buyer_id: number | null; name: string; sex: string | null; color: string | null; birth_date: string | null; birth_weight: number | null; current_weight: number | null; status: string; price_cents: number | null; notes: string | null };
+type PaymentPlan = BaseRecord & { buyer_id: number; name: string; total_amount_cents: number; payment_amount_cents: number; term_count: number; frequency: string; next_due_date: string | null; status: string; puppy_ids: number[] };
+type Transaction = BaseRecord & { type: "Payment" | "Cost"; dog_id: number | null; buyer_id: number | null; litter_id: number | null; puppy_id: number | null; payment_plan_id: number | null; category: string | null; description: string; amount_cents: number; due_date: string | null; paid_date: string | null; status: string; method: string | null; notes: string | null };
+type KennelEvent = BaseRecord & { title: string; event_type: string; event_date: string; event_time: string | null; location: string | null; status: string; notes: string | null };
+type PuppyUpdate = BaseRecord & { puppy_id: number; title: string; body: string; week_number: number | null; weight: number | null; published: number | boolean };
 type DogMedicalRecord = BaseRecord & { dog_id: number; record_type: string; title: string; record_date: string | null; provider: string | null; cost_cents: number; next_due_date: string | null; notes: string | null };
 type DogRegistration = BaseRecord & { dog_id: number; registry: string; registration_number: string; registered_name: string | null; issue_date: string | null; notes: string | null };
-type DogDocument = BaseRecord & { dog_id: number; registration_id: number | null; document_type: string; registry: string | null; registration_number: string | null; title: string; file_name: string; content_type: string; size_bytes: number; notes: string | null };
-type Litter = BaseRecord & { name: string; dam_id: number | null; sire_id: number | null; breeding_date: string | null; due_date: string | null; birth_date: string | null; expected_count: number | null; status: string; notes: string | null };
-type Buyer = BaseRecord & { first_name: string; last_name: string; email: string; phone: string | null; city: string | null; state: string | null; application_status: string; preferred_sex: string | null; preferred_color: string | null; household_notes: string | null; notes: string | null };
-type Puppy = BaseRecord & { litter_id: number; buyer_id: number | null; name: string; sex: string | null; color: string | null; birth_date: string | null; birth_weight: number | null; current_weight: number | null; status: string; price_cents: number | null; notes: string | null };
-type PaymentPlan = BaseRecord & { buyer_id: number; name: string; total_amount_cents: number; payment_amount_cents: number; term_count: number; frequency: string; start_date: string | null; next_due_date: string | null; on_time_credit_cents: number; credit_eligible: number | boolean; status: string; notes: string | null; puppy_ids: number[] };
-type Transaction = BaseRecord & { type: "Payment" | "Cost"; dog_id: number | null; buyer_id: number | null; litter_id: number | null; puppy_id: number | null; payment_plan_id: number | null; category: string | null; description: string; amount_cents: number; due_date: string | null; paid_date: string | null; status: string; method: string | null; notes: string | null };
-type KennelEvent = BaseRecord & { title: string; event_type: string; event_date: string; event_time: string | null; related_type: string | null; related_id: number | null; location: string | null; status: string; notes: string | null };
-type PuppyUpdate = BaseRecord & { puppy_id: number; title: string; body: string; week_number: number | null; weight: number | null; published: number | boolean };
-type BuyerDocument = BaseRecord & { buyer_id: number; payment_plan_id: number | null; document_type: string; title: string; file_name: string; content_type: string; size_bytes: number; notes: string | null; puppy_ids: number[] };
-type DataSet = { dogs: Dog[]; dog_medical_records: DogMedicalRecord[]; dog_registrations: DogRegistration[]; dog_documents: DogDocument[]; litters: Litter[]; buyers: Buyer[]; puppies: Puppy[]; payment_plans: PaymentPlan[]; transactions: Transaction[]; events: KennelEvent[]; updates: PuppyUpdate[]; buyer_documents: BuyerDocument[] };
+type StoredDocument = BaseRecord & { title: string; file_name: string; content_type: string; size_bytes: number; document_type: string };
+type DogDocument = StoredDocument & { dog_id: number; registration_id: number | null; registry: string | null; registration_number: string | null };
+type BuyerDocument = StoredDocument & { buyer_id: number; payment_plan_id: number | null; puppy_ids: number[] };
+type DataSet = { dogs: Dog[]; litters: Litter[]; buyers: Buyer[]; puppies: Puppy[]; payment_plans: PaymentPlan[]; transactions: Transaction[]; events: KennelEvent[]; updates: PuppyUpdate[]; dog_medical_records: DogMedicalRecord[]; dog_registrations: DogRegistration[]; dog_documents: DogDocument[]; buyer_documents: BuyerDocument[] };
 type ModalState = { resource: Resource; record?: Record<string, unknown>; preset?: Record<string, unknown> } | null;
+type View = "Command" | "Breeding" | "Families" | "Finance" | "Calendar" | "Vault";
 
-const emptyData: DataSet = { dogs: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], buyer_documents: [] };
-const navItems = [["Overview", "⌂"], ["Litters", "✦"], ["Dogs", "♡"], ["Buyers", "◎"], ["Payments", "$"], ["Calendar", "◷"], ["Puppy Portal", "↗"]] as const;
-const pageCopy: Record<string, [string, string, string]> = {
-  Overview: ["KENNEL COMMAND CENTER", "Overview", "Live information from every part of your breeding program."],
-  Litters: ["BREEDING PROGRAM", "Litters", "Pairings, due dates, births, and puppies in one connected record."],
-  Dogs: ["BREEDING PROGRAM", "Breeding dogs", "Health, registration, cycles, and breeding status."],
-  Buyers: ["FAMILY PIPELINE", "Buyers", "Puppy matches, signed documents, guarantees, and family records."],
-  Payments: ["FINANCIALS", "Payments & plans", "Track payments, plan terms, earned credits, balances, and costs."],
-  Calendar: ["SCHEDULE", "Events", "Veterinary visits, breeding dates, milestones, and family commitments."],
-  "Puppy Portal": ["FAMILY EXPERIENCE", "Puppy portal", "Manage puppy assignments and publish real updates for each family."],
-};
+const emptyData: DataSet = { dogs: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], buyer_documents: [] };
+const views: { id: View; label: string; code: string }[] = [
+  { id: "Command", label: "Command", code: "01" },
+  { id: "Breeding", label: "Breeding", code: "02" },
+  { id: "Families", label: "Families", code: "03" },
+  { id: "Finance", label: "Finance", code: "$" },
+  { id: "Calendar", label: "Calendar", code: "05" },
+  { id: "Vault", label: "Vault", code: "06" },
+];
 
 const money = (cents: number | null | undefined) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents ?? 0) / 100);
 const shortDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "Not set";
+const today = () => new Date().toISOString().slice(0, 10);
 const fullName = (buyer: Buyer) => `${buyer.first_name} ${buyer.last_name}`;
 const initials = (value: string) => value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
-const today = () => new Date().toISOString().slice(0, 10);
-const fileSize = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+const fileSize = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+const valueOf = (record: Record<string, unknown> | undefined, key: string, fallback = "") => String(record?.[key] ?? fallback);
 
-function nextBirthday(value: string) {
-  const [birthYear, month, day] = value.split("-").map(Number);
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const todayUtc = Date.UTC(currentYear, now.getMonth(), now.getDate());
-  let birthdayYear = currentYear;
-  let birthdayUtc = Date.UTC(birthdayYear, month - 1, day);
-  if (birthdayUtc < todayUtc) {
-    birthdayYear += 1;
-    birthdayUtc = Date.UTC(birthdayYear, month - 1, day);
-  }
-  const birthday = new Date(birthdayUtc);
-  return {
-    daysUntil: Math.round((birthdayUtc - todayUtc) / 86400000),
-    turning: birthdayYear - birthYear,
-    date: `${birthday.getUTCFullYear()}-${String(birthday.getUTCMonth() + 1).padStart(2, "0")}-${String(birthday.getUTCDate()).padStart(2, "0")}`,
-  };
+function pct(value: number, total: number) {
+  if (!total) return 0;
+  return Math.max(0, Math.min(100, Math.round((value / total) * 100)));
 }
 
-function Glyph({ children }: { children: ReactNode }) { return <span className="glyph" aria-hidden="true">{children}</span>; }
-function Status({ children, tone = "sage" }: { children: ReactNode; tone?: string }) { return <span className={`status ${tone}`}>{children}</span>; }
-
-function EmptyState({ icon, title, text, action, onAction }: { icon: string; title: string; text: string; action: string; onAction: () => void }) {
-  return <div className="empty-state"><span>{icon}</span><h2>{title}</h2><p>{text}</p><button className="primary-button" onClick={onAction}>{action}</button></div>;
+function Status({ children, tone = "neutral" }: { children: string; tone?: "good" | "warn" | "bad" | "neutral" }) {
+  return <span className={`status ${tone}`}>{children}</span>;
 }
 
-function SectionHeader({ eyebrow, title, actions }: { eyebrow: string; title: string; actions?: ReactNode }) {
-  return <div className="section-heading"><div><p className="kicker">{eyebrow}</p><h2>{title}</h2></div>{actions}</div>;
+function Section({ eyebrow, title, children, action }: { eyebrow: string; title: string; children: React.ReactNode; action?: React.ReactNode }) {
+  return <section className="panel"><div className="panel-head"><span>{eyebrow}</span><h2>{title}</h2>{action}</div>{children}</section>;
 }
 
-function Overview({ data, openCreate, navigate }: { data: DataSet; openCreate: (resource: Resource, preset?: Record<string, unknown>) => void; navigate: (tab: string) => void }) {
-  const activeLitters = data.litters.filter((item) => !["Completed", "Archived"].includes(item.status));
-  const paymentTotal = data.transactions.filter((item) => item.type === "Payment" && item.status === "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
-  const costTotal = data.transactions.filter((item) => item.type === "Cost").reduce((sum, item) => sum + item.amount_cents, 0);
-  const outstanding = data.transactions.filter((item) => item.type === "Payment" && item.status !== "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
-  const upcoming = data.events.filter((item) => item.event_date >= today() && item.status !== "Completed").slice(0, 5);
-  const unmatched = data.puppies.filter((item) => !item.buyer_id && !["Retained", "Placed"].includes(item.status));
-  const overdue = data.transactions.filter((item) => item.type === "Payment" && item.status !== "Paid" && item.due_date && item.due_date < today());
-  const dueSoon = activeLitters.filter((item) => item.due_date && item.due_date >= today()).sort((a, b) => String(a.due_date).localeCompare(String(b.due_date))).slice(0, 3);
-  const hasAnyData = Object.values(data).some((records) => records.length > 0);
-  const attention = [
-    overdue.length ? { label: `${overdue.length} overdue payment${overdue.length === 1 ? "" : "s"}`, detail: money(overdue.reduce((sum, item) => sum + item.amount_cents, 0)), tab: "Payments", tone: "peach" } : null,
-    unmatched.length ? { label: `${unmatched.length} unassigned pupp${unmatched.length === 1 ? "y" : "ies"}`, detail: "Ready for a buyer match", tab: "Puppy Portal", tone: "blue" } : null,
-    dueSoon.length ? { label: `${dueSoon.length} upcoming litter milestone${dueSoon.length === 1 ? "" : "s"}`, detail: dueSoon.map((item) => item.name).join(", "), tab: "Litters", tone: "mint" } : null,
-  ].filter(Boolean) as { label: string; detail: string; tab: string; tone: string }[];
+function Empty({ title, text, action, onAction }: { title: string; text: string; action: string; onAction: () => void }) {
+  return <div className="empty"><b>{title}</b><p>{text}</p><button onClick={onAction}>{action}</button></div>;
+}
 
-  if (!hasAnyData) return <div className="welcome-panel"><div><p className="kicker light">START HERE</p><h2>Your operating system is ready for real records.</h2><p>Add your breeding dogs first, then create a litter, enter buyers, and connect puppies as your program grows.</p></div><div className="setup-steps"><button onClick={() => openCreate("dogs")}><b>1</b><span><strong>Add a breeding dog</strong><small>Health, registration, and cycle details</small></span><em>→</em></button><button onClick={() => openCreate("litters")}><b>2</b><span><strong>Create a litter</strong><small>Pairing, expected dates, and notes</small></span><em>→</em></button><button onClick={() => openCreate("buyers")}><b>3</b><span><strong>Enter a buyer</strong><small>Application and contact information</small></span><em>→</em></button><button onClick={() => openCreate("events")}><b>4</b><span><strong>Schedule an event</strong><small>Veterinary visits and milestones</small></span><em>→</em></button></div></div>;
+function useAnalytics(data: DataSet) {
+  return useMemo(() => {
+    const activeLitters = data.litters.filter((item) => !["Completed", "Archived"].includes(item.status));
+    const payments = data.transactions.filter((item) => item.type === "Payment");
+    const paid = payments.filter((item) => item.status === "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
+    const costs = data.transactions.filter((item) => item.type === "Cost").reduce((sum, item) => sum + item.amount_cents, 0);
+    const outstanding = payments.filter((item) => item.status !== "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
+    const overdue = payments.filter((item) => item.status !== "Paid" && item.due_date && item.due_date < today());
+    const dueHealth = data.dog_medical_records.filter((item) => item.next_due_date && item.next_due_date <= today());
+    const unmatched = data.puppies.filter((item) => !item.buyer_id && !["Placed", "Retained"].includes(item.status));
+    const placed = data.puppies.filter((item) => item.buyer_id || item.status === "Placed");
+    const approvedBuyers = data.buyers.filter((item) => item.application_status === "Approved");
+    const pendingBuyers = data.buyers.filter((item) => !["Approved", "Declined", "Archived"].includes(item.application_status));
+    const registryCoverage = pct(data.dogs.filter((dog) => data.dog_registrations.some((registration) => registration.dog_id === dog.id)).length, data.dogs.length);
+    const docs = data.buyer_documents.length + data.dog_documents.length;
+    const readiness = Math.max(0, Math.min(100, Math.round(46 + Math.min(activeLitters.length, 4) * 8 + Math.min(approvedBuyers.length, 8) * 3 + Math.min(docs, 12) * 1.4 + registryCoverage * 0.12 - overdue.length * 8 - dueHealth.length * 5 - unmatched.length * 2)));
+    const upcoming = data.events.filter((item) => item.event_date >= today() && item.status !== "Completed").sort((a, b) => `${a.event_date}${a.event_time ?? ""}`.localeCompare(`${b.event_date}${b.event_time ?? ""}`));
+    const activePlanValue = data.payment_plans.filter((item) => item.status === "Active").reduce((sum, item) => sum + item.total_amount_cents, 0);
+    return { activeLitters, paid, costs, outstanding, overdue, dueHealth, unmatched, placed, approvedBuyers, pendingBuyers, registryCoverage, docs, readiness, upcoming, activePlanValue };
+  }, [data]);
+}
 
-  return <div className="dashboard-grid real-dashboard">
-    <section className="metric-grid span-12">
-      <button className="metric-card" onClick={() => navigate("Litters")}><span className="metric-icon mint"><Glyph>✦</Glyph></span><span><b>{activeLitters.length}</b><small>Active litters</small></span><em>{data.puppies.length} puppies recorded</em></button>
-      <button className="metric-card" onClick={() => navigate("Dogs")}><span className="metric-icon peach"><Glyph>♡</Glyph></span><span><b>{data.dogs.length}</b><small>Breeding dogs</small></span><em>{data.dogs.filter((item) => item.status === "Active").length} active</em></button>
-      <button className="metric-card" onClick={() => navigate("Buyers")}><span className="metric-icon blue"><Glyph>◎</Glyph></span><span><b>{data.buyers.length}</b><small>Buyer families</small></span><em>{data.buyers.filter((item) => item.application_status === "Approved").length} approved</em></button>
-      <button className="metric-card" onClick={() => navigate("Payments")}><span className="metric-icon lilac"><Glyph>$</Glyph></span><span><b>{money(outstanding)}</b><small>Outstanding</small></span><em>{money(paymentTotal - costTotal)} net recorded</em></button>
+function CommandView({ data, openCreate, setView }: { data: DataSet; openCreate: (resource: Resource, preset?: Record<string, unknown>) => void; setView: (view: View) => void }) {
+  const a = useAnalytics(data);
+  const alerts = [
+    ...a.overdue.map((item) => ({ title: item.description, detail: `${money(item.amount_cents)} overdue`, view: "Finance" as View, tone: "bad" as const })),
+    ...a.dueHealth.map((item) => ({ title: item.title, detail: `${item.record_type} due for dog #${item.dog_id}`, view: "Breeding" as View, tone: "warn" as const })),
+    ...a.unmatched.slice(0, 4).map((item) => ({ title: item.name, detail: "Puppy is not assigned to a buyer", view: "Families" as View, tone: "warn" as const })),
+  ];
+  return <div className="grid command-grid">
+    <section className="hero panel-wide">
+      <div><span className="eyebrow">LIVE SUPABASE OPERATIONS</span><h1>Southwest Virginia Chihuahua OS</h1><p>A direct Vercel dashboard for breeding operations, buyer pipeline, payments, document storage, care schedules, and family updates.</p><div className="hero-actions"><button onClick={() => openCreate("dogs")}>Add dog</button><button onClick={() => openCreate("litters")}>Create litter</button><button onClick={() => openCreate("buyers")}>Add buyer</button><button onClick={() => openCreate("transactions", { type: "Payment" })}>Log payment</button></div></div>
+      <div className="readiness"><span>Readiness</span><b>{a.readiness}</b><small>{alerts.length ? `${alerts.length} attention signals` : "All core signals nominal"}</small><i style={{ "--score": `${a.readiness}%` } as React.CSSProperties} /></div>
     </section>
-    <section className="card span-7"><SectionHeader eyebrow="ACTIVE LITTERS" title="Breeding program" actions={<button className="text-button" onClick={() => navigate("Litters")}>View all →</button>} />{activeLitters.length ? <div className="live-list">{activeLitters.slice(0, 4).map((litter) => { const dam = data.dogs.find((dog) => dog.id === litter.dam_id); const sire = data.dogs.find((dog) => dog.id === litter.sire_id); const puppies = data.puppies.filter((puppy) => puppy.litter_id === litter.id); return <button key={litter.id} onClick={() => navigate("Litters")}><span className="record-mark mint">{initials(litter.name) || "L"}</span><span><b>{litter.name}</b><small>{dam?.name ?? "Dam not set"} × {sire?.name ?? "Sire not set"}</small></span><span><Status>{litter.status}</Status><small>{litter.due_date ? `Due ${shortDate(litter.due_date)}` : litter.birth_date ? `Born ${shortDate(litter.birth_date)}` : "Date not set"}</small></span><em>{puppies.length} puppies</em></button>; })}</div> : <EmptyState icon="✦" title="No active litters" text="Create a litter when you have a planned or current pairing." action="Create litter" onAction={() => openCreate("litters")} />}</section>
-    <section className="card span-5"><SectionHeader eyebrow="NEEDS ATTENTION" title="Action center" />{attention.length ? <div className="attention-list">{attention.map((item) => <button key={item.label} onClick={() => navigate(item.tab)}><span className={`metric-icon ${item.tone}`}>!</span><span><b>{item.label}</b><small>{item.detail}</small></span><em>→</em></button>)}</div> : <div className="all-clear"><span>✓</span><b>Everything is up to date</b><p>There are no overdue balances or unmatched puppy records requiring attention.</p></div>}</section>
-    <section className="card span-7"><SectionHeader eyebrow="UPCOMING" title="Next events" actions={<button className="text-button" onClick={() => openCreate("events")}>+ Add event</button>} />{upcoming.length ? <div className="event-list">{upcoming.map((event) => <button className="real-event-row" key={event.id} onClick={() => navigate("Calendar")}><span className="date-tile mint"><b>{new Date(`${event.event_date}T12:00:00`).getDate()}</b><small>{new Date(`${event.event_date}T12:00:00`).toLocaleString("en-US", { month: "short" }).toUpperCase()}</small></span><span><b>{event.title}</b><small>{[event.event_time, event.location].filter(Boolean).join(" · ") || event.event_type}</small></span><Status tone="blue">{event.status}</Status></button>)}</div> : <EmptyState icon="◷" title="Nothing scheduled" text="Add veterinary visits, due dates, and puppy milestones." action="Schedule event" onAction={() => openCreate("events")} />}</section>
-    <section className="card span-5"><SectionHeader eyebrow="FINANCIAL SNAPSHOT" title="Recorded totals" actions={<button className="text-button" onClick={() => navigate("Payments")}>Open ledger →</button>} /><div className="financial-summary"><div><small>Payments received</small><strong>{money(paymentTotal)}</strong></div><div><small>Program costs</small><strong>{money(costTotal)}</strong></div><div className="net"><small>Net recorded</small><strong>{money(paymentTotal - costTotal)}</strong></div></div></section>
+    <div className="metric-row panel-wide">
+      <button onClick={() => setView("Breeding")}><span>Active litters</span><b>{a.activeLitters.length}</b><small>{data.puppies.length} puppies recorded</small></button>
+      <button onClick={() => setView("Families")}><span>Placement rate</span><b>{pct(a.placed.length, data.puppies.length)}%</b><small>{a.unmatched.length} unmatched puppies</small></button>
+      <button onClick={() => setView("Finance")}><span>Net recorded</span><b>{money(a.paid - a.costs)}</b><small>{money(a.outstanding)} outstanding</small></button>
+      <button onClick={() => setView("Vault")}><span>Vault files</span><b>{a.docs}</b><small>{a.registryCoverage}% registry coverage</small></button>
+    </div>
+    <Section eyebrow="Risk Radar" title="Attention queue" action={<button className="ghost" onClick={() => openCreate("events")}>Schedule</button>}>
+      {alerts.length ? <div className="signal-list">{alerts.slice(0, 7).map((item, index) => <button key={`${item.title}-${index}`} onClick={() => setView(item.view)}><Status tone={item.tone}>{item.tone.toUpperCase()}</Status><span><b>{item.title}</b><small>{item.detail}</small></span></button>)}</div> : <Empty title="No immediate risks" text="No overdue balances, care deadlines, or unassigned puppy records are currently flagged." action="Add event" onAction={() => openCreate("events")} />}
+    </Section>
+    <Section eyebrow="Program Pulse" title="Breeding and pipeline">
+      <div className="pulse-bars"><span style={{ "--value": `${Math.min(100, a.activeLitters.length * 22)}%` } as React.CSSProperties}><b>Litters</b><i>{a.activeLitters.length}</i></span><span style={{ "--value": `${Math.min(100, a.approvedBuyers.length * 12)}%` } as React.CSSProperties}><b>Approved buyers</b><i>{a.approvedBuyers.length}</i></span><span style={{ "--value": `${Math.min(100, a.pendingBuyers.length * 12)}%` } as React.CSSProperties}><b>In review</b><i>{a.pendingBuyers.length}</i></span><span style={{ "--value": `${a.registryCoverage}%` } as React.CSSProperties}><b>Registry coverage</b><i>{a.registryCoverage}%</i></span></div>
+    </Section>
+    <Section eyebrow="Upcoming" title="Next events" action={<button className="ghost" onClick={() => setView("Calendar")}>Calendar</button>}>
+      {a.upcoming.length ? <div className="event-stack">{a.upcoming.slice(0, 5).map((item) => <button key={item.id} onClick={() => setView("Calendar")}><span><b>{new Date(`${item.event_date}T12:00:00`).getDate()}</b><small>{new Date(`${item.event_date}T12:00:00`).toLocaleString("en-US", { month: "short" })}</small></span><p><b>{item.title}</b><small>{[item.event_time, item.location, item.event_type].filter(Boolean).join(" / ")}</small></p><Status>{item.status}</Status></button>)}</div> : <Empty title="No events scheduled" text="Add veterinary visits, whelping reminders, buyer pickups, and follow-up tasks." action="Schedule event" onAction={() => openCreate("events")} />}
+    </Section>
   </div>;
 }
 
-type DogViewProps = ViewProps & { reload: () => Promise<void>; notify: (message: string) => void; reportError: (message: string) => void };
-
-function DogsView({ data, openCreate, openEdit, remove, reload, notify, reportError }: DogViewProps) {
-  const [selectedDogId, setSelectedDogId] = useState<number | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [actionError, setActionError] = useState("");
-  const selectedDog = data.dogs.find((dog) => dog.id === selectedDogId) ?? null;
-
-  async function uploadDocument(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedDog) return;
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    form.set("dog_id", String(selectedDog.id));
-    setActionError("");
-    setUploading(true);
-    try {
-      const response = await fetch("/api/dog-documents", { method: "POST", body: form });
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Unable to upload the document.");
-      formElement.reset();
-      notify("Dog document uploaded securely");
-      await reload();
-    } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : "Unable to upload the document.";
-      setActionError(message);
-      reportError(message);
-    } finally { setUploading(false); }
-  }
-
-  async function removeDocument(document: DogDocument) {
-    if (!window.confirm(`Delete “${document.title}”? The stored file will also be removed.`)) return;
-    setActionError("");
-    try {
-      const response = await fetch(`/api/dog-documents?id=${document.id}`, { method: "DELETE" });
-      if (!response.ok) { const payload = await response.json() as { error?: string }; throw new Error(payload.error || "Unable to delete the document."); }
-      notify("Dog document deleted");
-      await reload();
-    } catch (deleteError) {
-      const message = deleteError instanceof Error ? deleteError.message : "Unable to delete the document.";
-      setActionError(message);
-      reportError(message);
-    }
-  }
-
-  if (!data.dogs.length) return <EmptyState icon="♡" title="No breeding dogs yet" text="Add each dam and sire with their health, registration, and breeding details." action="Add first dog" onAction={() => openCreate("dogs")} />;
-
-  const dogLitters = selectedDog ? data.litters.filter((litter) => litter.dam_id === selectedDog.id || litter.sire_id === selectedDog.id) : [];
-  const litterIds = new Set(dogLitters.map((litter) => litter.id));
-  const dogPuppies = data.puppies.filter((puppy) => litterIds.has(puppy.litter_id));
-  const puppyIds = new Set(dogPuppies.map((puppy) => puppy.id));
-  const relatedPlanIds = new Set(data.payment_plans.filter((plan) => plan.puppy_ids.some((puppyId) => puppyIds.has(puppyId))).map((plan) => plan.id));
-  const linkedPayments = data.transactions.filter((transaction) => transaction.type === "Payment" && transaction.status === "Paid" && ((transaction.puppy_id != null && puppyIds.has(transaction.puppy_id)) || (transaction.litter_id != null && litterIds.has(transaction.litter_id)) || (transaction.payment_plan_id != null && relatedPlanIds.has(transaction.payment_plan_id))));
-  const linkedRevenue = linkedPayments.reduce((sum, transaction) => sum + transaction.amount_cents, 0);
-  const contractedValue = dogPuppies.reduce((sum, puppy) => sum + (puppy.price_cents ?? 0), 0);
-  const medicalRecords = selectedDog ? data.dog_medical_records.filter((record) => record.dog_id === selectedDog.id) : [];
-  const medicalCost = medicalRecords.reduce((sum, record) => sum + record.cost_cents, 0);
-  const dogRegistrations = selectedDog ? data.dog_registrations.filter((registration) => registration.dog_id === selectedDog.id) : [];
-  const dogDocuments = selectedDog ? data.dog_documents.filter((document) => document.dog_id === selectedDog.id) : [];
-  const ledgerCosts = selectedDog ? data.transactions.filter((transaction) => transaction.type === "Cost" && transaction.dog_id === selectedDog.id) : [];
-  const ledgerCost = ledgerCosts.reduce((sum, transaction) => sum + transaction.amount_cents, 0);
-  const totalDogCost = (selectedDog?.purchase_price_cents ?? 0) + medicalCost + ledgerCost;
-  const performance = linkedRevenue - totalDogCost;
-
-  return <div className="module-stack"><div className="module-toolbar"><p className="record-count">{data.dogs.length} dog{data.dogs.length === 1 ? "" : "s"}</p><button className="primary-button" onClick={() => openCreate("dogs")}>+ Add dog</button></div><div className="dog-grid real-dog-grid">{data.dogs.map((dog) => { const litters = data.litters.filter((litter) => litter.dam_id === dog.id || litter.sire_id === dog.id); const puppyCount = data.puppies.filter((puppy) => litters.some((litter) => litter.id === puppy.litter_id)).length; const documents = data.dog_documents.filter((document) => document.dog_id === dog.id); const registrations = data.dog_registrations.filter((registration) => registration.dog_id === dog.id); const medical = data.dog_medical_records.filter((record) => record.dog_id === dog.id).reduce((sum, record) => sum + record.cost_cents, 0); const ledger = data.transactions.filter((transaction) => transaction.type === "Cost" && transaction.dog_id === dog.id).reduce((sum, transaction) => sum + transaction.amount_cents, 0); const totalCost = (dog.purchase_price_cents ?? 0) + medical + ledger; return <article className="dog-card" key={dog.id}><button className="dog-profile-trigger" onClick={() => { setSelectedDogId(dog.id); setActionError(""); }} aria-label={`Open ${dog.name}'s full profile`}><div className="dog-portrait mint"><span>{initials(dog.name)}</span><small>{dog.role}</small></div></button><div className="dog-body"><div className="dog-title"><div><h2>{dog.name}</h2><p>{[dog.color, dog.sex, dog.date_of_birth ? `Born ${shortDate(dog.date_of_birth)}` : null].filter(Boolean).join(" · ")}</p></div><Status tone={dog.status === "Active" ? "sage" : "blue"}>{dog.status}</Status></div><dl className="record-details dog-card-details"><div><dt>Registered name</dt><dd>{dog.registered_name || "—"}</dd></div><div><dt>Registries</dt><dd>{registrations.length || "—"}</dd></div><div><dt>Litters / puppies</dt><dd>{litters.length} / {puppyCount}</dd></div><div><dt>Documents</dt><dd>{documents.length}</dd></div><div className="dog-cost-detail"><dt>Total recorded costs</dt><dd>{money(totalCost)}</dd></div><div><dt>Next heat</dt><dd>{shortDate(dog.next_heat_date)}</dd></div></dl><div className="note-block"><small>HEALTH & REGISTRATION</small><p>{dog.health_testing || "Open the profile to add medical history, registrations, pedigrees, Embark, and OFA results."}</p></div><div className="record-actions"><button className="primary-button small" onClick={() => { setSelectedDogId(dog.id); setActionError(""); }}>View full profile</button><button className="secondary-button" onClick={() => openEdit("dogs", dog)}>Edit</button><button className="danger-button" onClick={() => remove("dogs", dog.id, dog.name)}>Delete</button></div></div></article>; })}</div>
-
-    {selectedDog && <div className="modal-backdrop buyer-record-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedDogId(null); }} role="dialog" aria-modal="true" aria-labelledby="dog-profile-title"><div className="buyer-record-modal dog-profile-modal"><header className="buyer-record-header dog-profile-header"><div className="buyer-record-identity"><span className="avatar light">{initials(selectedDog.name)}</span><div><p className="kicker light">BREEDING DOG PROFILE</p><h2 id="dog-profile-title">{selectedDog.name}</h2><p>{[selectedDog.registered_name, selectedDog.role, selectedDog.status].filter(Boolean).join(" · ")}</p></div></div><div className="dog-profile-header-actions"><button className="profile-edit-button" onClick={() => openEdit("dogs", selectedDog)}>Edit profile</button><button onClick={() => setSelectedDogId(null)} aria-label="Close dog profile">×</button></div></header><div className="buyer-record-body dog-profile-body">
-      <div className="dog-performance-grid"><div><small>PAID PUPPY-SALE REVENUE</small><b>{money(linkedRevenue)}</b><span>{linkedPayments.length} linked paid transaction{linkedPayments.length === 1 ? "" : "s"}</span></div><div><small>CONTRACTED PUPPY VALUE</small><b>{money(contractedValue)}</b><span>{dogPuppies.length} pupp{dogPuppies.length === 1 ? "y" : "ies"} across {dogLitters.length} litter{dogLitters.length === 1 ? "" : "s"}</span></div><div><small>TOTAL RECORDED COSTS</small><b>{money(totalDogCost)}</b><span>{money(selectedDog.purchase_price_cents)} acquisition · {money(medicalCost)} medical · {money(ledgerCost)} ledger</span></div><div className={performance < 0 ? "negative-performance" : ""}><small>RECORDED PERFORMANCE</small><b>{money(performance)}</b><span>Paid linked sales minus all dog-specific costs</span></div></div>
-      <p className="profile-calculation-note">Revenue is linked through this dog’s litters, puppies, and puppy payment plans. A litter’s revenue appears in both its dam’s and sire’s profiles so each breeding dog can be evaluated individually.</p>
-      {actionError && <div className="inline-error">{actionError}</div>}
-
-      <div className="dog-profile-columns"><section className="buyer-record-section"><SectionHeader eyebrow="PROFILE & ACQUISITION" title="Identity and origin" actions={<button className="secondary-button" onClick={() => openEdit("dogs", selectedDog)}>Edit details</button>} /><dl className="profile-detail-grid"><div><dt>Registered name</dt><dd>{selectedDog.registered_name || "Not recorded"}</dd></div><div><dt>Sex / role</dt><dd>{selectedDog.sex} · {selectedDog.role}</dd></div><div><dt>Date of birth</dt><dd>{shortDate(selectedDog.date_of_birth)}</dd></div><div><dt>Color / weight</dt><dd>{[selectedDog.color, selectedDog.weight ? `${selectedDog.weight} lb` : null].filter(Boolean).join(" · ") || "Not recorded"}</dd></div><div><dt>Microchip</dt><dd>{selectedDog.microchip_number || "Not recorded"}</dd></div><div><dt>Legacy registration</dt><dd>{selectedDog.registration_number || "Not recorded"}</dd></div><div><dt>Acquired from</dt><dd>{selectedDog.acquired_from || "Not recorded"}</dd></div><div><dt>Acquisition date</dt><dd>{shortDate(selectedDog.acquisition_date)}</dd></div><div><dt>Purchase price</dt><dd>{selectedDog.purchase_price_cents == null ? "Not recorded" : money(selectedDog.purchase_price_cents)}</dd></div><div><dt>Next heat</dt><dd>{shortDate(selectedDog.next_heat_date)}</dd></div></dl>{selectedDog.acquisition_notes && <div className="note-block profile-note"><small>ACQUISITION NOTES</small><p>{selectedDog.acquisition_notes}</p></div>}{selectedDog.notes && <div className="note-block profile-note"><small>GENERAL NOTES</small><p>{selectedDog.notes}</p></div>}</section>
-
-      <section className="buyer-record-section"><SectionHeader eyebrow="MEDICAL & VACCINATIONS" title="Complete health history" actions={<button className="primary-button small" onClick={() => openCreate("dog_medical_records", { dog_id: selectedDog.id, record_type: "Vaccination" })}>+ Add record</button>} />{selectedDog.health_testing && <div className="health-summary"><b>Health testing summary</b><p>{selectedDog.health_testing}</p></div>}{medicalRecords.length ? <div className="medical-timeline">{medicalRecords.map((record) => <article key={record.id}><span className="medical-marker">+</span><div><div><Status tone={record.record_type === "Vaccination" ? "sage" : "blue"}>{record.record_type}</Status><small>{shortDate(record.record_date)}</small></div><h3>{record.title}</h3><p>{[record.provider, record.cost_cents ? money(record.cost_cents) : null, record.next_due_date ? `Next due ${shortDate(record.next_due_date)}` : null].filter(Boolean).join(" · ")}</p>{record.notes && <small>{record.notes}</small>}</div><div className="document-actions"><button onClick={() => openEdit("dog_medical_records", record)}>Edit</button><button className="danger-link" onClick={() => remove("dog_medical_records", record.id, record.title)}>Delete</button></div></article>)}</div> : <p className="inline-empty">No exams, vaccinations, medications, or test history recorded yet.</p>}</section></div>
-
-      <section className="buyer-record-section dog-registration-section"><SectionHeader eyebrow="REGISTRIES" title="Multiple registration records" actions={<button className="primary-button small" onClick={() => openCreate("dog_registrations", { dog_id: selectedDog.id, registered_name: selectedDog.registered_name ?? "" })}>+ Add registry</button>} />{dogRegistrations.length ? <div className="dog-registration-grid">{dogRegistrations.map((registration) => { const documents = dogDocuments.filter((document) => document.registration_id === registration.id); return <article key={registration.id}><div className="registry-badge">{initials(registration.registry) || "R"}</div><div><Status tone="blue">{registration.registry}</Status><h3>{registration.registration_number}</h3><p>{registration.registered_name || selectedDog.registered_name || selectedDog.name}</p><small>{registration.issue_date ? `Issued ${shortDate(registration.issue_date)}` : "Issue date not recorded"} · {documents.length} linked file{documents.length === 1 ? "" : "s"}</small>{registration.notes && <em>{registration.notes}</em>}</div><div className="document-actions"><button onClick={() => openEdit("dog_registrations", registration)}>Edit</button><button className="danger-link" onClick={() => remove("dog_registrations", registration.id, `${registration.registry} ${registration.registration_number}`)}>Delete</button></div></article>; })}</div> : <div className="registry-empty"><span>R</span><div><b>No registry records yet</b><p>Add AKC, CKC, UKC, or any other registry separately. Dual-registered dogs can have as many records as needed.</p></div><button className="primary-button small" onClick={() => openCreate("dog_registrations", { dog_id: selectedDog.id, registered_name: selectedDog.registered_name ?? "" })}>Add first registry</button></div>}</section>
-
-      <section className="buyer-record-section"><SectionHeader eyebrow="DOG-SPECIFIC COSTS" title="Ledger costs on this profile" actions={<button className="primary-button small" onClick={() => openCreate("transactions", { type: "Cost", dog_id: selectedDog.id, description: `${selectedDog.name} expense`, status: "Paid" })}>+ Add cost</button>} />{ledgerCosts.length ? <div className="dog-cost-list">{ledgerCosts.map((cost) => <article key={cost.id}><span className="cost-icon">$</span><div><b>{cost.description}</b><small>{cost.category || "Dog expense"} · {shortDate(cost.paid_date || cost.due_date)}</small></div><strong>{money(cost.amount_cents)}</strong><button onClick={() => openEdit("transactions", cost)}>Edit</button></article>)}</div> : <p className="inline-empty">No additional ledger costs are linked directly to this dog. Acquisition and medical-record costs are already included above.</p>}</section>
-
-      <section className="buyer-record-section"><SectionHeader eyebrow="REGISTRATIONS, PEDIGREES & HEALTH TESTS" title="Secure dog documents" />
-        <form className="document-upload-form" onSubmit={uploadDocument}><div className="form-grid"><label><span>Document type *</span><select name="document_type" defaultValue="Registration Certificate" required><option>Registration Certificate</option><option>Pedigree</option><option>Embark Results</option><option>OFA Test Results</option><option>Genetic Test Results</option><option>Health Test Results</option><option>Health Certificate</option><option>Medical Documentation</option><option>Other</option></select></label><label><span>Link to registry</span><select name="registration_id" defaultValue=""><option value="">Not registry-specific</option>{dogRegistrations.map((registration) => <option key={registration.id} value={registration.id}>{registration.registry} · {registration.registration_number}</option>)}</select></label><label><span>Registry / test provider</span><input name="registry" placeholder="AKC, CKC, Embark, OFA, veterinarian…" /></label><label><span>Registration / report number</span><input name="registration_number" placeholder="Optional number" /></label><label><span>Document title</span><input name="title" placeholder="AKC Registration Certificate" /></label><label><span>Scanned file *</span><input name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" required /></label><TextAreaField label="Document notes" name="notes" placeholder="Results, clear/carrier status, issue date, medical details, or reminders" /></div><div className="upload-help"><span>Link certificates to the matching registry; add separate files for pedigrees, Embark, OFA, and medical records · up to 20 MB</span><button className="primary-button" disabled={uploading}>{uploading ? "Uploading…" : "Upload document"}</button></div></form>
-        {dogDocuments.length ? <div className="document-list dog-document-list">{dogDocuments.map((document) => { const registration = dogRegistrations.find((item) => item.id === document.registration_id); return <article key={document.id}><span className="document-icon">{document.content_type === "application/pdf" ? "PDF" : "IMG"}</span><div><Status tone={document.document_type.includes("Results") || document.document_type === "Medical Documentation" ? "blue" : document.document_type === "Pedigree" ? "peach" : "sage"}>{document.document_type}</Status><h3>{document.title}</h3><p>{document.file_name} · {fileSize(document.size_bytes)} · {shortDate(document.created_at.slice(0, 10))}</p><small>{registration ? `${registration.registry} · ${registration.registration_number}` : [document.registry, document.registration_number].filter(Boolean).join(" · ") || "Not registry-specific"}</small></div><div className="document-actions"><a href={`/api/dog-documents/${document.id}`} target="_blank" rel="noreferrer">Open</a><button className="danger-link" onClick={() => void removeDocument(document)}>Delete</button></div></article>; })}</div> : <p className="inline-empty">No registration certificates, pedigrees, Embark, OFA, or medical files uploaded yet.</p>}
-      </section>
-
-      <section className="buyer-record-section"><SectionHeader eyebrow="BREEDING HISTORY" title="Litters and puppies" />{dogLitters.length ? <div className="dog-litter-history">{dogLitters.map((litter) => { const puppies = dogPuppies.filter((puppy) => puppy.litter_id === litter.id); const mateId = litter.dam_id === selectedDog.id ? litter.sire_id : litter.dam_id; const mate = data.dogs.find((dog) => dog.id === mateId); return <article key={litter.id}><div><Status>{litter.status}</Status><h3>{litter.name}</h3><p>With {mate?.name ?? "unrecorded mate"} · {litter.birth_date ? `Born ${shortDate(litter.birth_date)}` : litter.due_date ? `Due ${shortDate(litter.due_date)}` : "Date not set"}</p></div><div className="profile-puppy-list">{puppies.length ? puppies.map((puppy) => { const buyer = data.buyers.find((item) => item.id === puppy.buyer_id); return <button key={puppy.id} onClick={() => openEdit("puppies", puppy)}><span className="record-mark mint">{initials(puppy.name)}</span><span><b>{puppy.name}</b><small>{puppy.status}{buyer ? ` · ${fullName(buyer)}` : " · No buyer"}</small></span><strong>{puppy.price_cents == null ? "No price" : money(puppy.price_cents)}</strong></button>; }) : <p className="inline-empty">No puppies recorded for this litter.</p>}</div></article>; })}</div> : <p className="inline-empty">This dog is not yet linked as the dam or sire of a litter.</p>}</section>
-    </div></div></div>}
+function BreedingView({ data, openCreate, openEdit, remove }: ViewProps) {
+  const [selectedDogId, setSelectedDogId] = useState<number | null>(data.dogs[0]?.id ?? null);
+  const selectedDog = data.dogs.find((dog) => dog.id === selectedDogId) ?? data.dogs[0] ?? null;
+  return <div className="grid two-one">
+    <Section eyebrow="Dog Matrix" title="Breeding dogs" action={<button className="ghost" onClick={() => openCreate("dogs")}>Add dog</button>}>
+      {data.dogs.length ? <div className="card-grid">{data.dogs.map((dog) => <article key={dog.id} className={selectedDog?.id === dog.id ? "record-card selected" : "record-card"} onClick={() => setSelectedDogId(dog.id)}><span className="avatar">{initials(dog.name)}</span><div><h3>{dog.name}</h3><p>{[dog.role, dog.sex, dog.color].filter(Boolean).join(" / ")}</p></div><Status tone={dog.status === "Active" ? "good" : "neutral"}>{dog.status}</Status><footer><button onClick={(event) => { event.stopPropagation(); openEdit("dogs", dog as unknown as Record<string, unknown>); }}>Edit</button><button onClick={(event) => { event.stopPropagation(); remove("dogs", dog.id, dog.name); }}>Delete</button></footer></article>)}</div> : <Empty title="No breeding dogs" text="Add dams and sires with health, registry, acquisition, and notes." action="Add dog" onAction={() => openCreate("dogs")} />}
+    </Section>
+    <Section eyebrow="Selected Profile" title={selectedDog?.name ?? "No dog selected"} action={selectedDog && <button className="ghost" onClick={() => openCreate("dog_medical_records", { dog_id: selectedDog.id })}>Add care</button>}>
+      {selectedDog ? <div className="profile-stack"><div className="profile-metrics"><span><b>{data.litters.filter((item) => item.dam_id === selectedDog.id || item.sire_id === selectedDog.id).length}</b><small>Litters</small></span><span><b>{data.dog_medical_records.filter((item) => item.dog_id === selectedDog.id).length}</b><small>Care records</small></span><span><b>{data.dog_registrations.filter((item) => item.dog_id === selectedDog.id).length}</b><small>Registries</small></span><span><b>{data.dog_documents.filter((item) => item.dog_id === selectedDog.id).length}</b><small>Files</small></span></div><p>{selectedDog.health_testing || selectedDog.notes || "No health testing or notes recorded yet."}</p><div className="mini-list">{data.dog_medical_records.filter((item) => item.dog_id === selectedDog.id).slice(0, 4).map((item) => <span key={item.id}><b>{item.title}</b><small>{item.record_type} / {shortDate(item.record_date)}</small></span>)}</div></div> : <Empty title="No dog selected" text="Select or add a breeding dog to open the profile panel." action="Add dog" onAction={() => openCreate("dogs")} />}
+    </Section>
+    <Section eyebrow="Litter Control" title="Litters" action={<button className="ghost" onClick={() => openCreate("litters")}>Create litter</button>}>
+      {data.litters.length ? <div className="table-list">{data.litters.map((litter) => <button key={litter.id} onClick={() => openEdit("litters", litter as unknown as Record<string, unknown>)}><span><b>{litter.name}</b><small>{shortDate(litter.birth_date || litter.due_date)} / {data.puppies.filter((puppy) => puppy.litter_id === litter.id).length} puppies</small></span><Status tone={litter.status === "Active" ? "good" : "neutral"}>{litter.status}</Status></button>)}</div> : <Empty title="No litters" text="Create planned and active litters with due dates, birth dates, and pairings." action="Create litter" onAction={() => openCreate("litters")} />}
+    </Section>
   </div>;
 }
 
-function LittersView({ data, openCreate, openEdit, remove }: ViewProps) {
-  if (!data.litters.length) return <EmptyState icon="✦" title="No litters yet" text="Create a planned, expecting, or born litter and connect its dam and sire." action="Create first litter" onAction={() => openCreate("litters")} />;
-  return <div className="module-stack"><div className="module-toolbar"><p className="record-count">{data.litters.length} litter{data.litters.length === 1 ? "" : "s"}</p><button className="primary-button" onClick={() => openCreate("litters")}>+ New litter</button></div><div className="litter-board real-litter-board">{data.litters.map((litter) => { const dam = data.dogs.find((dog) => dog.id === litter.dam_id); const sire = data.dogs.find((dog) => dog.id === litter.sire_id); const puppies = data.puppies.filter((puppy) => puppy.litter_id === litter.id); return <article className="litter-detail-card real-litter" key={litter.id}><div className="litter-cover mint"><span className="cover-eyebrow">{litter.status.toUpperCase()}</span><div className="cover-mark">{initials(litter.name)}<small>LITTER</small></div><span className="cover-date">{litter.due_date ? `DUE ${shortDate(litter.due_date).toUpperCase()}` : litter.birth_date ? `BORN ${shortDate(litter.birth_date).toUpperCase()}` : "DATE NOT SET"}</span></div><div className="litter-detail-body"><div className="litter-detail-title"><div><Status>{litter.status}</Status><h2>{litter.name}</h2><p>{dam?.name ?? "Dam not assigned"} × {sire?.name ?? "Sire not assigned"}</p></div></div><div className="litter-facts"><span><small>PUPPIES</small><b>{puppies.length} recorded</b></span><span><small>EXPECTED</small><b>{litter.expected_count ?? "—"}</b></span><span><small>BREEDING DATE</small><b>{shortDate(litter.breeding_date)}</b></span></div>{puppies.length ? <div className="puppy-chips">{puppies.map((puppy) => <button key={puppy.id} onClick={() => openEdit("puppies", puppy)}><span>{initials(puppy.name)}</span><b>{puppy.name}</b><small>{puppy.status}</small></button>)}</div> : <p className="inline-empty">No puppies recorded for this litter.</p>}<div className="record-actions"><button className="primary-button small" onClick={() => openCreate("puppies", { litter_id: litter.id, birth_date: litter.birth_date ?? "" })}>+ Add puppy</button><button className="secondary-button" onClick={() => openEdit("litters", litter)}>Edit litter</button><button className="danger-button" onClick={() => remove("litters", litter.id, litter.name)}>Delete</button></div></div></article>; })}</div></div>;
-}
-
-type BuyerViewProps = ViewProps & { reload: () => Promise<void>; notify: (message: string) => void; reportError: (message: string) => void };
-
-function BuyersView({ data, openCreate, openEdit, remove, reload, notify, reportError }: BuyerViewProps) {
-  const [selectedBuyerId, setSelectedBuyerId] = useState<number | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [actionError, setActionError] = useState("");
-  const selectedBuyer = data.buyers.find((buyer) => buyer.id === selectedBuyerId) ?? null;
-
-  async function uploadDocument(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedBuyer) return;
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    form.set("buyer_id", String(selectedBuyer.id));
-    setActionError("");
-    setUploading(true);
-    try {
-      const response = await fetch("/api/documents", { method: "POST", body: form });
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Unable to upload the document.");
-      formElement.reset();
-      notify("Document uploaded securely");
-      await reload();
-    } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : "Unable to upload the document.";
-      setActionError(message);
-      reportError(message);
-    } finally { setUploading(false); }
-  }
-
-  async function removeDocument(document: BuyerDocument) {
-    if (!window.confirm(`Delete “${document.title}”? The stored file will also be removed.`)) return;
-    setActionError("");
-    try {
-      const response = await fetch(`/api/documents?id=${document.id}`, { method: "DELETE" });
-      if (!response.ok) { const payload = await response.json() as { error?: string }; throw new Error(payload.error || "Unable to delete the document."); }
-      notify("Document deleted");
-      await reload();
-    } catch (deleteError) {
-      const message = deleteError instanceof Error ? deleteError.message : "Unable to delete the document.";
-      setActionError(message);
-      reportError(message);
-    }
-  }
-
-  if (!data.buyers.length) return <EmptyState icon="◎" title="No buyers yet" text="Enter inquiries and applications with real contact details and puppy preferences." action="Add first buyer" onAction={() => openCreate("buyers")} />;
-
-  const buyerPuppies = selectedBuyer ? data.puppies.filter((puppy) => puppy.buyer_id === selectedBuyer.id) : [];
-  const buyerDocuments = selectedBuyer ? data.buyer_documents.filter((document) => document.buyer_id === selectedBuyer.id) : [];
-  const buyerPlans = selectedBuyer ? data.payment_plans.filter((plan) => plan.buyer_id === selectedBuyer.id) : [];
-
-  return <div className="module-stack">
-    <div className="pipeline-summary">{["Inquiry", "Applied", "Approved", "Matched"].map((status, index) => <div key={status}><span className={`metric-icon ${["peach", "blue", "mint", "lilac"][index]}`}>◎</span><span><b>{data.buyers.filter((buyer) => buyer.application_status === status).length}</b><small>{status}</small></span></div>)}</div>
-    <section className="card table-card"><div className="table-toolbar"><p className="record-count">{data.buyers.length} buyer{data.buyers.length === 1 ? "" : "s"}</p><button className="primary-button" onClick={() => openCreate("buyers")}>+ Add buyer</button></div><div className="data-table real-buyer-table"><div className="table-head"><span>BUYER</span><span>CONTACT</span><span>LOCATION</span><span>APPLICATION</span><span>PUPPIES / RECORDS</span><span>ACTIONS</span></div>{data.buyers.map((buyer) => { const puppies = data.puppies.filter((item) => item.buyer_id === buyer.id); const documents = data.buyer_documents.filter((item) => item.buyer_id === buyer.id); const plans = data.payment_plans.filter((item) => item.buyer_id === buyer.id); return <div className="table-row" key={buyer.id}><span className="person"><i className="avatar">{initials(fullName(buyer))}</i><span><b>{fullName(buyer)}</b><small>{buyer.preferred_sex || buyer.preferred_color ? `Prefers ${[buyer.preferred_sex, buyer.preferred_color].filter(Boolean).join(", ")}` : "No preferences recorded"}</small></span></span><span><b>{buyer.email}</b><small>{buyer.phone || "No phone"}</small></span><span><b>{[buyer.city, buyer.state].filter(Boolean).join(", ") || "—"}</b></span><span><Status>{buyer.application_status}</Status></span><span><b>{puppies.length ? puppies.map((puppy) => puppy.name).join(", ") : "Not matched"}</b><small>{documents.length} document{documents.length === 1 ? "" : "s"} · {plans.length} payment plan{plans.length === 1 ? "" : "s"}</small></span><span className="row-actions"><button className="records-link" onClick={() => { setSelectedBuyerId(buyer.id); setActionError(""); }}>Records</button><button onClick={() => openEdit("buyers", buyer)}>Edit</button><button className="danger-link" onClick={() => remove("buyers", buyer.id, fullName(buyer))}>Delete</button></span></div>; })}</div></section>
-
-    {selectedBuyer && <div className="modal-backdrop buyer-record-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedBuyerId(null); }} role="dialog" aria-modal="true" aria-labelledby="buyer-record-title"><div className="buyer-record-modal"><header className="buyer-record-header"><div className="buyer-record-identity"><span className="avatar light">{initials(fullName(selectedBuyer))}</span><div><p className="kicker light">BUYER RECORD</p><h2 id="buyer-record-title">{fullName(selectedBuyer)}</h2><p>{selectedBuyer.email}{selectedBuyer.phone ? ` · ${selectedBuyer.phone}` : ""}</p></div></div><button onClick={() => setSelectedBuyerId(null)} aria-label="Close buyer records">×</button></header><div className="buyer-record-body">
-      <div className="buyer-record-stats"><div><small>PUPPIES</small><b>{buyerPuppies.length}</b><span>{buyerPuppies.length ? buyerPuppies.map((puppy) => puppy.name).join(", ") : "None assigned"}</span></div><div><small>DOCUMENTS</small><b>{buyerDocuments.length}</b><span>Bills, guarantees & agreements</span></div><div><small>PAYMENT PLANS</small><b>{buyerPlans.filter((plan) => plan.status === "Active").length}</b><span>{buyerPlans.length} total recorded</span></div></div>
-      {actionError && <div className="inline-error">{actionError}</div>}
-
-      <section className="buyer-record-section"><SectionHeader eyebrow="ASSIGNED PUPPIES" title="Puppies across every litter" />{buyerPuppies.length ? <div className="buyer-puppy-grid">{buyerPuppies.map((puppy) => { const litter = data.litters.find((item) => item.id === puppy.litter_id); return <article key={puppy.id}><span className="record-mark mint">{initials(puppy.name)}</span><div><b>{puppy.name}</b><small>{litter?.name ?? "Litter not found"} · {puppy.status}</small></div><button onClick={() => openEdit("puppies", puppy)}>Edit</button></article>; })}</div> : <p className="inline-empty">No puppies are assigned to this buyer yet.</p>}</section>
-
-      <section className="buyer-record-section"><SectionHeader eyebrow="PAYMENT PLANS" title="Terms, credits, and progress" actions={<button className="primary-button small" onClick={() => openCreate("payment_plans", { buyer_id: selectedBuyer.id, puppy_ids: buyerPuppies.map((puppy) => puppy.id), status: "Active", credit_eligible: true })}>+ New plan</button>} />{buyerPlans.length ? <div className="buyer-plan-list">{buyerPlans.map((plan) => { const paid = data.transactions.filter((transaction) => transaction.payment_plan_id === plan.id && transaction.type === "Payment" && transaction.status === "Paid").reduce((sum, transaction) => sum + transaction.amount_cents, 0); const credit = plan.credit_eligible ? plan.on_time_credit_cents : 0; const payoff = Math.max(plan.total_amount_cents - credit, 0); const remaining = Math.max(payoff - paid, 0); const progress = payoff ? Math.min(100, Math.round((paid / payoff) * 100)) : 0; const puppies = plan.puppy_ids.map((id) => data.puppies.find((puppy) => puppy.id === id)).filter(Boolean) as Puppy[]; return <article className="buyer-plan-card" key={plan.id}><div className="plan-card-top"><div><Status tone={plan.status === "Active" ? "sage" : "blue"}>{plan.status}</Status><h3>{plan.name}</h3><p>{plan.term_count} {plan.frequency.toLowerCase()} payments of {money(plan.payment_amount_cents)}</p></div><strong>{money(remaining)}<small>remaining</small></strong></div><div className="plan-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{money(paid)} paid · {progress}%</small></div><dl><div><dt>Contract</dt><dd>{money(plan.total_amount_cents)}</dd></div><div><dt>On-time credit</dt><dd>{plan.on_time_credit_cents ? `${money(plan.on_time_credit_cents)} ${plan.credit_eligible ? "eligible" : "not eligible"}` : "None"}</dd></div><div><dt>Next due</dt><dd>{shortDate(plan.next_due_date)}</dd></div><div><dt>Puppies</dt><dd>{puppies.map((puppy) => puppy.name).join(", ") || "Buyer-wide"}</dd></div></dl><div className="record-actions"><button className="primary-button small" onClick={() => openCreate("transactions", { type: "Payment", buyer_id: selectedBuyer.id, payment_plan_id: plan.id, amount: plan.payment_amount_cents / 100, description: `${plan.name} payment`, category: "Payment plan", due_date: plan.next_due_date ?? "", status: "Due" })}>+ Record payment</button><button className="secondary-button" onClick={() => openEdit("payment_plans", plan)}>Edit terms</button><button className="danger-button" onClick={() => remove("payment_plans", plan.id, plan.name)}>Delete</button></div></article>; })}</div> : <div className="mini-empty compact"><span>$</span><h3>No payment plan</h3><p>Create one when this buyer enrolls in installment payments.</p></div>}</section>
-
-      <section className="buyer-record-section"><SectionHeader eyebrow="SIGNED DOCUMENTS" title="Bills of sale, guarantees & agreements" />
-        <form className="document-upload-form" onSubmit={uploadDocument}><div className="form-grid"><label><span>Document type *</span><select name="document_type" defaultValue="Bill of Sale" required><option>Bill of Sale</option><option>Health Guarantee</option><option>Payment Plan Agreement</option><option>Other</option></select></label><label><span>Document title</span><input name="title" placeholder="Signed Bill of Sale" /></label><label><span>Payment plan link</span><select name="payment_plan_id" defaultValue=""><option value="">No payment plan</option>{buyerPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></label><label><span>Scanned file *</span><input name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" required /></label>{buyerPuppies.length > 0 && <fieldset className="document-puppy-picker full-field"><legend>Relate to one or more puppies</legend>{buyerPuppies.map((puppy) => <label key={puppy.id}><input type="checkbox" name="puppy_ids" value={puppy.id} /><span>{puppy.name}<small>{data.litters.find((litter) => litter.id === puppy.litter_id)?.name ?? "No litter"}</small></span></label>)}</fieldset>}<TextAreaField label="Document notes" name="notes" placeholder="Signatures, dates, special terms, or reminders" /></div><div className="upload-help"><span>PDF, JPG, PNG, or WebP · up to 20 MB</span><button className="primary-button" disabled={uploading}>{uploading ? "Uploading…" : "Upload document"}</button></div></form>
-        {buyerDocuments.length ? <div className="document-list">{buyerDocuments.map((document) => { const puppies = document.puppy_ids.map((id) => data.puppies.find((puppy) => puppy.id === id)).filter(Boolean) as Puppy[]; const plan = data.payment_plans.find((item) => item.id === document.payment_plan_id); return <article key={document.id}><span className="document-icon">{document.content_type === "application/pdf" ? "PDF" : "IMG"}</span><div><Status tone={document.document_type === "Health Guarantee" ? "blue" : document.document_type === "Payment Plan Agreement" ? "peach" : "sage"}>{document.document_type}</Status><h3>{document.title}</h3><p>{document.file_name} · {fileSize(document.size_bytes)} · {shortDate(document.created_at.slice(0, 10))}</p><small>{[puppies.length ? puppies.map((puppy) => puppy.name).join(", ") : "Buyer-wide", plan?.name].filter(Boolean).join(" · ")}</small></div><div className="document-actions"><a href={`/api/documents/${document.id}`} target="_blank" rel="noreferrer">Open</a><button className="danger-link" onClick={() => void removeDocument(document)}>Delete</button></div></article>; })}</div> : <p className="inline-empty">No scanned documents uploaded for this buyer.</p>}
-      </section>
-    </div></div></div>}
+function FamiliesView({ data, openCreate, openEdit, remove }: ViewProps) {
+  return <div className="grid two-one">
+    <Section eyebrow="Buyer Pipeline" title="Families" action={<button className="ghost" onClick={() => openCreate("buyers")}>Add buyer</button>}>
+      {data.buyers.length ? <div className="table-list">{data.buyers.map((buyer) => <button key={buyer.id} onClick={() => openEdit("buyers", buyer as unknown as Record<string, unknown>)}><span><b>{fullName(buyer)}</b><small>{[buyer.email, buyer.phone, buyer.city, buyer.state].filter(Boolean).join(" / ")}</small></span><Status tone={buyer.application_status === "Approved" ? "good" : "neutral"}>{buyer.application_status}</Status></button>)}</div> : <Empty title="No buyers" text="Track applications, preferences, family notes, and contact details." action="Add buyer" onAction={() => openCreate("buyers")} />}
+    </Section>
+    <Section eyebrow="Puppy Placement" title="Puppies" action={<button className="ghost" onClick={() => openCreate("puppies")}>Add puppy</button>}>
+      {data.puppies.length ? <div className="card-grid compact">{data.puppies.map((puppy) => <article key={puppy.id} className="record-card"><span className="avatar">{initials(puppy.name)}</span><div><h3>{puppy.name}</h3><p>{[puppy.sex, puppy.color, money(puppy.price_cents)].filter(Boolean).join(" / ")}</p></div><Status tone={puppy.buyer_id ? "good" : "warn"}>{puppy.buyer_id ? "Assigned" : puppy.status}</Status><footer><button onClick={() => openEdit("puppies", puppy as unknown as Record<string, unknown>)}>Edit</button><button onClick={() => remove("puppies", puppy.id, puppy.name)}>Delete</button></footer></article>)}</div> : <Empty title="No puppies" text="Add puppy records and connect them to litters and buyers." action="Add puppy" onAction={() => openCreate("puppies")} />}
+    </Section>
+    <Section eyebrow="Family Portal" title="Published updates" action={<button className="ghost" onClick={() => openCreate("updates")}>New update</button>}>
+      {data.updates.length ? <div className="mini-list">{data.updates.slice(0, 8).map((update) => <span key={update.id}><b>{update.title}</b><small>Week {update.week_number ?? "n/a"} / {update.published ? "Published" : "Draft"}</small></span>)}</div> : <Empty title="No updates" text="Publish growth notes, weights, milestones, and family-facing updates." action="New update" onAction={() => openCreate("updates")} />}
+    </Section>
   </div>;
 }
 
-function PaymentsView({ data, openCreate, openEdit, remove }: ViewProps) {
-  const payments = data.transactions.filter((item) => item.type === "Payment");
-  const costs = data.transactions.filter((item) => item.type === "Cost");
-  const received = payments.filter((item) => item.status === "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
-  const outstanding = payments.filter((item) => item.status !== "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
-  const spent = costs.reduce((sum, item) => sum + item.amount_cents, 0);
-  const activePlans = data.payment_plans.filter((plan) => plan.status === "Active");
-  return <div className="module-stack">
-    <div className="finance-metrics real-finance-metrics"><div className="financial-stat"><span className="metric-icon mint">$</span><small>Payments received</small><b>{money(received)}</b><em>{payments.filter((item) => item.status === "Paid").length} paid records</em></div><div className="financial-stat"><span className="metric-icon peach">◷</span><small>Outstanding</small><b>{money(outstanding)}</b><em>{payments.filter((item) => item.status !== "Paid").length} open records</em></div><div className="financial-stat"><span className="metric-icon blue">↗</span><small>Active plans</small><b>{activePlans.length}</b><em>{data.payment_plans.length} plans recorded</em></div><div className="financial-stat net-stat"><span className="metric-icon lilac">=</span><small>Net recorded</small><b>{money(received - spent)}</b><em>Received minus {money(spent)} costs</em></div></div>
-    <section className="card payment-plans-overview"><SectionHeader eyebrow="PUPPY PAYMENT PLANS" title={`${activePlans.length} active plan${activePlans.length === 1 ? "" : "s"}`} actions={<button className="primary-button small" onClick={() => openCreate("payment_plans", { status: "Active", credit_eligible: true })}>+ New plan</button>} />{data.payment_plans.length ? <div className="plan-overview-grid">{data.payment_plans.map((plan) => { const buyer = data.buyers.find((item) => item.id === plan.buyer_id); const paid = payments.filter((payment) => payment.payment_plan_id === plan.id && payment.status === "Paid").reduce((sum, payment) => sum + payment.amount_cents, 0); const payoff = Math.max(plan.total_amount_cents - (plan.credit_eligible ? plan.on_time_credit_cents : 0), 0); const remaining = Math.max(payoff - paid, 0); return <article key={plan.id}><div><Status tone={plan.status === "Active" ? "sage" : "blue"}>{plan.status}</Status><h3>{buyer ? fullName(buyer) : "Buyer removed"}</h3><p>{plan.name}</p></div><dl><div><dt>Terms</dt><dd>{plan.term_count} × {money(plan.payment_amount_cents)} {plan.frequency.toLowerCase()}</dd></div><div><dt>Remaining</dt><dd>{money(remaining)}</dd></div><div><dt>Next due</dt><dd>{shortDate(plan.next_due_date)}</dd></div><div><dt>Credit</dt><dd>{plan.on_time_credit_cents ? money(plan.on_time_credit_cents) : "None"}</dd></div></dl><button className="secondary-button" onClick={() => openEdit("payment_plans", plan)}>Open plan</button></article>; })}</div> : <p className="inline-empty">No customers are enrolled in a payment plan.</p>}</section>
-    <div className="module-toolbar"><p className="record-count">{data.transactions.length} transaction{data.transactions.length === 1 ? "" : "s"}</p><div className="button-row"><button className="secondary-button" onClick={() => openCreate("transactions", { type: "Cost", status: "Paid" })}>+ Add cost</button><button className="primary-button" onClick={() => openCreate("transactions", { type: "Payment" })}>+ Record payment</button></div></div>
-    {data.transactions.length ? <section className="card table-card"><div className="data-table transaction-table"><div className="table-head"><span>TYPE / DESCRIPTION</span><span>FAMILY</span><span>RELATED TO</span><span>AMOUNT</span><span>DATE</span><span>STATUS</span><span>ACTIONS</span></div>{data.transactions.map((item) => { const dog = data.dogs.find((record) => record.id === item.dog_id); const buyer = data.buyers.find((record) => record.id === item.buyer_id); const puppy = data.puppies.find((record) => record.id === item.puppy_id); const litter = data.litters.find((record) => record.id === item.litter_id); const plan = data.payment_plans.find((record) => record.id === item.payment_plan_id); return <div className="table-row" key={item.id}><span><b>{item.description}</b><small>{item.type} · {item.category || "Uncategorized"}</small></span><span><b>{buyer ? fullName(buyer) : "—"}</b></span><span><b>{dog?.name || plan?.name || puppy?.name || litter?.name || "—"}</b><small>{dog ? "Breeding dog" : plan ? "Payment plan" : ""}</small></span><span><b className={item.type === "Cost" ? "negative" : "positive"}>{item.type === "Cost" ? "−" : "+"}{money(item.amount_cents)}</b></span><span><b>{shortDate(item.paid_date || item.due_date)}</b><small>{item.paid_date ? "Paid date" : "Due date"}</small></span><span><Status tone={item.status === "Paid" ? "sage" : "peach"}>{item.status}</Status></span><span className="row-actions"><button onClick={() => openEdit("transactions", item)}>Edit</button><button className="danger-link" onClick={() => remove("transactions", item.id, item.description)}>Delete</button></span></div>; })}</div></section> : <EmptyState icon="$" title="No transactions yet" text="Record buyer payments, balances due, and program costs as they occur." action="Record first payment" onAction={() => openCreate("transactions", { type: "Payment" })} />}
+function FinanceView({ data, openCreate, openEdit }: ViewProps) {
+  const a = useAnalytics(data);
+  return <div className="grid">
+    <div className="metric-row panel-wide"><button><span>Payments received</span><b>{money(a.paid)}</b><small>Paid transactions</small></button><button><span>Recorded costs</span><b>{money(a.costs)}</b><small>Program expenses</small></button><button><span>Outstanding</span><b>{money(a.outstanding)}</b><small>{a.overdue.length} overdue items</small></button><button><span>Active plan value</span><b>{money(a.activePlanValue)}</b><small>Payment plans</small></button></div>
+    <Section eyebrow="Ledger" title="Transactions" action={<button className="ghost" onClick={() => openCreate("transactions", { type: "Payment" })}>Log transaction</button>}>
+      {data.transactions.length ? <div className="table-list">{data.transactions.map((item) => <button key={item.id} onClick={() => openEdit("transactions", item as unknown as Record<string, unknown>)}><span><b>{item.description}</b><small>{[item.type, item.category, item.status, item.due_date ? `Due ${shortDate(item.due_date)}` : null].filter(Boolean).join(" / ")}</small></span><strong>{money(item.amount_cents)}</strong></button>)}</div> : <Empty title="No ledger entries" text="Log deposits, balances, refunds, veterinary costs, supplies, and other financial events." action="Log transaction" onAction={() => openCreate("transactions", { type: "Payment" })} />}
+    </Section>
+    <Section eyebrow="Payment Plans" title="Installments" action={<button className="ghost" onClick={() => openCreate("payment_plans")}>New plan</button>}>
+      {data.payment_plans.length ? <div className="card-grid compact">{data.payment_plans.map((plan) => <article key={plan.id} className="record-card"><div><h3>{plan.name}</h3><p>{money(plan.payment_amount_cents)} {plan.frequency.toLowerCase()} / {plan.term_count} terms</p></div><b>{money(plan.total_amount_cents)}</b><Status tone={plan.status === "Active" ? "good" : "neutral"}>{plan.status}</Status><footer><button onClick={() => openEdit("payment_plans", plan as unknown as Record<string, unknown>)}>Edit</button></footer></article>)}</div> : <Empty title="No payment plans" text="Create installment schedules and connect them to buyers and puppies." action="New plan" onAction={() => openCreate("payment_plans")} />}
+    </Section>
   </div>;
 }
 
 function CalendarView({ data, openCreate, openEdit, remove }: ViewProps) {
-  const upcoming = data.events.filter((item) => item.event_date >= today() && item.status !== "Completed");
-  const past = data.events.filter((item) => item.event_date < today() || item.status === "Completed");
-  if (!data.events.length) return <EmptyState icon="◷" title="No events scheduled" text="Add veterinary appointments, breeding dates, puppy milestones, and pickup days." action="Schedule first event" onAction={() => openCreate("events")} />;
-  const eventGroup = (items: KennelEvent[]) => <div className="agenda-list">{items.map((event) => <article key={event.id}><span className="date-tile mint"><b>{new Date(`${event.event_date}T12:00:00`).getDate()}</b><small>{new Date(`${event.event_date}T12:00:00`).toLocaleString("en-US", { month: "short" }).toUpperCase()}</small></span><span><b>{event.title}</b><small>{[event.event_type, event.event_time, event.location].filter(Boolean).join(" · ")}</small>{event.notes && <p>{event.notes}</p>}</span><Status tone={event.status === "Completed" ? "blue" : "sage"}>{event.status}</Status><span className="row-actions"><button onClick={() => openEdit("events", event)}>Edit</button><button className="danger-link" onClick={() => remove("events", event.id, event.title)}>Delete</button></span></article>)}</div>;
-  return <div className="module-stack"><div className="module-toolbar"><p className="record-count">{data.events.length} event{data.events.length === 1 ? "" : "s"}</p><button className="primary-button" onClick={() => openCreate("events")}>+ Add event</button></div><section className="card"><SectionHeader eyebrow="UPCOMING" title={`${upcoming.length} scheduled`} />{upcoming.length ? eventGroup(upcoming) : <p className="inline-empty">No upcoming events.</p>}</section>{past.length > 0 && <section className="card muted-section"><SectionHeader eyebrow="HISTORY" title="Past & completed" />{eventGroup(past)}</section>}</div>;
+  const events = [...data.events].sort((a, b) => `${a.event_date}${a.event_time ?? ""}`.localeCompare(`${b.event_date}${b.event_time ?? ""}`));
+  return <div className="grid">
+    <Section eyebrow="Mission Calendar" title="Events and reminders" action={<button className="ghost" onClick={() => openCreate("events")}>Add event</button>}>
+      {events.length ? <div className="calendar-list">{events.map((event) => <article key={event.id}><time><b>{new Date(`${event.event_date}T12:00:00`).getDate()}</b><small>{new Date(`${event.event_date}T12:00:00`).toLocaleString("en-US", { month: "short" })}</small></time><div><h3>{event.title}</h3><p>{[event.event_type, event.event_time, event.location].filter(Boolean).join(" / ")}</p></div><Status tone={event.status === "Completed" ? "good" : "neutral"}>{event.status}</Status><footer><button onClick={() => openEdit("events", event as unknown as Record<string, unknown>)}>Edit</button><button onClick={() => remove("events", event.id, event.title)}>Delete</button></footer></article>)}</div> : <Empty title="No events" text="Schedule care, breeding, pickup, buyer, and reminder events." action="Add event" onAction={() => openCreate("events")} />}
+    </Section>
+  </div>;
 }
 
-function PortalView({ data, openCreate, openEdit, remove, selectedPuppyId, setSelectedPuppyId }: ViewProps & { selectedPuppyId: number | null; setSelectedPuppyId: (value: number) => void }) {
-  if (!data.puppies.length) return <EmptyState icon="↗" title="No puppy portal records yet" text="Add a puppy to a litter, then match a buyer and publish real updates." action="Add first puppy" onAction={() => openCreate("puppies")} />;
-  const puppy = data.puppies.find((item) => item.id === selectedPuppyId) ?? data.puppies[0];
-  const litter = data.litters.find((item) => item.id === puppy.litter_id);
-  const buyer = data.buyers.find((item) => item.id === puppy.buyer_id);
-  const updates = data.updates.filter((item) => item.puppy_id === puppy.id);
-  const payments = data.transactions.filter((item) => item.type === "Payment" && (item.puppy_id === puppy.id || (buyer && item.buyer_id === buyer.id)) && item.status === "Paid");
-  const paid = payments.reduce((sum, item) => sum + item.amount_cents, 0);
-  const balance = Math.max((puppy.price_cents ?? 0) - paid, 0);
-  return <div className="portal-admin-layout"><aside className="card portal-manager"><div className="section-heading"><div><p className="kicker">PUPPY RECORDS</p><h2>Portal manager</h2></div><button className="primary-button small" onClick={() => openCreate("puppies")}>+ Puppy</button></div><label className="portal-select"><span>Preview puppy</span><select value={puppy.id} onChange={(event) => setSelectedPuppyId(Number(event.target.value))}>{data.puppies.map((item) => <option key={item.id} value={item.id}>{item.name} · {data.litters.find((record) => record.id === item.litter_id)?.name ?? "No litter"}</option>)}</select></label><div className="manager-summary"><span className="record-mark peach">{initials(puppy.name)}</span><div><h3>{puppy.name}</h3><p>{[puppy.sex, puppy.color, puppy.status].filter(Boolean).join(" · ")}</p></div></div><dl className="record-details"><div><dt>Buyer</dt><dd>{buyer ? fullName(buyer) : "Not matched"}</dd></div><div><dt>Litter</dt><dd>{litter?.name ?? "—"}</dd></div><div><dt>Current weight</dt><dd>{puppy.current_weight ? `${puppy.current_weight} oz` : "—"}</dd></div><div><dt>Price</dt><dd>{money(puppy.price_cents)}</dd></div></dl><div className="record-actions vertical"><button className="secondary-button" onClick={() => openEdit("puppies", puppy)}>Edit puppy record</button><button className="primary-button" onClick={() => openCreate("updates", { puppy_id: puppy.id })}>+ Publish update</button><button className="danger-button" onClick={() => remove("puppies", puppy.id, puppy.name)}>Delete puppy</button></div></aside><section className="portal-preview"><div className="portal-preview-bar"><span>FAMILY PORTAL PREVIEW</span><Status tone={buyer ? "sage" : "peach"}>{buyer ? "Buyer matched" : "Not matched"}</Status></div><div className="portal-hero real-portal-hero"><div><p className="kicker light">{litter?.name?.toUpperCase() || "PUPPY JOURNEY"}</p><h2>{puppy.name}</h2><p>{buyer ? `A private progress space for ${fullName(buyer)}.` : "Match a buyer to personalize this portal."}</p></div><div className="puppy-portrait"><div className="portrait-rings"><span>{initials(puppy.name)}</span><i>{puppy.current_weight ? `${puppy.current_weight} oz` : puppy.status}</i></div></div></div><div className="portal-real-content"><div className="portal-stat-row"><div><small>STATUS</small><b>{puppy.status}</b></div><div><small>BIRTH DATE</small><b>{shortDate(puppy.birth_date)}</b></div><div><small>PAID</small><b>{money(paid)}</b></div><div><small>BALANCE</small><b>{money(balance)}</b></div></div><section className="card updates-panel"><SectionHeader eyebrow="PUPPY UPDATES" title={`${updates.length} update${updates.length === 1 ? "" : "s"}`} actions={<button className="primary-button small" onClick={() => openCreate("updates", { puppy_id: puppy.id })}>+ New update</button>} />{updates.length ? <div className="published-updates">{updates.map((update) => <article key={update.id}><div><Status tone={update.published ? "sage" : "peach"}>{update.published ? "Published" : "Draft"}</Status><span>{update.week_number ? `Week ${update.week_number}` : shortDate(update.created_at.slice(0, 10))}</span></div><h3>{update.title}</h3><p>{update.body}</p><div className="update-footer"><span>{update.weight ? `Weight: ${update.weight} oz` : "No weight recorded"}</span><span className="row-actions"><button onClick={() => openEdit("updates", update)}>Edit</button><button className="danger-link" onClick={() => remove("updates", update.id, update.title)}>Delete</button></span></div></article>)}</div> : <div className="mini-empty"><span>✦</span><h3>No updates published</h3><p>Add the first photo-free progress note, weight, or milestone for this puppy.</p><button className="secondary-button" onClick={() => openCreate("updates", { puppy_id: puppy.id })}>Create update</button></div>}</section></div></section></div>;
+function VaultView({ data }: { data: DataSet }) {
+  const buyerDocs = data.buyer_documents.map((doc) => ({ ...doc, href: `/api/documents/${doc.id}`, owner: data.buyers.find((buyer) => buyer.id === doc.buyer_id) ? fullName(data.buyers.find((buyer) => buyer.id === doc.buyer_id)!) : `Buyer #${doc.buyer_id}` }));
+  const dogDocs = data.dog_documents.map((doc) => ({ ...doc, href: `/api/dog-documents/${doc.id}`, owner: data.dogs.find((dog) => dog.id === doc.dog_id)?.name ?? `Dog #${doc.dog_id}` }));
+  const docs = [...buyerDocs, ...dogDocs].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return <div className="grid">
+    <Section eyebrow="Document Vault" title="Stored files">
+      {docs.length ? <div className="vault-list">{docs.map((doc) => <a key={`${doc.href}-${doc.id}`} href={doc.href} target="_blank" rel="noreferrer"><span><b>{doc.title}</b><small>{doc.owner} / {doc.document_type}</small></span><em>{fileSize(doc.size_bytes)}</em></a>)}</div> : <Empty title="No documents stored" text="Uploaded buyer and dog documents will appear here once Supabase Storage is configured." action="Open breeding" onAction={() => undefined} />}
+    </Section>
+  </div>;
 }
 
-type ViewProps = { data: DataSet; openCreate: (resource: Resource, preset?: Record<string, unknown>) => void; openEdit: (resource: Resource, record: BaseRecord) => void; remove: (resource: Resource, id: number, label: string) => void };
+type ViewProps = { data: DataSet; openCreate: (resource: Resource, preset?: Record<string, unknown>) => void; openEdit: (resource: Resource, record: Record<string, unknown>) => void; remove: (resource: Resource, id: number, label: string) => void };
 
-function Field({ label, name, record, preset, type = "text", required = false, placeholder, step, min }: { label: string; name: string; record?: Record<string, unknown>; preset?: Record<string, unknown>; type?: string; required?: boolean; placeholder?: string; step?: string; min?: string }) {
-  const value = record?.[name] ?? preset?.[name] ?? "";
-  return <label><span>{label}{required && " *"}</span><input name={name} type={type} required={required} defaultValue={String(value ?? "")} placeholder={placeholder} step={step} min={min} /></label>;
-}
-function SelectField({ label, name, options, record, preset, required = false, empty = "Select…" }: { label: string; name: string; options: { value: string | number; label: string }[]; record?: Record<string, unknown>; preset?: Record<string, unknown>; required?: boolean; empty?: string }) {
-  const value = record?.[name] ?? preset?.[name] ?? "";
-  return <label><span>{label}{required && " *"}</span><select name={name} required={required} defaultValue={String(value ?? "")}><option value="">{empty}</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
-}
-function MultiSelectField({ label, name, options, record, preset }: { label: string; name: string; options: { value: string | number; label: string }[]; record?: Record<string, unknown>; preset?: Record<string, unknown> }) {
-  const raw = record?.[name] ?? preset?.[name] ?? [];
-  const selected = (Array.isArray(raw) ? raw : String(raw).split(",")).map(String);
-  return <label className="full-field multi-select-field"><span>{label}</span><select name={name} multiple size={Math.min(5, Math.max(2, options.length))} defaultValue={selected}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><small>Hold Ctrl or Command to select more than one puppy.</small></label>;
-}
-function TextAreaField({ label, name, record, preset, placeholder, required = false }: { label: string; name: string; record?: Record<string, unknown>; preset?: Record<string, unknown>; placeholder?: string; required?: boolean }) {
-  const value = record?.[name] ?? preset?.[name] ?? "";
-  return <label className="full-field"><span>{label}{required && " *"}</span><textarea name={name} rows={3} defaultValue={String(value ?? "")} placeholder={placeholder} required={required} /></label>;
+function dollarDefault(record: Record<string, unknown> | undefined, key: string, centsKey: string, preset?: Record<string, unknown>) {
+  if (record?.[key] !== undefined) return String(record[key]);
+  if (typeof record?.[centsKey] === "number") return String((record[centsKey] as number) / 100);
+  return valueOf(preset, key);
 }
 
-const options = (values: string[]) => values.map((value) => ({ value, label: value }));
-function RecordForm({ modal, data, saving, onClose, onSubmit }: { modal: NonNullable<ModalState>; data: DataSet; saving: boolean; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function Field({ label, name, type = "text", record, preset, required = false, defaultValue }: { label: string; name: string; type?: string; record?: Record<string, unknown>; preset?: Record<string, unknown>; required?: boolean; defaultValue?: string }) {
+  return <label><span>{label}</span><input name={name} type={type} defaultValue={defaultValue ?? valueOf(record, name, valueOf(preset, name))} required={required} /></label>;
+}
+
+function SelectField({ label, name, options, record, preset, empty, required = false }: { label: string; name: string; options: { value: string | number; label: string }[]; record?: Record<string, unknown>; preset?: Record<string, unknown>; empty?: string; required?: boolean }) {
+  return <label><span>{label}</span><select name={name} defaultValue={valueOf(record, name, valueOf(preset, name))} required={required}>{empty && <option value="">{empty}</option>}{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+}
+
+function TextArea({ label, name, record, preset }: { label: string; name: string; record?: Record<string, unknown>; preset?: Record<string, unknown> }) {
+  return <label className="wide"><span>{label}</span><textarea name={name} defaultValue={valueOf(record, name, valueOf(preset, name))} rows={3} /></label>;
+}
+
+function RecordModal({ modal, data, saving, onClose, onSubmit }: { modal: Exclude<ModalState, null>; data: DataSet; saving: boolean; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const { resource, record, preset } = modal;
   const editing = Boolean(record?.id);
-  const title = `${editing ? "Edit" : "Add"} ${resource === "puppies" ? "puppy" : resource === "updates" ? "portal update" : resource === "transactions" ? "transaction" : resource === "payment_plans" ? "payment plan" : resource === "dog_medical_records" ? "medical record" : resource === "dog_registrations" ? "registration" : resource.slice(0, -1)}`;
-  const dogOptions = data.dogs.map((dog) => ({ value: dog.id, label: `${dog.name} · ${dog.sex}` }));
-  const litterOptions = data.litters.map((litter) => ({ value: litter.id, label: litter.name }));
+  const dogOptions = data.dogs.map((dog) => ({ value: dog.id, label: dog.name }));
   const buyerOptions = data.buyers.map((buyer) => ({ value: buyer.id, label: fullName(buyer) }));
-  const puppyOptions = data.puppies.map((puppy) => ({ value: puppy.id, label: `${puppy.name} · ${data.litters.find((litter) => litter.id === puppy.litter_id)?.name ?? "No litter"}` }));
-  const paymentPlanOptions = data.payment_plans.map((plan) => { const buyer = data.buyers.find((item) => item.id === plan.buyer_id); return { value: plan.id, label: `${plan.name} · ${buyer ? fullName(buyer) : "Buyer removed"}` }; });
-  const amountDefault = resource === "transactions" && record?.amount_cents != null ? Number(record.amount_cents) / 100 : preset?.amount;
-  const priceDefault = resource === "puppies" && record?.price_cents != null ? Number(record.price_cents) / 100 : preset?.price;
-  const purchasePriceDefault = resource === "dogs" && record?.purchase_price_cents != null ? Number(record.purchase_price_cents) / 100 : preset?.purchase_price;
-  const medicalCostDefault = resource === "dog_medical_records" && record?.cost_cents != null ? Number(record.cost_cents) / 100 : preset?.cost;
-  const planTotalDefault = resource === "payment_plans" && record?.total_amount_cents != null ? Number(record.total_amount_cents) / 100 : preset?.total_amount;
-  const planPaymentDefault = resource === "payment_plans" && record?.payment_amount_cents != null ? Number(record.payment_amount_cents) / 100 : preset?.payment_amount;
-  const planCreditDefault = resource === "payment_plans" && record?.on_time_credit_cents != null ? Number(record.on_time_credit_cents) / 100 : preset?.credit_amount;
-  const relatedOptions = [
-    ...data.dogs.map((item) => ({ value: `Dog:${item.id}`, label: `Dog · ${item.name}` })),
-    ...data.litters.map((item) => ({ value: `Litter:${item.id}`, label: `Litter · ${item.name}` })),
-    ...data.buyers.map((item) => ({ value: `Buyer:${item.id}`, label: `Buyer · ${fullName(item)}` })),
-    ...data.puppies.map((item) => ({ value: `Puppy:${item.id}`, label: `Puppy · ${item.name}` })),
-  ];
-  const relatedValue = record?.related_type && record?.related_id ? `${record.related_type}:${record.related_id}` : preset?.related_record;
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} role="dialog" aria-modal="true" aria-labelledby="record-form-title"><form className="modal data-modal" onSubmit={onSubmit}><div className="modal-header"><div><p className="kicker">REAL RECORD</p><h2 id="record-form-title">{title}</h2></div><button type="button" onClick={onClose} aria-label="Close form">×</button></div><div className="form-grid">
-    {resource === "dogs" && <><Field label="Call name" name="name" record={record} preset={preset} required /><Field label="Registered name" name="registered_name" record={record} preset={preset} /><SelectField label="Sex" name="sex" options={options(["Female", "Male"])} record={record} preset={preset} required /><SelectField label="Role" name="role" options={options(["Dam", "Sire", "Prospect", "Retired"])} record={record} preset={preset} required /><Field label="Date of birth" name="date_of_birth" type="date" record={record} preset={preset} /><Field label="Color / markings" name="color" record={record} preset={preset} /><Field label="Weight (lb)" name="weight" type="number" step="0.1" min="0" record={record} preset={preset} /><SelectField label="Status" name="status" options={options(["Active", "Resting", "Expecting", "Nursing", "Available", "Retired"])} record={record} preset={preset} /><Field label="Legacy registration number" name="registration_number" record={record} preset={preset} placeholder="Optional; add named registries from the full profile" /><Field label="Microchip number" name="microchip_number" record={record} preset={preset} /><Field label="Next heat date" name="next_heat_date" type="date" record={record} preset={preset} /><Field label="Acquired from" name="acquired_from" record={record} preset={preset} placeholder="Breeder, kennel, rescue, or owner" /><Field label="Acquisition date" name="acquisition_date" type="date" record={record} preset={preset} /><Field label="Purchase price" name="purchase_price" type="number" step="0.01" min="0" record={undefined} preset={{ purchase_price: purchasePriceDefault ?? "" }} /><TextAreaField label="Acquisition notes" name="acquisition_notes" record={record} preset={preset} placeholder="Transport, contract, co-ownership, or other origin details" /><TextAreaField label="Health testing summary" name="health_testing" record={record} preset={preset} placeholder="Patellas, cardiac, eyes, genetics, dates, and results" /><TextAreaField label="Notes" name="notes" record={record} preset={preset} /></>}
-    {resource === "dog_medical_records" && <><SelectField label="Breeding dog" name="dog_id" options={dogOptions} record={record} preset={preset} required empty="Choose dog" /><SelectField label="Record type" name="record_type" options={options(["Vaccination", "Exam", "Medication", "Test", "Surgery", "Other"])} record={record} preset={preset} required /><Field label="Title" name="title" record={record} preset={preset} placeholder="Rabies vaccination, OFA patella exam…" required /><Field label="Date" name="record_date" type="date" record={record} preset={preset} /><Field label="Veterinarian / provider" name="provider" record={record} preset={preset} /><Field label="Cost" name="cost" type="number" step="0.01" min="0" record={undefined} preset={{ cost: medicalCostDefault ?? "" }} /><Field label="Next due date" name="next_due_date" type="date" record={record} preset={preset} /><TextAreaField label="Medical notes" name="notes" record={record} preset={preset} placeholder="Vaccine lot number, result, treatment, dosage, or follow-up" /></>}
-    {resource === "dog_registrations" && <><SelectField label="Breeding dog" name="dog_id" options={dogOptions} record={record} preset={preset} required empty="Choose dog" /><Field label="Registry" name="registry" record={record} preset={preset} placeholder="AKC, CKC, UKC…" required /><Field label="Registration number" name="registration_number" record={record} preset={preset} required /><Field label="Name on this registration" name="registered_name" record={record} preset={preset} /><Field label="Issue date" name="issue_date" type="date" record={record} preset={preset} /><TextAreaField label="Registry notes" name="notes" record={record} preset={preset} placeholder="Registration type, co-owner details, status, or reminders" /></>}
-    {resource === "litters" && <><Field label="Litter name" name="name" record={record} preset={preset} required /><SelectField label="Status" name="status" options={options(["Planned", "Bred", "Expecting", "Born", "Weaning", "Completed", "Archived"])} record={record} preset={preset} required /><SelectField label="Dam" name="dam_id" options={dogOptions.filter((item) => data.dogs.find((dog) => dog.id === item.value)?.sex === "Female")} record={record} preset={preset} empty="Choose dam" /><SelectField label="Sire" name="sire_id" options={dogOptions.filter((item) => data.dogs.find((dog) => dog.id === item.value)?.sex === "Male")} record={record} preset={preset} empty="Choose sire" /><Field label="Breeding date" name="breeding_date" type="date" record={record} preset={preset} /><Field label="Due date" name="due_date" type="date" record={record} preset={preset} /><Field label="Birth date" name="birth_date" type="date" record={record} preset={preset} /><Field label="Expected puppies" name="expected_count" type="number" min="0" record={record} preset={preset} /><TextAreaField label="Litter notes" name="notes" record={record} preset={preset} /></>}
-    {resource === "buyers" && <><Field label="First name" name="first_name" record={record} preset={preset} required /><Field label="Last name" name="last_name" record={record} preset={preset} required /><Field label="Email" name="email" type="email" record={record} preset={preset} required /><Field label="Phone" name="phone" type="tel" record={record} preset={preset} /><Field label="City" name="city" record={record} preset={preset} /><Field label="State" name="state" record={record} preset={preset} /><SelectField label="Application status" name="application_status" options={options(["Inquiry", "Applied", "Approved", "Waitlist", "Matched", "Completed", "Declined"])} record={record} preset={preset} required /><SelectField label="Preferred sex" name="preferred_sex" options={options(["Female", "Male", "No preference"])} record={record} preset={preset} /><Field label="Preferred color" name="preferred_color" record={record} preset={preset} /><TextAreaField label="Household information" name="household_notes" record={record} preset={preset} placeholder="Children, pets, home, schedule, veterinarian, and experience" /><TextAreaField label="Internal notes" name="notes" record={record} preset={preset} /></>}
-    {resource === "puppies" && <><SelectField label="Litter" name="litter_id" options={litterOptions} record={record} preset={preset} required empty="Choose litter" /><SelectField label="Buyer match" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="Not matched" /><Field label="Puppy name / identifier" name="name" record={record} preset={preset} required /><SelectField label="Sex" name="sex" options={options(["Female", "Male"])} record={record} preset={preset} /><Field label="Color / markings" name="color" record={record} preset={preset} /><Field label="Birth date" name="birth_date" type="date" record={record} preset={preset} /><Field label="Birth weight (oz)" name="birth_weight" type="number" step="0.1" min="0" record={record} preset={preset} /><Field label="Current weight (oz)" name="current_weight" type="number" step="0.1" min="0" record={record} preset={preset} /><SelectField label="Status" name="status" options={options(["Available", "Reserved", "Matched", "Retained", "Placed"])} record={record} preset={preset} required /><Field label="Price" name="price" type="number" step="0.01" min="0" record={undefined} preset={{ price: priceDefault ?? "" }} /><TextAreaField label="Puppy notes" name="notes" record={record} preset={preset} /></>}
-    {resource === "payment_plans" && <><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} required empty="Choose buyer" /><Field label="Plan name" name="name" record={record} preset={preset} placeholder="Puppy payment plan" required /><MultiSelectField label="Puppies covered by this plan" name="puppy_ids" options={puppyOptions.filter((option) => { const puppy = data.puppies.find((item) => item.id === option.value); const buyerId = Number(record?.buyer_id ?? preset?.buyer_id); return !buyerId || puppy?.buyer_id === buyerId; })} record={record} preset={preset} /><Field label="Contract amount" name="total_amount" type="number" step="0.01" min="0" record={undefined} preset={{ total_amount: planTotalDefault ?? "" }} required /><Field label="Payment amount" name="payment_amount" type="number" step="0.01" min="0" record={undefined} preset={{ payment_amount: planPaymentDefault ?? "" }} required /><Field label="Number of payments" name="term_count" type="number" step="1" min="1" record={record} preset={preset} required /><SelectField label="Payment frequency" name="frequency" options={options(["Weekly", "Biweekly", "Monthly", "Custom"])} record={record} preset={preset} required /><Field label="Start date" name="start_date" type="date" record={record} preset={preset} /><Field label="Next due date" name="next_due_date" type="date" record={record} preset={preset} /><Field label="On-time completion credit" name="credit_amount" type="number" step="0.01" min="0" record={undefined} preset={{ credit_amount: planCreditDefault ?? "" }} /><SelectField label="Status" name="status" options={options(["Active", "Paused", "Completed", "Defaulted", "Cancelled"])} record={record} preset={preset} required /><label className="checkbox-field full-field"><input name="credit_eligible" type="checkbox" defaultChecked={Boolean(record?.credit_eligible ?? preset?.credit_eligible ?? true)} /><span>Customer is currently eligible for the on-time completion credit</span></label><TextAreaField label="Plan notes and credit terms" name="notes" record={record} preset={preset} placeholder="Describe when the credit is earned and any late-payment conditions." /></>}
-    {resource === "transactions" && <><SelectField label="Type" name="type" options={options(["Payment", "Cost"])} record={record} preset={preset} required /><Field label="Description" name="description" record={record} preset={preset} required /><Field label="Amount" name="amount" type="number" step="0.01" min="0" record={undefined} preset={{ amount: amountDefault ?? "" }} required /><Field label="Category" name="category" record={record} preset={preset} placeholder="Deposit, balance, vet, food…" /><SelectField label="Breeding dog" name="dog_id" options={dogOptions} record={record} preset={preset} empty="No dog" /><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="No buyer" /><SelectField label="Payment plan" name="payment_plan_id" options={paymentPlanOptions} record={record} preset={preset} empty="No payment plan" /><SelectField label="Litter" name="litter_id" options={litterOptions} record={record} preset={preset} empty="No litter" /><SelectField label="Puppy" name="puppy_id" options={puppyOptions} record={record} preset={preset} empty="No puppy" /><SelectField label="Status" name="status" options={options(["Pending", "Due", "Paid", "Overdue", "Refunded", "Void"])} record={record} preset={preset} required /><Field label="Due date" name="due_date" type="date" record={record} preset={preset} /><Field label="Paid date" name="paid_date" type="date" record={record} preset={preset} /><Field label="Method" name="method" record={record} preset={preset} placeholder="Cash, check, card, transfer…" /><TextAreaField label="Notes" name="notes" record={record} preset={preset} /></>}
-    {resource === "events" && <><Field label="Event title" name="title" record={record} preset={preset} required /><SelectField label="Event type" name="event_type" options={options(["Veterinary", "Breeding", "Whelping", "Puppy care", "Buyer", "Pickup", "Reminder", "Other"])} record={record} preset={preset} required /><Field label="Date" name="event_date" type="date" record={record} preset={preset} required /><Field label="Time" name="event_time" type="time" record={record} preset={preset} /><SelectField label="Related record" name="related_record" options={relatedOptions} preset={{ related_record: relatedValue ?? "" }} empty="No related record" /><Field label="Location" name="location" record={record} preset={preset} /><SelectField label="Status" name="status" options={options(["Scheduled", "Confirmed", "Completed", "Cancelled"])} record={record} preset={preset} required /><TextAreaField label="Notes" name="notes" record={record} preset={preset} /></>}
-    {resource === "updates" && <><SelectField label="Puppy" name="puppy_id" options={puppyOptions} record={record} preset={preset} required /><Field label="Update title" name="title" record={record} preset={preset} required /><Field label="Week number" name="week_number" type="number" min="0" record={record} preset={preset} /><Field label="Current weight (oz)" name="weight" type="number" step="0.1" min="0" record={record} preset={preset} /><TextAreaField label="Family update" name="body" record={record} preset={preset} placeholder="Share real growth, temperament, health, and milestone details." required /><label className="checkbox-field full-field"><input name="published" type="checkbox" defaultChecked={Boolean(record?.published ?? preset?.published)} /><span>Publish this update in the family portal</span></label></>}
-  </div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Save record"}</button></div></form></div>;
+  const litterOptions = data.litters.map((litter) => ({ value: litter.id, label: litter.name }));
+  const puppyOptions = data.puppies.map((puppy) => ({ value: puppy.id, label: puppy.name }));
+  const planOptions = data.payment_plans.map((plan) => ({ value: plan.id, label: plan.name }));
+  return <div className="modal-backdrop" role="dialog" aria-modal="true"><form className="modal" onSubmit={onSubmit}><header><span>{editing ? "Edit record" : "Create record"}</span><h2>{resource.replaceAll("_", " ")}</h2><button type="button" onClick={onClose}>Close</button></header><div className="form-grid">
+    {resource === "dogs" && <><Field label="Name" name="name" record={record} preset={preset} required /><Field label="Registered name" name="registered_name" record={record} preset={preset} /><Field label="Sex" name="sex" record={record} preset={preset} required /><Field label="Role" name="role" record={record} preset={preset} required /><Field label="Birth date" name="date_of_birth" type="date" record={record} preset={preset} /><Field label="Color" name="color" record={record} preset={preset} /><Field label="Weight" name="weight" type="number" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><Field label="Purchase price" name="purchase_price" type="number" record={record} preset={preset} defaultValue={dollarDefault(record, "purchase_price", "purchase_price_cents", preset)} /><Field label="Next heat" name="next_heat_date" type="date" record={record} preset={preset} /><TextArea label="Health testing" name="health_testing" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "litters" && <><Field label="Name" name="name" record={record} preset={preset} required /><SelectField label="Dam" name="dam_id" options={dogOptions} record={record} preset={preset} empty="No dam" /><SelectField label="Sire" name="sire_id" options={dogOptions} record={record} preset={preset} empty="No sire" /><Field label="Breeding date" name="breeding_date" type="date" record={record} preset={preset} /><Field label="Due date" name="due_date" type="date" record={record} preset={preset} /><Field label="Birth date" name="birth_date" type="date" record={record} preset={preset} /><Field label="Expected count" name="expected_count" type="number" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "buyers" && <><Field label="First name" name="first_name" record={record} preset={preset} required /><Field label="Last name" name="last_name" record={record} preset={preset} required /><Field label="Email" name="email" type="email" record={record} preset={preset} required /><Field label="Phone" name="phone" record={record} preset={preset} /><Field label="City" name="city" record={record} preset={preset} /><Field label="State" name="state" record={record} preset={preset} /><Field label="Application status" name="application_status" record={record} preset={preset} /><Field label="Preferred sex" name="preferred_sex" record={record} preset={preset} /><Field label="Preferred color" name="preferred_color" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "puppies" && <><SelectField label="Litter" name="litter_id" options={litterOptions} record={record} preset={preset} required /><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="No buyer" /><Field label="Name" name="name" record={record} preset={preset} required /><Field label="Sex" name="sex" record={record} preset={preset} /><Field label="Color" name="color" record={record} preset={preset} /><Field label="Birth date" name="birth_date" type="date" record={record} preset={preset} /><Field label="Birth weight" name="birth_weight" type="number" record={record} preset={preset} /><Field label="Current weight" name="current_weight" type="number" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><Field label="Price" name="price" type="number" record={record} preset={preset} defaultValue={dollarDefault(record, "price", "price_cents", preset)} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "transactions" && <><Field label="Type" name="type" record={record} preset={preset} required /><Field label="Description" name="description" record={record} preset={preset} required /><Field label="Amount" name="amount" type="number" record={record} preset={preset} required defaultValue={dollarDefault(record, "amount", "amount_cents", preset)} /><Field label="Category" name="category" record={record} preset={preset} /><SelectField label="Dog" name="dog_id" options={dogOptions} record={record} preset={preset} empty="No dog" /><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="No buyer" /><SelectField label="Litter" name="litter_id" options={litterOptions} record={record} preset={preset} empty="No litter" /><SelectField label="Puppy" name="puppy_id" options={puppyOptions} record={record} preset={preset} empty="No puppy" /><SelectField label="Plan" name="payment_plan_id" options={planOptions} record={record} preset={preset} empty="No plan" /><Field label="Status" name="status" record={record} preset={preset} /><Field label="Due date" name="due_date" type="date" record={record} preset={preset} /><Field label="Paid date" name="paid_date" type="date" record={record} preset={preset} /><Field label="Method" name="method" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "payment_plans" && <><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} /><Field label="Name" name="name" record={record} preset={preset} required /><Field label="Contract amount" name="total_amount" type="number" record={record} preset={preset} required defaultValue={dollarDefault(record, "total_amount", "total_amount_cents", preset)} /><Field label="Payment amount" name="payment_amount" type="number" record={record} preset={preset} required defaultValue={dollarDefault(record, "payment_amount", "payment_amount_cents", preset)} /><Field label="Number of payments" name="term_count" type="number" record={record} preset={preset} required /><Field label="Frequency" name="frequency" record={record} preset={preset} /><Field label="Next due date" name="next_due_date" type="date" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "events" && <><Field label="Title" name="title" record={record} preset={preset} required /><Field label="Type" name="event_type" record={record} preset={preset} required /><Field label="Date" name="event_date" type="date" record={record} preset={preset} required /><Field label="Time" name="event_time" type="time" record={record} preset={preset} /><Field label="Location" name="location" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "updates" && <><SelectField label="Puppy" name="puppy_id" options={puppyOptions} record={record} preset={preset} /><Field label="Title" name="title" record={record} preset={preset} required /><Field label="Week" name="week_number" type="number" record={record} preset={preset} /><Field label="Weight" name="weight" type="number" record={record} preset={preset} /><TextArea label="Body" name="body" record={record} preset={preset} /><label className="check wide"><input name="published" type="checkbox" defaultChecked={Boolean(record?.published ?? preset?.published)} /><span>Publish update</span></label></>}
+    {resource === "dog_medical_records" && <><SelectField label="Dog" name="dog_id" options={dogOptions} record={record} preset={preset} /><Field label="Type" name="record_type" record={record} preset={preset} required /><Field label="Title" name="title" record={record} preset={preset} required /><Field label="Date" name="record_date" type="date" record={record} preset={preset} /><Field label="Provider" name="provider" record={record} preset={preset} /><Field label="Cost" name="cost" type="number" record={record} preset={preset} defaultValue={dollarDefault(record, "cost", "cost_cents", preset)} /><Field label="Next due" name="next_due_date" type="date" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "dog_registrations" && <><SelectField label="Dog" name="dog_id" options={dogOptions} record={record} preset={preset} /><Field label="Registry" name="registry" record={record} preset={preset} required /><Field label="Registration number" name="registration_number" record={record} preset={preset} required /><Field label="Registered name" name="registered_name" record={record} preset={preset} /><Field label="Issue date" name="issue_date" type="date" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+  </div><footer><button type="button" onClick={onClose}>Cancel</button><button disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : "Create record"}</button></footer></form></div>;
 }
 
 export default function Home() {
-  const [active, setActive] = useState("Overview");
+  const [view, setView] = useState<View>("Command");
   const [data, setData] = useState<DataSet>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
-  const [search, setSearch] = useState("");
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [selectedPuppyId, setSelectedPuppyId] = useState<number | null>(null);
+  const analytics = useAnalytics(data);
 
   const loadData = useCallback(async () => {
     setError("");
@@ -376,18 +230,22 @@ export default function Home() {
       const response = await fetch("/api/data", { cache: "no-store" });
       const payload = await response.json() as DataSet & { error?: string };
       if (!response.ok) throw new Error(payload.error || "Unable to load records.");
-      setData(payload);
+      setData({ ...emptyData, ...payload });
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load records.");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { const timer = window.setTimeout(() => void loadData(), 0); return () => window.clearTimeout(timer); }, [loadData]);
-  useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2800); return () => window.clearTimeout(timer); }, [toast]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadData(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
+  useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2400); return () => window.clearTimeout(timer); }, [toast]);
 
   const openCreate = (resource: Resource, preset: Record<string, unknown> = {}) => setModal({ resource, preset });
-  const openEdit = (resource: Resource, record: BaseRecord) => setModal({ resource, record: record as unknown as Record<string, unknown> });
-
+  const openEdit = (resource: Resource, record: Record<string, unknown>) => setModal({ resource, record });
   async function submitRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!modal) return;
@@ -395,83 +253,51 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     const values = Object.fromEntries(form.entries()) as Record<string, unknown>;
     if (modal.resource === "updates") values.published = form.get("published") === "on";
-    if (modal.resource === "payment_plans") {
-      values.puppy_ids = form.getAll("puppy_ids");
-      values.credit_eligible = form.get("credit_eligible") === "on";
-    }
-    if (modal.resource === "events") {
-      const [relatedType, relatedId] = String(values.related_record ?? "").split(":");
-      values.related_type = relatedType || "";
-      values.related_id = relatedId || "";
-      delete values.related_record;
-    }
     try {
       const response = await fetch("/api/data", { method: modal.record?.id ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ resource: modal.resource, id: modal.record?.id, data: values }) });
       const payload = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Unable to save the record.");
+      if (!response.ok) throw new Error(payload.error || "Unable to save record.");
       setModal(null);
-      setToast("Record saved to the database");
+      setToast("Record saved");
       await loadData();
-    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Unable to save the record."); }
-    finally { setSaving(false); }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save record.");
+    } finally {
+      setSaving(false);
+    }
   }
-
   async function remove(resource: Resource, id: number, label: string) {
-    if (!window.confirm(`Delete “${label}”? This cannot be undone.`)) return;
-    try {
-      const response = await fetch(`/api/data?resource=${resource}&id=${id}`, { method: "DELETE" });
-      if (!response.ok) { const payload = await response.json() as { error?: string }; throw new Error(payload.error || "Unable to delete the record."); }
-      setToast("Record deleted");
-      await loadData();
-    } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : "Unable to delete the record."); }
+    if (!window.confirm(`Delete "${label}"? This cannot be undone.`)) return;
+    const response = await fetch(`/api/data?resource=${resource}&id=${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      setError(payload.error || "Unable to delete record.");
+      return;
+    }
+    setToast("Record deleted");
+    await loadData();
   }
 
   const searchResults = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (query.length < 2) return [];
     return [
-      ...data.dogs.map((item) => ({ label: item.name, detail: `${item.role} · ${item.status}`, tab: "Dogs" })),
-      ...data.litters.map((item) => ({ label: item.name, detail: `Litter · ${item.status}`, tab: "Litters" })),
-      ...data.buyers.map((item) => ({ label: fullName(item), detail: item.email, tab: "Buyers" })),
-      ...data.puppies.map((item) => ({ label: item.name, detail: `Puppy · ${item.status}`, tab: "Puppy Portal" })),
-      ...data.events.map((item) => ({ label: item.title, detail: shortDate(item.event_date), tab: "Calendar" })),
-      ...data.transactions.map((item) => ({ label: item.description, detail: `${item.type} · ${money(item.amount_cents)}`, tab: "Payments" })),
-      ...data.payment_plans.map((item) => ({ label: item.name, detail: `${item.status} plan · ${money(item.total_amount_cents)}`, tab: "Payments" })),
-    ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query)).slice(0, 6);
+      ...data.dogs.map((item) => ({ label: item.name, detail: `${item.role} / ${item.status}`, view: "Breeding" as View })),
+      ...data.litters.map((item) => ({ label: item.name, detail: `Litter / ${item.status}`, view: "Breeding" as View })),
+      ...data.buyers.map((item) => ({ label: fullName(item), detail: item.email, view: "Families" as View })),
+      ...data.puppies.map((item) => ({ label: item.name, detail: `Puppy / ${item.status}`, view: "Families" as View })),
+      ...data.transactions.map((item) => ({ label: item.description, detail: `${item.type} / ${money(item.amount_cents)}`, view: "Finance" as View })),
+      ...data.events.map((item) => ({ label: item.title, detail: shortDate(item.event_date), view: "Calendar" as View })),
+    ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query)).slice(0, 8);
   }, [data, search]);
 
-  const notifications = useMemo(() => {
-    const messages: { title: string; detail: string; tab: string; urgent?: boolean }[] = [];
-    const overdue = data.transactions.filter((item) => item.type === "Payment" && item.status !== "Paid" && item.due_date && item.due_date < today());
-    if (overdue.length) messages.push({ title: `${overdue.length} overdue payment${overdue.length === 1 ? "" : "s"}`, detail: money(overdue.reduce((sum, item) => sum + item.amount_cents, 0)), tab: "Payments", urgent: true });
-    const unassigned = data.puppies.filter((item) => !item.buyer_id && item.status === "Available");
-    if (unassigned.length) messages.push({ title: `${unassigned.length} available pupp${unassigned.length === 1 ? "y" : "ies"}`, detail: "No buyer match recorded", tab: "Puppy Portal" });
-    const nextEvent = data.events.find((item) => item.event_date >= today() && item.status !== "Completed");
-    if (nextEvent) messages.push({ title: nextEvent.title, detail: `${shortDate(nextEvent.event_date)}${nextEvent.event_time ? ` · ${nextEvent.event_time}` : ""}`, tab: "Calendar" });
-    const plansDue = data.payment_plans.filter((plan) => plan.status === "Active" && plan.next_due_date && plan.next_due_date <= today());
-    if (plansDue.length) messages.push({ title: `${plansDue.length} payment plan${plansDue.length === 1 ? "" : "s"} due`, detail: plansDue.map((plan) => plan.name).join(", "), tab: "Payments", urgent: true });
-    return messages;
-  }, [data]);
-
-  const birthdayReminders = useMemo(() => data.puppies.flatMap((puppy) => {
-    if (!puppy.buyer_id || !puppy.birth_date) return [];
-    const buyer = data.buyers.find((item) => item.id === puppy.buyer_id);
-    if (!buyer) return [];
-    return [{ puppy, buyer, ...nextBirthday(puppy.birth_date) }];
-  }).sort((a, b) => a.daysUntil - b.daysUntil || a.puppy.name.localeCompare(b.puppy.name)), [data.buyers, data.puppies]);
-  const reminderCount = notifications.length + birthdayReminders.filter((reminder) => reminder.daysUntil <= 45).length;
-
-  const quickResource: Resource = active === "Dogs" ? "dogs" : active === "Litters" ? "litters" : active === "Buyers" ? "buyers" : active === "Payments" ? "transactions" : active === "Puppy Portal" ? "updates" : "events";
-  const activePuppyId = selectedPuppyId ?? data.puppies[0]?.id ?? null;
-  const [eyebrow, title, subtitle] = pageCopy[active];
-  const navigate = (tab: string) => { setActive(tab); setSearch(""); setNotificationsOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
-
-  return <div className="app-shell tech-theme"><aside className="sidebar"><button className="brand" onClick={() => navigate("Overview")} aria-label="Southwest Virginia Operating System home"><span className="brand-node">S</span><span className="brand-lockup"><b>Southwest</b><strong>Virginia</strong><small>Operating System</small></span></button><nav aria-label="Main navigation"><p>KENNEL</p>{navItems.slice(0, 3).map(([label, icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => navigate(label)}><Glyph>{icon}</Glyph><span>{label}</span>{label === "Litters" && data.litters.length > 0 && <i>{data.litters.length}</i>}</button>)}<p>BUSINESS</p>{navItems.slice(3, 6).map(([label, icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => navigate(label)}><Glyph>{icon}</Glyph><span>{label}</span>{label === "Buyers" && data.buyers.length > 0 && <i>{data.buyers.length}</i>}</button>)}<p>EXPERIENCE</p>{navItems.slice(6).map(([label, icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => navigate(label)}><Glyph>{icon}</Glyph><span>{label}</span></button>)}</nav><div className="sidebar-live"><span><i className={error ? "error-dot" : ""} /></span><p><b>{error ? "Connection issue" : "Database connected"}</b><small>{error ? "Check the message above" : "Real records are saved"}</small></p></div><div className="user-card"><span className="avatar light">SV</span><span><b>Southwest Virginia</b><small>Private workspace</small></span></div></aside>
-    <main className="main"><header className="topbar"><div className="search-wrap"><Glyph>⌕</Glyph><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search dogs, litters, buyers, or payments…" aria-label="Search all records" />{searchResults.length > 0 && <div className="search-results">{searchResults.map((result, index) => <button key={`${result.label}-${index}`} onClick={() => navigate(result.tab)}><span><b>{result.label}</b><small>{result.detail}</small></span><em>Open →</em></button>)}</div>}</div><div className="top-actions"><span className="sync-status"><i className={error ? "error-dot" : ""} />{error ? "System offline" : "System live"}</span><button className="notification-button reminder-button" onClick={() => setNotificationsOpen(!notificationsOpen)} aria-label="Open reminders and upcoming birthdays" aria-expanded={notificationsOpen}><span>◷</span><span className="reminder-label"><b>Reminders</b><small>{birthdayReminders.length ? `${birthdayReminders.length} upcoming` : "All clear"}</small></span>{reminderCount > 0 && <i>{reminderCount}</i>}</button><button className="quick-add" onClick={() => openCreate(quickResource, quickResource === "transactions" ? { type: "Payment" } : quickResource === "updates" && activePuppyId ? { puppy_id: activePuppyId } : {})}>+ Quick add</button></div>{notificationsOpen && <div className="notifications reminders-popover"><div className="section-heading"><div><p className="kicker">MARKETING & OPERATIONS</p><h2>Upcoming</h2></div><button onClick={() => setNotificationsOpen(false)} aria-label="Close reminders">×</button></div>
-      <section className="reminder-section upcoming-birthdays"><div className="reminder-section-heading"><span>PUPPY BIRTHDAYS</span><small>{birthdayReminders.length}</small></div>{birthdayReminders.length ? <div className="birthday-reminder-list">{birthdayReminders.slice(0, 6).map((reminder) => { const date = new Date(`${reminder.date}T12:00:00`); const timing = reminder.daysUntil === 0 ? "Today" : reminder.daysUntil === 1 ? "Tomorrow" : `In ${reminder.daysUntil} days`; return <button key={reminder.puppy.id} onClick={() => navigate("Buyers")}><span className="birthday-date"><b>{date.getDate()}</b><small>{date.toLocaleString("en-US", { month: "short" }).toUpperCase()}</small></span><span className="birthday-family"><b>{reminder.puppy.name}</b><small>{fullName(reminder.buyer)} · turning {reminder.turning}</small><em>{reminder.buyer.email}</em></span><strong>{timing}</strong></button>; })}</div> : <div className="birthday-empty"><span>♡</span><p><b>No birthdays to show yet</b><small>Add a birth date and buyer assignment to a puppy to create a reminder.</small></p></div>}<p className="birthday-help">Birthday card and family follow-up schedule for assigned puppies.</p></section>
-      <section className="reminder-section"><div className="reminder-section-heading"><span>NEEDS ATTENTION</span><small>{notifications.length}</small></div>{notifications.length ? <div className="reminder-attention-list">{notifications.map((item) => <button key={item.title} onClick={() => navigate(item.tab)}><i className={`notice-dot ${item.urgent ? "urgent" : ""}`} /><span><b>{item.title}</b><small>{item.detail}</small></span><em>→</em></button>)}</div> : <div className="reminder-clear"><span>✓</span><p><b>All clear</b><small>No urgent records need attention.</small></p></div>}</section>
-    </div>}</header>
-      <div className="content"><div className="page-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{subtitle}</p></div><div className="heading-actions"><span className="data-date">Updated {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span></div></div>{error && <div className="error-banner"><span>!</span><p><b>Something needs attention</b><small>{error}</small></p><button onClick={() => void loadData()}>Try again</button></div>}{loading ? <div className="loading-state"><span /><p>Loading your records…</p></div> : <>{active === "Overview" && <Overview data={data} openCreate={openCreate} navigate={navigate} />}{active === "Dogs" && <DogsView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} reload={loadData} notify={setToast} reportError={setError} />}{active === "Litters" && <LittersView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} />}{active === "Buyers" && <BuyersView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} reload={loadData} notify={setToast} reportError={setError} />}{active === "Payments" && <PaymentsView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} />}{active === "Calendar" && <CalendarView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} />}{active === "Puppy Portal" && <PortalView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} selectedPuppyId={activePuppyId} setSelectedPuppyId={setSelectedPuppyId} />}</>}</div></main>
-    <nav className="mobile-nav">{navItems.slice(0, 5).map(([label, icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => navigate(label)}><Glyph>{icon}</Glyph><small>{label}</small></button>)}</nav>{modal && <RecordForm modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}{toast && <div className="toast"><span>✓</span>{toast}</div>}
+  const activeViewProps = { data, openCreate, openEdit, remove };
+  return <div className="app-shell">
+    <aside className="sidebar"><button className="brand" onClick={() => setView("Command")}><span>SV</span><b>Chihuahua OS</b><small>Supabase command center</small></button><nav>{views.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><i>{item.code}</i><span>{item.label}</span></button>)}</nav><div className="system-card"><span className={error ? "offline" : ""} /><b>{error ? "Action needed" : "Supabase online"}</b><small>{analytics.readiness}% readiness / {analytics.docs} vault files</small></div></aside>
+    <main><header className="topbar"><div className="search"><span>SEARCH</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Dogs, buyers, payments, events..." />{searchResults.length > 0 && <div className="search-menu">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => { setView(item.view); setSearch(""); }}><b>{item.label}</b><small>{item.detail}</small></button>)}</div>}</div><div className="top-actions"><span>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span><button onClick={() => openCreate("transactions", { type: "Payment" })}>Log payment</button><button onClick={() => openCreate(view === "Calendar" ? "events" : view === "Families" ? "buyers" : view === "Breeding" ? "dogs" : "events")}>Quick add</button></div></header>
+      <div className="content"><div className="view-title"><span>{view.toUpperCase()}</span><h1>{view === "Command" ? "Operating command" : view}</h1><p>{view === "Command" ? "High-tech control surface for every record in the program." : "Manage records directly against Supabase."}</p></div>{error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}{loading ? <div className="loading"><span />Loading Supabase records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} />}</>}</div>
+    </main>
+    {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}
+    {toast && <div className="toast">{toast}</div>}
   </div>;
 }

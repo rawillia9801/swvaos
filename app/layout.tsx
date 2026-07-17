@@ -12,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const imageUrl = `${protocol}://${host}/og.png`;
   const title = "Chihuahua OS | Southwest Virginia Chihuahuas";
-  const description = "Litters, dogs, families, finances, and puppy milestones—all in one calm operating system.";
+  const description = "Direct Vercel and Supabase command center for litters, dogs, families, finances, files, and puppy milestones.";
   return {
     title,
     description,
