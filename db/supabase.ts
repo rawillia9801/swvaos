@@ -1,6 +1,6 @@
 type SupabaseConfig = {
   url: string;
-  anonKey: string;
+  anonKey?: string;
   serviceRoleKey?: string;
   storageBucket: string;
 };
@@ -16,7 +16,7 @@ export function getSupabaseConfig(): SupabaseConfig {
   const serviceRoleKey = runtimeValue("SUPABASE_SERVICE_ROLE_KEY");
   const storageBucket = runtimeValue("SUPABASE_STORAGE_BUCKET") ?? "documents";
 
-  if (!url || !anonKey) {
+  if (!url || (!anonKey && !serviceRoleKey)) {
     throw new Error("Data connection is not configured.");
   }
 
@@ -31,6 +31,7 @@ export function getSupabaseConfig(): SupabaseConfig {
 export async function supabaseRequest(path: string, init: RequestInit = {}) {
   const { url, anonKey, serviceRoleKey } = getSupabaseConfig();
   const token = serviceRoleKey ?? anonKey;
+  if (!token) throw new Error("Data connection is not configured.");
   const headers = new Headers(init.headers);
   headers.set("apikey", token);
   headers.set("authorization", `Bearer ${token}`);
