@@ -120,6 +120,19 @@ payments, due dates, progress from linked transactions, and a conditional
 on-time completion credit. Supported uploads are PDF, JPG, PNG, and WebP files
 up to 20 MB.
 
+## Claude Operations Copilot
+
+The floating **Claude copilot** can translate plain-language operational notes
+into a proposed new kennel record. It is intentionally create-only and always
+shows an approval step before any database write occurs. This keeps the API key
+server-side and prevents an AI request from silently modifying or deleting an
+existing record.
+
+Set `ANTHROPIC_API_KEY` in the runtime environment (and optionally
+`ANTHROPIC_MODEL`) to enable it. The copilot sends the current dog, buyer,
+litter, and puppy identifiers to Claude only to resolve relationships for the
+requested record; it never sends the key to the browser.
+
 ## Breeding Dog Profiles
 
 Every breeding dog has a full profile for origin and purchase details, medical
