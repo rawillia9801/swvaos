@@ -70,6 +70,18 @@ async function selectAll<T>(table: TableName, query = "select=*") {
   return jsonRequest<T[]>(`rest/v1/${table}?${query}`);
 }
 
+async function selectSafeAll<T>(table: TableName) {
+  try {
+    return await selectAll<T>(table);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("Could not find the table") || message.includes("does not exist") || message.includes("schema cache")) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 async function insertRow<T>(table: TableName, row: Record<string, unknown>) {
   return jsonRequest<T[]>(`rest/v1/${table}`, {
     method: "POST",
@@ -114,45 +126,45 @@ export async function getKennelDataFromSupabase() {
     buyerDocuments,
     buyerDocumentPuppies,
   ] = await Promise.all([
-    selectAll<Record<string, unknown>>("dogs", "select=*&order=name.asc"),
-    selectAll<Record<string, unknown>>("dog_medical_records", "select=*&order=record_date.desc.nullslast,created_at.desc"),
-    selectAll<Record<string, unknown>>("dog_registrations", "select=*&order=registry.asc,registration_number.asc"),
-    selectAll<Record<string, unknown>>("dog_documents", "select=*&order=created_at.desc"),
-    selectAll<Record<string, unknown>>("litters", "select=*&order=created_at.desc"),
-    selectAll<Record<string, unknown>>("buyers", "select=*&order=created_at.desc"),
-    selectAll<Record<string, unknown>>("puppies", "select=*&order=litter_id.desc,name.asc"),
-    selectAll<Record<string, unknown>>("payment_plans", "select=*&order=status.asc,next_due_date.asc.nullslast"),
-    selectAll<{ payment_plan_id: number; puppy_id: number }>("payment_plan_puppies"),
-    selectAll<Record<string, unknown>>("transactions", "select=*&order=created_at.desc"),
-    selectAll<Record<string, unknown>>("events", "select=*&order=event_date.asc,event_time.asc.nullslast"),
-    selectAll<Record<string, unknown>>("puppy_updates", "select=*&order=created_at.desc"),
-    selectAll<Record<string, unknown>>("buyer_documents", "select=*&order=created_at.desc"),
-    selectAll<{ document_id: number; puppy_id: number }>("buyer_document_puppies"),
+    selectSafeAll<Record<string, unknown>>("dogs"),
+    selectSafeAll<Record<string, unknown>>("dog_medical_records"),
+    selectSafeAll<Record<string, unknown>>("dog_registrations"),
+    selectSafeAll<Record<string, unknown>>("dog_documents"),
+    selectSafeAll<Record<string, unknown>>("litters"),
+    selectSafeAll<Record<string, unknown>>("buyers"),
+    selectSafeAll<Record<string, unknown>>("puppies"),
+    selectSafeAll<Record<string, unknown>>("payment_plans"),
+    selectSafeAll<{ payment_plan_id: number; puppy_id: number }>("payment_plan_puppies"),
+    selectSafeAll<Record<string, unknown>>("transactions"),
+    selectSafeAll<Record<string, unknown>>("events"),
+    selectSafeAll<Record<string, unknown>>("puppy_updates"),
+    selectSafeAll<Record<string, unknown>>("buyer_documents"),
+    selectSafeAll<{ document_id: number; puppy_id: number }>("buyer_document_puppies"),
   ]);
 
   return {
-    dogs,
-    dog_medical_records: dogMedicalRecords,
-    dog_registrations: dogRegistrations,
-    dog_documents: dogDocuments,
-    litters,
-    buyers: buyers.map(normalizeBuyer),
-    puppies,
+    dogs: dogs.sort((left, right) => textValue(left, "name").localeCompare(textValue(right, "name"))),
+    dog_medical_records: dogMedicalRecords.sort((left, right) => textValue(right, "created_at").localeCompare(textValue(left, "created_at"))),
+    dog_registrations: dogRegistrations.sort((left, right) => textValue(left, "registry").localeCompare(textValue(right, "registry"))),
+    dog_documents: dogDocuments.sort((left, right) => textValue(right, "created_at").localeCompare(textValue(left, "created_at"))),
+    litters: litters.sort((left, right) => textValue(right, "created_at").localeCompare(textValue(left, "created_at"))),
+    buyers: buyers.map(normalizeBuyer).sort((left, right) => `${textValue(left, "last_name")} ${textValue(left, "first_name")}`.localeCompare(`${textValue(right, "last_name")} ${textValue(right, "first_name")}`)),
+    puppies: puppies.sort((left, right) => textValue(left, "name").localeCompare(textValue(right, "name"))),
     payment_plans: paymentPlans.map((plan: Record<string, unknown>) => ({
       ...plan,
       puppy_ids: paymentPlanPuppies
         .filter((link) => link.payment_plan_id === Number(plan.id))
         .map((link) => link.puppy_id),
-    })),
-    transactions,
-    events,
-    updates,
+    })).sort((left, right) => textValue(left, "status").localeCompare(textValue(right, "status"))),
+    transactions: transactions.sort((left, right) => textValue(right, "created_at").localeCompare(textValue(left, "created_at"))),
+    events: events.sort((left, right) => `${textValue(left, "event_date")}${textValue(left, "event_time")}`.localeCompare(`${textValue(right, "event_date")}${textValue(right, "event_time")}`)),
+    updates: updates.sort((left, right) => textValue(right, "created_at").localeCompare(textValue(left, "created_at"))),
     buyer_documents: buyerDocuments.map((document: Record<string, unknown>) => ({
       ...document,
       puppy_ids: buyerDocumentPuppies
         .filter((link) => link.document_id === Number(document.id))
         .map((link) => link.puppy_id),
-    })),
+    })).sort((left, right) => textValue(right, "created_at").localeCompare(textValue(left, "created_at"))),
   };
 }
 

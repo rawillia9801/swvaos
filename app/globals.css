@@ -236,6 +236,7 @@ main { min-width: 0; }
 .view-title h1 { margin: 7px 0 6px; font-size: clamp(28px, 4vw, 48px); line-height: 1; letter-spacing: -.05em; }
 .view-title p { margin: 0; color: var(--muted); max-width: 760px; }
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.grid > .panel { grid-column: 1 / -1; }
 .command-grid > .panel, .two-one > .panel { grid-column: span 6; }
 .two-one > .panel:first-child { grid-column: span 7; }
 .two-one > .panel:nth-child(2) { grid-column: span 5; }
