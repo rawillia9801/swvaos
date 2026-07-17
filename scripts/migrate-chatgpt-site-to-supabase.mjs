@@ -1,6 +1,11 @@
+import { createReadStream } from "node:fs";
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
+
 const sourceUrl = process.env.SOURCE_SITE_URL ?? "https://southwest-virginia-chihuahua-os.dswillia74.chatgpt.site";
 const sourceCookie = process.env.SOURCE_COOKIE;
 const sourceAuthorization = process.env.SOURCE_AUTHORIZATION;
+const sourceBackupDir = process.env.SOURCE_BACKUP_DIR;
 const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "documents";
@@ -13,8 +18,8 @@ const sourceHeaders = new Headers();
 if (sourceCookie) sourceHeaders.set("cookie", sourceCookie);
 if (sourceAuthorization) sourceHeaders.set("authorization", sourceAuthorization);
 
-if (!sourceCookie && !sourceAuthorization) {
-  throw new Error("Set SOURCE_COOKIE or SOURCE_AUTHORIZATION so the migration can read the private ChatGPT/Sites app.");
+if (!sourceBackupDir && !sourceCookie && !sourceAuthorization) {
+  throw new Error("Set SOURCE_BACKUP_DIR, SOURCE_COOKIE, or SOURCE_AUTHORIZATION so the migration can read the private ChatGPT/Sites app.");
 }
 
 const supabaseHeaders = {
@@ -26,6 +31,13 @@ async function sourceFetch(path) {
   const response = await fetch(new URL(path, sourceUrl), { headers: sourceHeaders });
   if (!response.ok) throw new Error(`Source ${path} failed with ${response.status}.`);
   return response;
+}
+
+async function sourceData() {
+  if (sourceBackupDir) {
+    return JSON.parse(await readFile(path.join(sourceBackupDir, "data.json"), "utf8"));
+  }
+  return sourceFetch("/api/data").then((response) => response.json());
 }
 
 async function supabaseFetch(path, init = {}) {
@@ -65,16 +77,33 @@ async function upsertLinkRows(table, rows, conflict) {
   console.log(`migrated ${rows.length} ${table}`);
 }
 
-async function uploadObject(objectKey, response) {
+async function uploadObject(objectKey, body, contentType) {
   await supabaseFetch(`storage/v1/object/${bucket}/${objectKey}`, {
     method: "POST",
     headers: {
-      "content-type": response.headers.get("content-type") ?? "application/octet-stream",
+      "content-type": contentType ?? "application/octet-stream",
       "x-upsert": "true",
     },
-    body: response.body,
+    body,
     duplex: "half",
   });
+}
+
+async function backupFileFor(directory, document) {
+  const folder = path.join(sourceBackupDir, directory);
+  const files = await readdir(folder);
+  const file = files.find((name) => name.startsWith(`${document.id}-`));
+  if (!file) throw new Error(`Missing backup file for ${directory} document ${document.id}.`);
+  return path.join(folder, file);
+}
+
+async function uploadDocumentObject(directory, urlPath, document) {
+  if (sourceBackupDir) {
+    await uploadObject(document.object_key, createReadStream(await backupFileFor(directory, document)), document.content_type);
+    return;
+  }
+  const response = await sourceFetch(`${urlPath}/${document.id}`);
+  await uploadObject(document.object_key, response.body, response.headers.get("content-type") ?? document.content_type);
 }
 
 function withoutPuppyIds(record) {
@@ -83,7 +112,7 @@ function withoutPuppyIds(record) {
   return copy;
 }
 
-const data = await sourceFetch("/api/data").then((response) => response.json());
+const data = await sourceData();
 
 await upsertRows("dogs", data.dogs);
 await upsertRows("dog_medical_records", data.dog_medical_records);
@@ -102,8 +131,7 @@ await upsertRows("events", data.events);
 await upsertRows("puppy_updates", data.updates);
 
 for (const document of data.buyer_documents ?? []) {
-  const response = await sourceFetch(`/api/documents/${document.id}`);
-  await uploadObject(document.object_key, response);
+  await uploadDocumentObject("buyer-documents", "/api/documents", document);
 }
 await upsertRows("buyer_documents", data.buyer_documents?.map(withoutPuppyIds));
 await upsertLinkRows(
@@ -113,8 +141,7 @@ await upsertLinkRows(
 );
 
 for (const document of data.dog_documents ?? []) {
-  const response = await sourceFetch(`/api/dog-documents/${document.id}`);
-  await uploadObject(document.object_key, response);
+  await uploadDocumentObject("dog-documents", "/api/dog-documents", document);
 }
 await upsertRows("dog_documents", data.dog_documents);
 
