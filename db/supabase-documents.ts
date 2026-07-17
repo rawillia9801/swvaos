@@ -50,7 +50,7 @@ async function jsonRequest<T>(path: string, init: RequestInit = {}) {
   const response = await supabaseRequest(path, { ...init, headers, cache: "no-store" });
   const payload = await response.text();
   const json = payload ? JSON.parse(payload) : null;
-  if (!response.ok) throw new Error(json?.message ?? json?.error ?? "Supabase request failed.");
+  if (!response.ok) throw new Error(json?.message ?? json?.error ?? "Document request failed.");
   return json as T;
 }
 

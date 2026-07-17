@@ -46,7 +46,7 @@ async function jsonRequest<T>(path: string, init: RequestInit = {}) {
   const payload = await response.text();
   const json = payload ? JSON.parse(payload) : null;
   if (!response.ok) {
-    const message = json?.message ?? json?.error ?? "Supabase request failed.";
+    const message = json?.message ?? json?.error ?? "Data request failed.";
     throw new Error(message);
   }
   return json as T;

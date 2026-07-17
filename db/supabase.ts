@@ -17,12 +17,12 @@ export function getSupabaseConfig(): SupabaseConfig {
   const storageBucket = runtimeValue("SUPABASE_STORAGE_BUCKET") ?? "documents";
 
   if (!url || !anonKey) {
-    throw new Error("Supabase is not configured.");
+    throw new Error("Data connection is not configured.");
   }
 
   const parsedUrl = new URL(url);
   if (parsedUrl.protocol !== "https:") {
-    throw new Error("Supabase must use an HTTPS URL.");
+    throw new Error("Data connection must use an HTTPS URL.");
   }
 
   return { url: url.replace(/\/$/, ""), anonKey, serviceRoleKey, storageBucket };
