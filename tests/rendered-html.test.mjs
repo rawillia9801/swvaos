@@ -4,14 +4,14 @@ import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 
-test("ships a high-tech Supabase command surface", async () => {
+test("ships the SWVAOS command surface", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
 
-  assert.match(page, /LIVE SUPABASE OPERATIONS/);
+  assert.match(page, /SWVAOS/);
+  assert.match(page, /OPERATING SYSTEM/);
   assert.match(page, /Readiness/);
   assert.match(page, /Risk Radar/);
   assert.match(page, /Document Vault/);
-  assert.match(page, /Supabase command center/);
   assert.match(page, /Care operations/);
   assert.match(page, /Inventory control/);
   assert.match(page, /Communications hub/);
@@ -41,7 +41,7 @@ test("includes the redesigned operations styling", async () => {
   assert.match(css, /\.report-grid/);
 });
 
-test("persists dog medical records and private documents through Supabase", async () => {
+test("persists dog medical records and private documents", async () => {
   const [kennel, documents, schema] = await Promise.all([
     readFile(new URL("db/supabase-kennel.ts", root), "utf8"),
     readFile(new URL("db/supabase-documents.ts", root), "utf8"),
@@ -56,7 +56,7 @@ test("persists dog medical records and private documents through Supabase", asyn
   assert.match(schema, /create table if not exists dog_registrations/);
 });
 
-test("deploys the app directly on Vercel with a Supabase data path", async () => {
+test("deploys the app directly without redirects", async () => {
   const [configuration, packageManifest, supabaseSchema, dataRoute] = await Promise.all([
     readFile(new URL("vercel.json", root), "utf8"),
     readFile(new URL("package.json", root), "utf8"),

@@ -11,13 +11,13 @@ export async function generateMetadata(): Promise<Metadata> {
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const imageUrl = `${protocol}://${host}/og.png`;
-  const title = "Chihuahua OS | Southwest Virginia Chihuahuas";
-  const description = "Direct Vercel and Supabase command center for litters, dogs, families, finances, files, and puppy milestones.";
+  const title = "SWVAOS";
+  const description = "Southwest Virginia Chihuahua operating system for litters, dogs, families, finances, files, and puppy milestones.";
   return {
     title,
     description,
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: { title, description, images: [{ url: imageUrl, width: 1680, height: 941, alt: "Chihuahua OS by Southwest Virginia Chihuahuas" }] },
+    openGraph: { title, description, images: [{ url: imageUrl, width: 1680, height: 941, alt: "SWVAOS" }] },
     twitter: { card: "summary_large_image", title, description, images: [imageUrl] },
   };
 }
