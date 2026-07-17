@@ -74,3 +74,18 @@ test("deploys the app directly on Vercel with a Supabase migration path", async 
   assert.match(supabaseSchema, /create table if not exists dogs/);
   assert.match(supabaseSchema, /insert into storage\.buckets/);
 });
+
+test("includes a reviewable Claude operations copilot", async () => {
+  const [page, assistantRoute, environment] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/api/assistant/route.ts", root), "utf8"),
+    readFile(new URL(".env.example", root), "utf8"),
+  ]);
+
+  assert.match(page, /OperationsCopilot/);
+  assert.match(page, /Approve & save/);
+  assert.match(assistantRoute, /https:\/\/api\.anthropic\.com\/v1\/messages/);
+  assert.match(assistantRoute, /create_record/);
+  assert.match(assistantRoute, /Never update or delete/);
+  assert.match(environment, /ANTHROPIC_API_KEY/);
+});

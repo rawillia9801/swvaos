@@ -18,6 +18,7 @@ type PuppyUpdate = BaseRecord & { puppy_id: number; title: string; body: string;
 type BuyerDocument = BaseRecord & { buyer_id: number; payment_plan_id: number | null; document_type: string; title: string; file_name: string; content_type: string; size_bytes: number; notes: string | null; puppy_ids: number[] };
 type DataSet = { dogs: Dog[]; dog_medical_records: DogMedicalRecord[]; dog_registrations: DogRegistration[]; dog_documents: DogDocument[]; litters: Litter[]; buyers: Buyer[]; puppies: Puppy[]; payment_plans: PaymentPlan[]; transactions: Transaction[]; events: KennelEvent[]; updates: PuppyUpdate[]; buyer_documents: BuyerDocument[] };
 type ModalState = { resource: Resource; record?: Record<string, unknown>; preset?: Record<string, unknown> } | null;
+type AssistantAction = { resource: Resource; data: Record<string, unknown>; summary: string };
 
 const emptyData: DataSet = { dogs: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], buyer_documents: [] };
 const navItems = [["Overview", "⌂"], ["Litters", "✦"], ["Dogs", "♡"], ["Buyers", "◎"], ["Payments", "$"], ["Calendar", "◷"], ["Puppy Portal", "↗"]] as const;
@@ -66,6 +67,13 @@ function EmptyState({ icon, title, text, action, onAction }: { icon: string; tit
 
 function SectionHeader({ eyebrow, title, actions }: { eyebrow: string; title: string; actions?: ReactNode }) {
   return <div className="section-heading"><div><p className="kicker">{eyebrow}</p><h2>{title}</h2></div>{actions}</div>;
+}
+
+function OperationsCopilot({ open, setOpen, message, setMessage, response, action, busy, error, onAsk, onApprove }: { open: boolean; setOpen: (value: boolean) => void; message: string; setMessage: (value: string) => void; response: string; action: AssistantAction | null; busy: boolean; error: string; onAsk: () => void; onApprove: () => void }) {
+  return <aside className={`copilot ${open ? "open" : ""}`} aria-label="Operations copilot">
+    <button className="copilot-launcher" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="operations-copilot"><span>✦</span><b>Claude copilot</b><i>AI</i></button>
+    {open && <div className="copilot-panel" id="operations-copilot"><header><div><p>KENNEL INTELLIGENCE</p><h2>Operations copilot</h2><small>Drafts a change. You approve it.</small></div><button onClick={() => setOpen(false)} aria-label="Close operations copilot">×</button></header><div className="copilot-signal"><i /><span>CLAUDE LINK READY</span><em>CREATE-ONLY MODE</em></div><div className="copilot-conversation" aria-live="polite">{response ? <p className="copilot-response">{response}</p> : <p className="copilot-placeholder">Try: “Add an approved buyer named Jane Doe, jane@example.com, in Roanoke.” Or: “Schedule a vet visit for Bella on 2026-08-02.”</p>}{action && <div className="copilot-action"><small>PROPOSED DATABASE CHANGE</small><b>{action.summary}</b><span>Creates a new {action.resource.replaceAll("_", " ")} record. Nothing has been saved yet.</span><button className="primary-button" onClick={onApprove}>Approve & save</button></div>}{error && <p className="copilot-error">{error}</p>}</div><div className="copilot-composer"><label htmlFor="copilot-message">Tell the copilot what happened</label><textarea id="copilot-message" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Record a payment, add a buyer, schedule care…" rows={3} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") onAsk(); }} /><button className="primary-button" onClick={onAsk} disabled={busy || !message.trim()}>{busy ? "Thinking…" : "Draft change ↗"}</button><small>⌘/Ctrl + Enter to draft · Review before saving</small></div></div>}
+  </aside>;
 }
 
 function Overview({ data, openCreate, navigate }: { data: DataSet; openCreate: (resource: Resource, preset?: Record<string, unknown>) => void; navigate: (tab: string) => void }) {
@@ -369,6 +377,12 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [selectedPuppyId, setSelectedPuppyId] = useState<number | null>(null);
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotMessage, setCopilotMessage] = useState("");
+  const [copilotResponse, setCopilotResponse] = useState("");
+  const [copilotAction, setCopilotAction] = useState<AssistantAction | null>(null);
+  const [copilotBusy, setCopilotBusy] = useState(false);
+  const [copilotError, setCopilotError] = useState("");
 
   const loadData = useCallback(async () => {
     setError("");
@@ -426,6 +440,31 @@ export default function Home() {
     } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : "Unable to delete the record."); }
   }
 
+  async function askCopilot() {
+    if (!copilotMessage.trim()) return;
+    setCopilotBusy(true); setCopilotError(""); setCopilotAction(null);
+    try {
+      const response = await fetch("/api/assistant", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: copilotMessage }) });
+      const payload = await response.json() as { message?: string; action?: AssistantAction; error?: string };
+      if (!response.ok) throw new Error(payload.error || "The copilot could not prepare a change.");
+      setCopilotResponse(payload.message || "I prepared a draft for review.");
+      setCopilotAction(payload.action ?? null);
+    } catch (assistantError) { setCopilotError(assistantError instanceof Error ? assistantError.message : "The copilot is unavailable."); }
+    finally { setCopilotBusy(false); }
+  }
+
+  async function approveCopilotAction() {
+    if (!copilotAction) return;
+    setCopilotBusy(true); setCopilotError("");
+    try {
+      const response = await fetch("/api/data", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ resource: copilotAction.resource, data: copilotAction.data }) });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Unable to save the copilot change.");
+      setToast("Copilot change saved to the database"); setCopilotResponse("Saved. Your operating system is updated."); setCopilotAction(null); setCopilotMessage(""); await loadData();
+    } catch (assistantError) { setCopilotError(assistantError instanceof Error ? assistantError.message : "Unable to save the copilot change."); }
+    finally { setCopilotBusy(false); }
+  }
+
   const searchResults = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (query.length < 2) return [];
@@ -472,6 +511,6 @@ export default function Home() {
       <section className="reminder-section"><div className="reminder-section-heading"><span>NEEDS ATTENTION</span><small>{notifications.length}</small></div>{notifications.length ? <div className="reminder-attention-list">{notifications.map((item) => <button key={item.title} onClick={() => navigate(item.tab)}><i className={`notice-dot ${item.urgent ? "urgent" : ""}`} /><span><b>{item.title}</b><small>{item.detail}</small></span><em>→</em></button>)}</div> : <div className="reminder-clear"><span>✓</span><p><b>All clear</b><small>No urgent records need attention.</small></p></div>}</section>
     </div>}</header>
       <div className="content"><div className="page-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{subtitle}</p></div><div className="heading-actions"><span className="data-date">Updated {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span></div></div>{error && <div className="error-banner"><span>!</span><p><b>Something needs attention</b><small>{error}</small></p><button onClick={() => void loadData()}>Try again</button></div>}{loading ? <div className="loading-state"><span /><p>Loading your records…</p></div> : <>{active === "Overview" && <Overview data={data} openCreate={openCreate} navigate={navigate} />}{active === "Dogs" && <DogsView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} reload={loadData} notify={setToast} reportError={setError} />}{active === "Litters" && <LittersView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} />}{active === "Buyers" && <BuyersView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} reload={loadData} notify={setToast} reportError={setError} />}{active === "Payments" && <PaymentsView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} />}{active === "Calendar" && <CalendarView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} />}{active === "Puppy Portal" && <PortalView data={data} openCreate={openCreate} openEdit={openEdit} remove={remove} selectedPuppyId={activePuppyId} setSelectedPuppyId={setSelectedPuppyId} />}</>}</div></main>
-    <nav className="mobile-nav">{navItems.slice(0, 5).map(([label, icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => navigate(label)}><Glyph>{icon}</Glyph><small>{label}</small></button>)}</nav>{modal && <RecordForm modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}{toast && <div className="toast"><span>✓</span>{toast}</div>}
+    <nav className="mobile-nav">{navItems.slice(0, 5).map(([label, icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => navigate(label)}><Glyph>{icon}</Glyph><small>{label}</small></button>)}</nav><OperationsCopilot open={copilotOpen} setOpen={setCopilotOpen} message={copilotMessage} setMessage={setCopilotMessage} response={copilotResponse} action={copilotAction} busy={copilotBusy} error={copilotError} onAsk={() => void askCopilot()} onApprove={() => void approveCopilotAction()} />{modal && <RecordForm modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}{toast && <div className="toast"><span>✓</span>{toast}</div>}
   </div>;
 }
