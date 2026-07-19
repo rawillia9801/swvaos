@@ -10,9 +10,12 @@ import {
   FileText,
   FolderOpen,
   HeartPulse,
+  Headphones,
   LayoutDashboard,
   MessagesSquare,
   PackageSearch,
+  PhoneCall,
+  PhoneIncoming,
   Plus,
   ReceiptText,
   Search as SearchIcon,
@@ -28,11 +31,11 @@ type Resource = "dogs" | "litters" | "buyers" | "puppies" | "payment_plans" | "t
 type BaseRecord = { id: number; created_at: string; updated_at: string };
 type Dog = BaseRecord & { name: string; registered_name: string | null; sex: string; role: string; date_of_birth: string | null; color: string | null; weight: number | null; status: string; registration_number: string | null; microchip_number: string | null; health_testing: string | null; acquired_from: string | null; acquisition_date: string | null; acquisition_notes: string | null; next_heat_date: string | null; notes: string | null; purchase_price_cents: number | null };
 type Litter = BaseRecord & { name: string; dam_id: number | null; sire_id: number | null; breeding_date: string | null; due_date: string | null; birth_date: string | null; expected_count: number | null; status: string; notes: string | null };
-type Buyer = BaseRecord & { first_name: string; last_name: string; email: string; phone: string | null; city: string | null; state: string | null; application_status: string; preferred_sex: string | null; preferred_color: string | null; notes: string | null };
+type Buyer = BaseRecord & { first_name: string; last_name: string; email: string; phone: string | null; city: string | null; state: string | null; postal_code?: string | null; application_status: string; preferred_sex: string | null; preferred_color: string | null; notes: string | null };
 type Puppy = BaseRecord & { litter_id: number; buyer_id: number | null; name: string; sex: string | null; color: string | null; birth_date: string | null; birth_weight: number | null; current_weight: number | null; status: string; price_cents: number | null; notes: string | null };
 type PaymentPlan = BaseRecord & { buyer_id: number; name: string; total_amount_cents: number; payment_amount_cents: number; term_count: number; frequency: string; next_due_date: string | null; status: string; puppy_ids: number[] };
 type Transaction = BaseRecord & { type: "Payment" | "Cost"; dog_id: number | null; buyer_id: number | null; litter_id: number | null; puppy_id: number | null; payment_plan_id: number | null; category: string | null; description: string; amount_cents: number; due_date: string | null; paid_date: string | null; status: string; method: string | null; notes: string | null };
-type KennelEvent = BaseRecord & { title: string; event_type: string; event_date: string; event_time: string | null; location: string | null; status: string; notes: string | null };
+type KennelEvent = BaseRecord & { title: string; event_type: string; event_date: string; event_time: string | null; related_type: string | null; related_id: number | null; location: string | null; status: string; notes: string | null };
 type PuppyUpdate = BaseRecord & { puppy_id: number; title: string; body: string; week_number: number | null; weight: number | null; published: number | boolean };
 type DogMedicalRecord = BaseRecord & { dog_id: number; record_type: string; title: string; record_date: string | null; provider: string | null; cost_cents: number; next_due_date: string | null; notes: string | null };
 type DogRegistration = BaseRecord & { dog_id: number; registry: string; registration_number: string; registered_name: string | null; issue_date: string | null; notes: string | null };
@@ -43,7 +46,7 @@ type DataSet = { dogs: Dog[]; litters: Litter[]; buyers: Buyer[]; puppies: Puppy
 type ModalState = { resource: Resource; record?: Record<string, unknown>; preset?: Record<string, unknown> } | null;
 type DocumentKind = "dog" | "buyer";
 type DocumentModalState = { kind: DocumentKind; ownerId?: number } | null;
-type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "Calendar" | "Vault" | "Reports";
+type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "CRM" | "Calendar" | "Vault" | "Reports";
 
 const emptyData: DataSet = { dogs: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], buyer_documents: [] };
 const views: { id: View; label: string; icon: LucideIcon }[] = [
@@ -54,6 +57,7 @@ const views: { id: View; label: string; icon: LucideIcon }[] = [
   { id: "Finance", label: "Finance", icon: WalletCards },
   { id: "Inventory", label: "Inventory", icon: PackageSearch },
   { id: "Comms", label: "Comms", icon: MessagesSquare },
+  { id: "CRM", label: "Caller CRM", icon: Headphones },
   { id: "Calendar", label: "Calendar", icon: CalendarDays },
   { id: "Vault", label: "Vault", icon: FolderOpen },
   { id: "Reports", label: "Reports", icon: ChartNoAxesCombined },
@@ -274,7 +278,73 @@ function CommunicationsView({ data, openCreate, openEdit }: ViewProps) {
       {data.updates.length ? <div className="ops-list">{data.updates.slice(0, 12).map((update) => <button key={update.id} onClick={() => openEdit("updates", update as unknown as Record<string, unknown>)}><Status tone={update.published ? "good" : "warn"}>{update.published ? "Live" : "Draft"}</Status><span><b>{update.title}</b><small>{data.puppies.find((puppy) => puppy.id === update.puppy_id)?.name ?? `Puppy #${update.puppy_id}`} / week {update.week_number ?? "n/a"} / {update.weight ?? "no"} lb</small></span></button>)}</div> : <Empty title="No updates" text="Create family-facing updates with growth notes, weights, milestones, and photos once uploads are connected." action="New update" onAction={() => openCreate("updates", { published: true })} />}
     </Section>
     <Section eyebrow="Contact Center" title="Quick outreach">
-      {data.buyers.length ? <div className="matrix-list">{data.buyers.slice(0, 12).map((buyer) => <span key={buyer.id}><b>{fullName(buyer)}</b><small><a href={`mailto:${buyer.email}`}>{buyer.email}</a>{buyer.phone ? ` / ${buyer.phone}` : ""}</small></span>)}</div> : <Empty title="No contacts" text="Add families to activate the contact center." action="Add family" onAction={() => openCreate("buyers")} />}
+      {data.buyers.length ? <div className="matrix-list">{data.buyers.slice(0, 12).map((buyer) => <span key={buyer.id}><b>{fullName(buyer)}</b><small>{buyer.email && <a href={`mailto:${buyer.email}`}>{buyer.email}</a>}{buyer.email && buyer.phone ? " / " : ""}{buyer.phone || "No phone recorded"}</small></span>)}</div> : <Empty title="No contacts" text="Add families to activate the contact center." action="Add family" onAction={() => openCreate("buyers")} />}
+    </Section>
+  </div>;
+}
+
+function CallerCrmView({ data, openCreate, openEdit }: ViewProps) {
+  const callers = useMemo(() => data.buyers.filter((buyer) => buyer.phone).sort((left, right) => fullName(left).localeCompare(fullName(right))), [data.buyers]);
+  const [selectedBuyerId, setSelectedBuyerId] = useState<number | null>(callers[0]?.id ?? null);
+  const [callerSearch, setCallerSearch] = useState("");
+  const selectedBuyer = data.buyers.find((buyer) => buyer.id === selectedBuyerId) ?? callers[0] ?? null;
+
+  const filteredCallers = callers.filter((buyer) => `${fullName(buyer)} ${buyer.phone} ${buyer.email} ${buyer.city} ${buyer.state}`.toLowerCase().includes(callerSearch.trim().toLowerCase()));
+  const assignedPuppies = selectedBuyer ? data.puppies.filter((puppy) => puppy.buyer_id === selectedBuyer.id) : [];
+  const puppyIds = new Set(assignedPuppies.map((puppy) => puppy.id));
+  const updates = data.updates.filter((update) => puppyIds.has(update.puppy_id) && Boolean(update.published)).sort((left, right) => right.created_at.localeCompare(left.created_at));
+  const plans = selectedBuyer ? data.payment_plans.filter((plan) => plan.buyer_id === selectedBuyer.id) : [];
+  const transactions = selectedBuyer ? data.transactions.filter((item) => item.buyer_id === selectedBuyer.id || (item.puppy_id ? puppyIds.has(item.puppy_id) : false)) : [];
+  const payments = transactions.filter((item) => item.type === "Payment");
+  const paid = sumBy(payments.filter((item) => item.status === "Paid"), (item) => item.amount_cents);
+  const outstanding = sumBy(payments.filter((item) => item.status !== "Paid"), (item) => item.amount_cents);
+  const nextDue = payments.filter((item) => item.status !== "Paid" && item.due_date).sort((left, right) => String(left.due_date).localeCompare(String(right.due_date)))[0]?.due_date;
+  const calls = selectedBuyer ? data.events.filter((event) => event.event_type === "Call" && event.related_type === "buyers" && event.related_id === selectedBuyer.id).sort((left, right) => `${right.event_date}${right.event_time ?? ""}`.localeCompare(`${left.event_date}${left.event_time ?? ""}`)) : [];
+  const unmatchedCalls = data.events.filter((event) => event.event_type === "Call" && event.related_type === "caller");
+  const knownMenu = ["Balance, payments, and payment-plan options", "Pickup, delivery, and scheduling", "Reservation details and next steps", "Application and approval status", "Leave a message", "Speak with someone", "Repeat menu"];
+  const publicMenu = ["Available puppies", "Submitted application help", "Reserved puppy help", "Pickup or delivery questions", "Pup-Lift information", "Chihuahua HQ information", "Speak with someone"];
+  const callPreset = selectedBuyer ? { event_type: "Call", related_type: "buyers", related_id: selectedBuyer.id, title: `Call with ${fullName(selectedBuyer)}`, event_date: today(), location: "Phone", status: "Completed" } : {};
+
+  return <div className="grid crm-grid">
+    <div className="metric-row panel-wide">
+      <button><span>Recognized callers</span><b>{callers.length}</b><small>Families with a phone number</small></button>
+      <button><span>Assigned puppies</span><b>{data.puppies.filter((puppy) => puppy.buyer_id).length}</b><small>Available to caller lookup</small></button>
+      <button><span>Published updates</span><b>{data.updates.filter((update) => Boolean(update.published)).length}</b><small>Ready for family accounts</small></button>
+      <button><span>Unmatched calls</span><b>{unmatchedCalls.length}</b><small>Caller records needing review</small></button>
+    </div>
+
+    <Section eyebrow="Caller Directory" title="Recognized phone numbers" action={<button className="ghost" onClick={() => openCreate("buyers")}>Add family</button>}>
+      <label className="crm-search"><SearchIcon size={16} /><input value={callerSearch} onChange={(event) => setCallerSearch(event.target.value)} placeholder="Search name or phone number" aria-label="Search caller directory" /></label>
+      {filteredCallers.length ? <div className="crm-directory">{filteredCallers.map((buyer) => {
+        const buyerPuppies = data.puppies.filter((puppy) => puppy.buyer_id === buyer.id);
+        return <button key={buyer.id} className={selectedBuyer?.id === buyer.id ? "active" : ""} onClick={() => setSelectedBuyerId(buyer.id)}><span className="avatar">{initials(fullName(buyer))}</span><span><b>{fullName(buyer)}</b><small>{buyer.phone}</small></span><span><b>{buyerPuppies.length}</b><small>{buyerPuppies.length === 1 ? "puppy" : "puppies"}</small></span></button>;
+      })}</div> : <Empty title="No matching callers" text="Families need a phone number before incoming calls can be recognized." action="Add family" onAction={() => openCreate("buyers")} />}
+    </Section>
+
+    <Section eyebrow="Active Caller" title={selectedBuyer ? fullName(selectedBuyer) : "No caller selected"} action={selectedBuyer && <div className="panel-actions"><button className="ghost" onClick={() => openEdit("buyers", selectedBuyer as unknown as Record<string, unknown>)}>Edit account</button><button className="primary-action" onClick={() => openCreate("events", callPreset)}><PhoneCall size={15} /> Log call</button></div>}>
+      {selectedBuyer ? <div className="crm-account">
+        <div className="crm-identity"><span className="avatar">{initials(fullName(selectedBuyer))}</span><div><b>{fullName(selectedBuyer)}</b><p>{[selectedBuyer.city, selectedBuyer.state].filter(Boolean).join(", ") || "Location not recorded"}</p><span><a href={`tel:${selectedBuyer.phone}`}>{selectedBuyer.phone}</a>{selectedBuyer.email && <a href={`mailto:${selectedBuyer.email}`}>{selectedBuyer.email}</a>}</span></div><Status tone={selectedBuyer.application_status === "Approved" ? "good" : "neutral"}>{selectedBuyer.application_status}</Status></div>
+        <div className="crm-balance"><span><small>Paid</small><b>{money(paid)}</b></span><span><small>Outstanding</small><b>{money(outstanding)}</b></span><span><small>Next due</small><b>{shortDate(nextDue)}</b></span><span><small>Plans</small><b>{plans.filter((plan) => plan.status === "Active").length}</b></span></div>
+      </div> : <Empty title="No recognized callers" text="Add a family phone number to activate account matching." action="Add family" onAction={() => openCreate("buyers")} />}
+    </Section>
+
+    <Section eyebrow="Assigned Records" title="Puppies and latest updates" action={selectedBuyer && assignedPuppies[0] && <button className="ghost" onClick={() => openCreate("updates", { puppy_id: assignedPuppies[0].id, published: true })}>Add update</button>}>
+      {assignedPuppies.length ? <div className="crm-puppies">{assignedPuppies.map((puppy) => {
+        const latest = updates.find((update) => update.puppy_id === puppy.id);
+        return <article key={puppy.id}><span className="avatar">{initials(puppy.name)}</span><div><b>{puppy.name}</b><p>{[puppy.sex, puppy.color, puppy.status].filter(Boolean).join(" / ")}</p><small>{latest ? `${latest.title}: ${latest.body}` : "No published update yet"}</small></div><Status tone={puppy.status === "Available" || puppy.status === "Reserved" ? "good" : "neutral"}>{puppy.status}</Status></article>;
+      })}</div> : <div className="crm-empty-line">No puppy is assigned to this caller account.</div>}
+    </Section>
+
+    <Section eyebrow="Call History" title="Conversations and messages" action={selectedBuyer && <button className="ghost" onClick={() => openCreate("events", callPreset)}><PhoneIncoming size={15} /> New entry</button>}>
+      {calls.length ? <div className="crm-history">{calls.slice(0, 8).map((call) => <button key={call.id} onClick={() => openEdit("events", call as unknown as Record<string, unknown>)}><span><b>{call.title}</b><small>{shortDate(call.event_date)}{call.event_time ? ` / ${call.event_time}` : ""}</small></span><Status tone={call.status === "Completed" ? "good" : "neutral"}>{call.status}</Status><p>{call.notes || "No notes recorded"}</p></button>)}</div> : <div className="crm-empty-line">No calls or recorded messages are connected to this account yet.</div>}
+    </Section>
+
+    <Section eyebrow="Recognized Caller Flow" title="Account-aware voice menu">
+      <div className="crm-menu-list">{knownMenu.map((item, index) => <span key={item}><b>{index === knownMenu.length - 1 ? 9 : index + 1}</b><small>{item}</small></span>)}</div>
+    </Section>
+
+    <Section eyebrow="Unrecognized Caller Flow" title="Public information menu">
+      <div className="crm-menu-list public">{publicMenu.map((item, index) => <span key={item}><b>{index + 1}</b><small>{item}</small></span>)}</div>
     </Section>
   </div>;
 }
@@ -550,7 +620,7 @@ export default function Home() {
     return [
       ...data.dogs.map((item) => ({ label: item.name, detail: `${item.role} / ${item.status}`, view: "Breeding" as View })),
       ...data.litters.map((item) => ({ label: item.name, detail: `Litter / ${item.status}`, view: "Breeding" as View })),
-      ...data.buyers.map((item) => ({ label: fullName(item), detail: item.email, view: "Families" as View })),
+      ...data.buyers.map((item) => ({ label: fullName(item), detail: [item.phone, item.email].filter(Boolean).join(" / "), view: item.phone ? "CRM" as View : "Families" as View })),
       ...data.puppies.map((item) => ({ label: item.name, detail: `Puppy / ${item.status}`, view: "Families" as View })),
       ...data.transactions.map((item) => ({ label: item.description, detail: `${item.type} / ${money(item.amount_cents)}`, view: "Finance" as View })),
       ...data.events.map((item) => ({ label: item.title, detail: shortDate(item.event_date), view: "Calendar" as View })),
@@ -560,7 +630,7 @@ export default function Home() {
   }, [data, search]);
 
   const activeViewProps = { data, openCreate, openEdit, openDocumentUpload, remove, removeDocument };
-  const quickResource = view === "Calendar" || view === "Care" ? "events" : view === "Families" || view === "Comms" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
+  const quickResource = view === "Calendar" || view === "Care" || view === "CRM" ? "events" : view === "Families" || view === "Comms" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
   const viewCopy: Record<View, { title: string; text: string }> = {
     Command: { title: "Operating command", text: "Control surface for every record in the program." },
     Breeding: { title: "Breeding control", text: "Manage dogs, litters, registrations, health context, and pairings." },
@@ -569,6 +639,7 @@ export default function Home() {
     Finance: { title: "Finance ledger", text: "Track payments, costs, balances, payment plans, and profitability." },
     Inventory: { title: "Inventory control", text: "Control supply spend, restock watchlists, and cost category burn." },
     Comms: { title: "Communications hub", text: "Manage family pipeline, puppy updates, and quick outreach." },
+    CRM: { title: "Caller CRM", text: "Identify callers and surface their account, assigned puppy, payment, update, and conversation records." },
     Calendar: { title: "Mission calendar", text: "Schedule care, breeding, pickup, buyer, and reminder events." },
     Vault: { title: "Document vault", text: "Access buyer files, dog files, certificates, agreements, and reports." },
     Reports: { title: "Reports and intelligence", text: "Review performance, compliance, profitability, and export an operating snapshot." },
@@ -587,7 +658,7 @@ export default function Home() {
       <div className="content">
         <div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div>
         {error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}
-        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
+        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "CRM" && <CallerCrmView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
       </div>
     </main>
     {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}

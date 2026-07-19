@@ -123,3 +123,34 @@ test("includes buyer schema repair for existing projects", async () => {
   assert.match(kennel, /selectSafeAll/);
   assert.doesNotMatch(kennel, /order=last_name/);
 });
+
+test("ships the caller CRM and complete recognized and public voice menus", async () => {
+  const [page, callerCrm, callerVoice, lookupRoute, webhook, env] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("db/caller-crm.ts", root), "utf8"),
+    readFile(new URL("lib/caller-voice.ts", root), "utf8"),
+    readFile(new URL("app/api/caller-crm/lookup/route.ts", root), "utf8"),
+    readFile(new URL("lib/voice-webhook.ts", root), "utf8"),
+    readFile(new URL(".env.example", root), "utf8"),
+  ]);
+
+  assert.match(page, /Caller CRM/);
+  assert.match(page, /Recognized Caller Flow/);
+  assert.match(page, /Unrecognized Caller Flow/);
+  assert.match(page, /Assigned Records/);
+  assert.match(page, /Conversations and messages/);
+  assert.doesNotMatch(page, /localStorage|sessionStorage/);
+  assert.match(callerCrm, /toStudioCallerLookup/);
+  assert.match(callerCrm, /assigned_puppy_information/);
+  assert.match(callerCrm, /voice_prompts/);
+  assert.match(lookupRoute, /isAuthorizedCallerLookup/);
+  assert.match(lookupRoute, /toStudioCallerLookup/);
+  assert.match(webhook, /x-twilio-signature/);
+  assert.match(webhook, /validateRequest/);
+  assert.match(webhook, /Basic/);
+  assert.match(callerVoice, /Press 7 to speak with someone/);
+  assert.match(callerVoice, /Press 6 to speak with someone/);
+  assert.match(callerVoice, /Polly\.Joanna/);
+  assert.match(env, /TWILIO_AUTH_TOKEN/);
+  assert.match(env, /SWVAOS_CRM_API_KEY/);
+});
