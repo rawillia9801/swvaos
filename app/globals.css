@@ -557,10 +557,20 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
   cursor: pointer;
 }
 .record-card.selected, .record-card:hover { border-color: #80b6b4; background: #e9f5f3; }
-.record-card:focus-visible { outline: 3px solid rgba(39, 104, 232, .22); outline-offset: 2px; }
+.record-card-profile {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  color: inherit;
+  text-decoration: none;
+}
+.record-card-profile:focus-visible { outline: 3px solid rgba(39, 104, 232, .22); outline-offset: 3px; border-radius: 5px; }
 .record-card h3 { margin: 2px 0 4px; }
 .record-card p { margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.record-card > div > small { display: block; margin-top: 7px; color: var(--cyan); font-size: 10px; font-weight: 700; }
+.record-card-profile > div > small { display: block; margin-top: 7px; color: var(--cyan); font-size: 10px; font-weight: 700; }
 .record-card footer {
   grid-column: 1 / -1;
   display: flex;

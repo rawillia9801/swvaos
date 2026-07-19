@@ -68,7 +68,8 @@ test("opens complete dog profiles with connected operations", async () => {
     readFile(new URL("app/dogs/[id]/page.tsx", root), "utf8"),
   ]);
 
-  assert.match(command, /window\.open\(`\/dogs\/\$\{dog\.id\}`/);
+  assert.match(command, /href=\{`\/dogs\/\$\{dog\.id\}`\}/);
+  assert.match(command, /target="_blank"/);
   assert.match(command, /Add registry/);
   assert.match(command, /Add medical/);
   assert.match(command, /Add cost/);
