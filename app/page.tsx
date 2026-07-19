@@ -1,6 +1,28 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  CalendarDays,
+  ChartNoAxesCombined,
+  CircleGauge,
+  Dog as DogIcon,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  HeartPulse,
+  LayoutDashboard,
+  MessagesSquare,
+  PackageSearch,
+  Plus,
+  ReceiptText,
+  Search as SearchIcon,
+  Trash2,
+  Upload,
+  UsersRound,
+  WalletCards,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 type Resource = "dogs" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates" | "dog_medical_records" | "dog_registrations";
 type BaseRecord = { id: number; created_at: string; updated_at: string };
@@ -19,21 +41,26 @@ type DogDocument = StoredDocument & { dog_id: number; registration_id: number | 
 type BuyerDocument = StoredDocument & { buyer_id: number; payment_plan_id: number | null; puppy_ids: number[] };
 type DataSet = { dogs: Dog[]; litters: Litter[]; buyers: Buyer[]; puppies: Puppy[]; payment_plans: PaymentPlan[]; transactions: Transaction[]; events: KennelEvent[]; updates: PuppyUpdate[]; dog_medical_records: DogMedicalRecord[]; dog_registrations: DogRegistration[]; dog_documents: DogDocument[]; buyer_documents: BuyerDocument[] };
 type ModalState = { resource: Resource; record?: Record<string, unknown>; preset?: Record<string, unknown> } | null;
+type DocumentKind = "dog" | "buyer";
+type DocumentModalState = { kind: DocumentKind; ownerId?: number } | null;
 type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "Calendar" | "Vault" | "Reports";
 
 const emptyData: DataSet = { dogs: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], buyer_documents: [] };
-const views: { id: View; label: string; code: string }[] = [
-  { id: "Command", label: "Command", code: "01" },
-  { id: "Breeding", label: "Breeding", code: "02" },
-  { id: "Families", label: "Families", code: "03" },
-  { id: "Care", label: "Care", code: "04" },
-  { id: "Finance", label: "Finance", code: "$" },
-  { id: "Inventory", label: "Inventory", code: "06" },
-  { id: "Comms", label: "Comms", code: "07" },
-  { id: "Calendar", label: "Calendar", code: "08" },
-  { id: "Vault", label: "Vault", code: "09" },
-  { id: "Reports", label: "Reports", code: "10" },
+const views: { id: View; label: string; icon: LucideIcon }[] = [
+  { id: "Command", label: "Command", icon: LayoutDashboard },
+  { id: "Breeding", label: "Breeding", icon: DogIcon },
+  { id: "Families", label: "Families", icon: UsersRound },
+  { id: "Care", label: "Care", icon: HeartPulse },
+  { id: "Finance", label: "Finance", icon: WalletCards },
+  { id: "Inventory", label: "Inventory", icon: PackageSearch },
+  { id: "Comms", label: "Comms", icon: MessagesSquare },
+  { id: "Calendar", label: "Calendar", icon: CalendarDays },
+  { id: "Vault", label: "Vault", icon: FolderOpen },
+  { id: "Reports", label: "Reports", icon: ChartNoAxesCombined },
 ];
+
+const dogDocumentTypes = ["Registration Certificate", "Pedigree", "Embark Results", "OFA Test Results", "Genetic Test Results", "Health Test Results", "Health Certificate", "Medical Documentation", "Other"];
+const buyerDocumentTypes = ["Bill of Sale", "Health Guarantee", "Payment Plan Agreement", "Other"];
 
 const money = (cents: number | null | undefined) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents ?? 0) / 100);
 const shortDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "Not set";
@@ -49,6 +76,12 @@ const initials = (value: string) => value.split(/\s+/).filter(Boolean).slice(0, 
 const fileSize = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 const valueOf = (record: Record<string, unknown> | undefined, key: string, fallback = "") => String(record?.[key] ?? fallback);
 const includesAny = (value: string | null | undefined, terms: string[]) => terms.some((term) => (value ?? "").toLowerCase().includes(term));
+const friendlyError = (value: unknown, fallback: string) => {
+  const message = value instanceof Error ? value.message : String(value || fallback);
+  if (/schema cache|could not find the table|relation .* does not exist|column .* does not exist/i.test(message)) return "The SWVAOS data structure needs attention.";
+  if (/not configured|missing.*key|missing.*url/i.test(message)) return "The SWVAOS data connection is not configured.";
+  return message.replace(/supabase/gi, "data service").replace(/vercel/gi, "hosting service").replace(/chatgpt/gi, "previous site");
+};
 
 function pct(value: number, total: number) {
   if (!total) return 0;
@@ -97,7 +130,19 @@ function useAnalytics(data: DataSet) {
     const draftUpdates = data.updates.filter((item) => !item.published);
     const publishedUpdates = data.updates.filter((item) => item.published);
     const docsNeeded = Math.max(0, data.dogs.length * 2 + data.buyers.length - docs);
-    const readiness = Math.max(0, Math.min(100, Math.round(46 + Math.min(activeLitters.length, 4) * 8 + Math.min(approvedBuyers.length, 8) * 3 + Math.min(docs, 12) * 1.4 + registryCoverage * 0.12 + microchipCoverage * 0.08 - overdue.length * 8 - dueHealth.length * 5 - unmatched.length * 2 - draftUpdates.length)));
+    const documentCoverage = pct(docs, data.dogs.length * 2 + data.buyers.length);
+    const hasRecords = data.dogs.length + data.litters.length + data.buyers.length + data.puppies.length + data.transactions.length + data.events.length > 0;
+    const readiness = hasRecords ? Math.max(0, Math.min(100, Math.round(
+      (data.dogs.length ? 15 : 0)
+      + registryCoverage * .2
+      + microchipCoverage * .15
+      + documentCoverage * .2
+      + (data.buyers.length ? 10 : 0)
+      + (data.dog_medical_records.length || data.events.length ? 10 : 0)
+      + (data.transactions.length ? 10 : 0)
+      - overdue.length * 5
+      - dueHealth.length * 3
+    ))) : 0;
     const upcoming = data.events.filter((item) => item.event_date >= today() && item.status !== "Completed").sort((a, b) => `${a.event_date}${a.event_time ?? ""}`.localeCompare(`${b.event_date}${b.event_time ?? ""}`));
     const activePlanValue = data.payment_plans.filter((item) => item.status === "Active").reduce((sum, item) => sum + item.total_amount_cents, 0);
     return { activeLitters, paid, costs, outstanding, overdue, dueHealth, unmatched, placed, approvedBuyers, pendingBuyers, registryCoverage, microchipCoverage, docs, docsNeeded, readiness, upcoming, activePlanValue, activePuppies, readyPuppies, careEvents, openTasks, upcomingCare, supplyCosts, inventorySpend, draftUpdates, publishedUpdates };
@@ -114,7 +159,7 @@ function CommandView({ data, openCreate, setView }: { data: DataSet; openCreate:
   return <div className="grid command-grid">
     <section className="hero panel-wide">
       <div><span className="eyebrow">OPERATING SYSTEM</span><h1>SWVAOS</h1><p>Breeding operations, buyer pipeline, payments, document storage, care schedules, family updates, and reporting in one place.</p><div className="hero-actions"><button onClick={() => openCreate("dogs")}>Add dog</button><button onClick={() => openCreate("litters")}>Create litter</button><button onClick={() => openCreate("buyers")}>Add buyer</button><button onClick={() => openCreate("transactions", { type: "Payment" })}>Log payment</button></div></div>
-      <div className="readiness"><span>Readiness</span><b>{a.readiness}</b><small>{alerts.length ? `${alerts.length} attention signals` : "All core signals nominal"}</small><i style={{ "--score": `${a.readiness}%` } as React.CSSProperties} /></div>
+      <div className="readiness" style={{ "--score": `${a.readiness}%` } as React.CSSProperties}><span>Readiness</span><b>{a.readiness}</b><small>{alerts.length ? `${alerts.length} attention signals` : "All core signals nominal"}</small><i /></div>
     </section>
     <div className="metric-row panel-wide">
       <button onClick={() => setView("Breeding")}><span>Active litters</span><b>{a.activeLitters.length}</b><small>{data.puppies.length} puppies recorded</small></button>
@@ -140,14 +185,14 @@ function CommandView({ data, openCreate, setView }: { data: DataSet; openCreate:
   </div>;
 }
 
-function BreedingView({ data, openCreate, openEdit, remove }: ViewProps) {
+function BreedingView({ data, openCreate, openEdit, openDocumentUpload, remove }: ViewProps) {
   const [selectedDogId, setSelectedDogId] = useState<number | null>(data.dogs[0]?.id ?? null);
   const selectedDog = data.dogs.find((dog) => dog.id === selectedDogId) ?? data.dogs[0] ?? null;
   return <div className="grid two-one">
     <Section eyebrow="Dog Matrix" title="Breeding dogs" action={<button className="ghost" onClick={() => openCreate("dogs")}>Add dog</button>}>
       {data.dogs.length ? <div className="card-grid">{data.dogs.map((dog) => <article key={dog.id} className={selectedDog?.id === dog.id ? "record-card selected" : "record-card"} onClick={() => setSelectedDogId(dog.id)}><span className="avatar">{initials(dog.name)}</span><div><h3>{dog.name}</h3><p>{[dog.role, dog.sex, dog.color].filter(Boolean).join(" / ")}</p></div><Status tone={dog.status === "Active" ? "good" : "neutral"}>{dog.status}</Status><footer><button onClick={(event) => { event.stopPropagation(); openEdit("dogs", dog as unknown as Record<string, unknown>); }}>Edit</button><button onClick={(event) => { event.stopPropagation(); remove("dogs", dog.id, dog.name); }}>Delete</button></footer></article>)}</div> : <Empty title="No breeding dogs" text="Add dams and sires with health, registry, acquisition, and notes." action="Add dog" onAction={() => openCreate("dogs")} />}
     </Section>
-    <Section eyebrow="Selected Profile" title={selectedDog?.name ?? "No dog selected"} action={selectedDog && <button className="ghost" onClick={() => openCreate("dog_medical_records", { dog_id: selectedDog.id })}>Add care</button>}>
+    <Section eyebrow="Selected Profile" title={selectedDog?.name ?? "No dog selected"} action={selectedDog && <div className="panel-actions"><button className="ghost" onClick={() => openCreate("dog_medical_records", { dog_id: selectedDog.id })}>Add care</button><button className="primary-action" onClick={() => openDocumentUpload("dog", selectedDog.id)}><Upload size={15} /> Upload file</button></div>}>
       {selectedDog ? <div className="profile-stack"><div className="profile-metrics"><span><b>{data.litters.filter((item) => item.dam_id === selectedDog.id || item.sire_id === selectedDog.id).length}</b><small>Litters</small></span><span><b>{data.dog_medical_records.filter((item) => item.dog_id === selectedDog.id).length}</b><small>Care records</small></span><span><b>{data.dog_registrations.filter((item) => item.dog_id === selectedDog.id).length}</b><small>Registries</small></span><span><b>{data.dog_documents.filter((item) => item.dog_id === selectedDog.id).length}</b><small>Files</small></span></div><p>{selectedDog.health_testing || selectedDog.notes || "No health testing or notes recorded yet."}</p><div className="mini-list">{data.dog_medical_records.filter((item) => item.dog_id === selectedDog.id).slice(0, 4).map((item) => <span key={item.id}><b>{item.title}</b><small>{item.record_type} / {shortDate(item.record_date)}</small></span>)}</div></div> : <Empty title="No dog selected" text="Select or add a breeding dog to open the profile panel." action="Add dog" onAction={() => openCreate("dogs")} />}
     </Section>
     <Section eyebrow="Litter Control" title="Litters" action={<button className="ghost" onClick={() => openCreate("litters")}>Create litter</button>}>
@@ -156,9 +201,9 @@ function BreedingView({ data, openCreate, openEdit, remove }: ViewProps) {
   </div>;
 }
 
-function FamiliesView({ data, openCreate, openEdit, remove }: ViewProps) {
+function FamiliesView({ data, openCreate, openEdit, openDocumentUpload, remove }: ViewProps) {
   return <div className="grid two-one">
-    <Section eyebrow="Buyer Pipeline" title="Families" action={<button className="ghost" onClick={() => openCreate("buyers")}>Add buyer</button>}>
+    <Section eyebrow="Buyer Pipeline" title="Families" action={<div className="panel-actions"><button className="ghost" onClick={() => openCreate("buyers")}>Add buyer</button><button className="primary-action" onClick={() => openDocumentUpload("buyer")}><Upload size={15} /> Upload file</button></div>}>
       {data.buyers.length ? <div className="table-list">{data.buyers.map((buyer) => <button key={buyer.id} onClick={() => openEdit("buyers", buyer as unknown as Record<string, unknown>)}><span><b>{fullName(buyer)}</b><small>{[buyer.email, buyer.phone, buyer.city, buyer.state].filter(Boolean).join(" / ")}</small></span><Status tone={buyer.application_status === "Approved" ? "good" : "neutral"}>{buyer.application_status}</Status></button>)}</div> : <Empty title="No buyers" text="Track applications, preferences, family notes, and contact details." action="Add buyer" onAction={() => openCreate("buyers")} />}
     </Section>
     <Section eyebrow="Puppy Placement" title="Puppies" action={<button className="ghost" onClick={() => openCreate("puppies")}>Add puppy</button>}>
@@ -256,13 +301,17 @@ function CalendarView({ data, openCreate, openEdit, remove }: ViewProps) {
   </div>;
 }
 
-function VaultView({ data }: { data: DataSet }) {
-  const buyerDocs = data.buyer_documents.map((doc) => ({ ...doc, href: `/api/documents/${doc.id}`, owner: data.buyers.find((buyer) => buyer.id === doc.buyer_id) ? fullName(data.buyers.find((buyer) => buyer.id === doc.buyer_id)!) : `Buyer #${doc.buyer_id}` }));
-  const dogDocs = data.dog_documents.map((doc) => ({ ...doc, href: `/api/dog-documents/${doc.id}`, owner: data.dogs.find((dog) => dog.id === doc.dog_id)?.name ?? `Dog #${doc.dog_id}` }));
+function VaultView({ data, openDocumentUpload, removeDocument }: Pick<ViewProps, "data" | "openDocumentUpload" | "removeDocument">) {
+  const buyerDocs = data.buyer_documents.map((doc) => ({ ...doc, kind: "buyer" as const, href: `/api/documents/${doc.id}`, owner: data.buyers.find((buyer) => buyer.id === doc.buyer_id) ? fullName(data.buyers.find((buyer) => buyer.id === doc.buyer_id)!) : `Buyer #${doc.buyer_id}` }));
+  const dogDocs = data.dog_documents.map((doc) => ({ ...doc, kind: "dog" as const, href: `/api/dog-documents/${doc.id}`, owner: data.dogs.find((dog) => dog.id === doc.dog_id)?.name ?? `Dog #${doc.dog_id}` }));
   const docs = [...buyerDocs, ...dogDocs].sort((a, b) => b.created_at.localeCompare(a.created_at));
-  return <div className="grid">
-    <Section eyebrow="Document Vault" title="Stored files">
-      {docs.length ? <div className="vault-list">{docs.map((doc) => <a key={`${doc.href}-${doc.id}`} href={doc.href} target="_blank" rel="noreferrer"><span><b>{doc.title}</b><small>{doc.owner} / {doc.document_type}</small></span><em>{fileSize(doc.size_bytes)}</em></a>)}</div> : <Empty title="No documents stored" text="Uploaded buyer and dog documents will appear here." action="Open breeding" onAction={() => undefined} />}
+  return <div className="grid vault-grid">
+    <section className="vault-upload panel-wide">
+      <div><span className="eyebrow">SECURE RECORDS</span><h2>Put every scan where it belongs.</h2><p>Registration papers, pedigrees, health results, contracts, guarantees, and payment documents stay connected to the correct dog or family.</p></div>
+      <div className="upload-actions"><button onClick={() => openDocumentUpload("dog")}><DogIcon size={18} /> Dog document</button><button onClick={() => openDocumentUpload("buyer")}><UsersRound size={18} /> Family document</button></div>
+    </section>
+    <Section eyebrow="Document Vault" title={`${docs.length} stored ${docs.length === 1 ? "file" : "files"}`}>
+      {docs.length ? <div className="vault-list">{docs.map((doc) => <article key={`${doc.kind}-${doc.id}`}><span className="file-mark"><FileText size={18} /></span><span className="file-copy"><b>{doc.title}</b><small>{doc.owner} / {doc.document_type} / {fileSize(doc.size_bytes)}</small></span><div className="file-actions"><a href={doc.href} target="_blank" rel="noreferrer" aria-label={`Open ${doc.title}`} title="Open document"><ExternalLink size={16} /></a><button onClick={() => removeDocument(doc.kind, doc.id, doc.title)} aria-label={`Delete ${doc.title}`} title="Delete document"><Trash2 size={16} /></button></div></article>)}</div> : <Empty title="No documents stored" text="Upload the first dog or family document. It will appear here immediately." action="Upload document" onAction={() => openDocumentUpload("dog")} />}
     </Section>
   </div>;
 }
@@ -310,7 +359,14 @@ function ReportsView({ data, openCreate }: Pick<ViewProps, "data" | "openCreate"
   </div>;
 }
 
-type ViewProps = { data: DataSet; openCreate: (resource: Resource, preset?: Record<string, unknown>) => void; openEdit: (resource: Resource, record: Record<string, unknown>) => void; remove: (resource: Resource, id: number, label: string) => void };
+type ViewProps = {
+  data: DataSet;
+  openCreate: (resource: Resource, preset?: Record<string, unknown>) => void;
+  openEdit: (resource: Resource, record: Record<string, unknown>) => void;
+  openDocumentUpload: (kind: DocumentKind, ownerId?: number) => void;
+  remove: (resource: Resource, id: number, label: string) => void;
+  removeDocument: (kind: DocumentKind, id: number, label: string) => void;
+};
 
 function dollarDefault(record: Record<string, unknown> | undefined, key: string, centsKey: string, preset?: Record<string, unknown>) {
   if (record?.[key] !== undefined) return String(record[key]);
@@ -352,6 +408,40 @@ function RecordModal({ modal, data, saving, onClose, onSubmit }: { modal: Exclud
   </div><footer><button type="button" onClick={onClose}>Cancel</button><button disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : "Create record"}</button></footer></form></div>;
 }
 
+function DocumentUploadModal({ modal, data, saving, error, onClose, onKindChange, onSubmit }: {
+  modal: Exclude<DocumentModalState, null>;
+  data: DataSet;
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onKindChange: (kind: DocumentKind) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const isDog = modal.kind === "dog";
+  const hasOwners = isDog ? data.dogs.length > 0 : data.buyers.length > 0;
+  const documentTypes = isDog ? dogDocumentTypes : buyerDocumentTypes;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="document-upload-title">
+    <form className="modal upload-modal" onSubmit={onSubmit}>
+      <header><span>Document vault</span><h2 id="document-upload-title">Upload document</h2><button className="icon-button" type="button" onClick={onClose} aria-label="Close upload"><X size={18} /></button></header>
+      <div className="upload-form">
+        <div className="segment-control" aria-label="Document owner type"><button type="button" aria-pressed={isDog} className={isDog ? "active" : ""} onClick={() => onKindChange("dog")}><DogIcon size={17} /> Dog</button><button type="button" aria-pressed={!isDog} className={!isDog ? "active" : ""} onClick={() => onKindChange("buyer")}><UsersRound size={17} /> Family</button></div>
+        {!hasOwners && <div className="inline-notice">Add a {isDog ? "dog" : "family"} record before attaching a document.</div>}
+        {error && <div className="inline-error">{error}</div>}
+        <div className="form-grid document-fields">
+          <label><span>{isDog ? "Dog" : "Family"}</span><select name={isDog ? "dog_id" : "buyer_id"} defaultValue={modal.ownerId ?? ""} required><option value="">Choose {isDog ? "a dog" : "a family"}</option>{isDog ? data.dogs.map((dog) => <option key={dog.id} value={dog.id}>{dog.name}</option>) : data.buyers.map((buyer) => <option key={buyer.id} value={buyer.id}>{fullName(buyer)}</option>)}</select></label>
+          <label><span>Document type</span><select name="document_type" defaultValue={documentTypes[0]} required>{documentTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+          <label className="wide"><span>Title</span><input name="title" placeholder="A clear name for this document" /></label>
+          {isDog && <><label><span>Registry</span><input name="registry" placeholder="AKC, CKC, ACA..." /></label><label><span>Registration number</span><input name="registration_number" /></label></>}
+          {!isDog && <label className="wide"><span>Payment plan</span><select name="payment_plan_id" defaultValue=""><option value="">Not connected to a plan</option>{data.payment_plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></label>}
+          <label className="wide file-input"><span>PDF or image</span><input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" required /><small>PDF, JPG, PNG, or WebP. Maximum 20 MB.</small></label>
+          <label className="wide"><span>Notes</span><textarea name="notes" rows={3} /></label>
+        </div>
+      </div>
+      <footer><button type="button" onClick={onClose}>Cancel</button><button className="primary-action" disabled={saving || !hasOwners}><Upload size={16} /> {saving ? "Uploading..." : "Upload document"}</button></footer>
+    </form>
+  </div>;
+}
+
 export default function Home() {
   const [view, setView] = useState<View>("Command");
   const [data, setData] = useState<DataSet>(emptyData);
@@ -359,6 +449,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
+  const [documentModal, setDocumentModal] = useState<DocumentModalState>(null);
+  const [uploadError, setUploadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
   const analytics = useAnalytics(data);
@@ -371,7 +463,7 @@ export default function Home() {
       if (!response.ok) throw new Error(payload.error || "Unable to load records.");
       setData({ ...emptyData, ...payload });
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load records.");
+      setError(friendlyError(loadError, "Unable to load records."));
     } finally {
       setLoading(false);
     }
@@ -385,6 +477,10 @@ export default function Home() {
 
   const openCreate = (resource: Resource, preset: Record<string, unknown> = {}) => setModal({ resource, preset });
   const openEdit = (resource: Resource, record: Record<string, unknown>) => setModal({ resource, record });
+  const openDocumentUpload = (kind: DocumentKind, ownerId?: number) => {
+    setUploadError("");
+    setDocumentModal({ kind, ownerId });
+  };
   async function submitRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!modal) return;
@@ -400,7 +496,7 @@ export default function Home() {
       setToast("Record saved");
       await loadData();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save record.");
+      setError(friendlyError(saveError, "Unable to save record."));
     } finally {
       setSaving(false);
     }
@@ -414,6 +510,37 @@ export default function Home() {
       return;
     }
     setToast("Record deleted");
+    await loadData();
+  }
+  async function submitDocument(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!documentModal) return;
+    setSaving(true);
+    setUploadError("");
+    try {
+      const endpoint = documentModal.kind === "dog" ? "/api/dog-documents" : "/api/documents";
+      const response = await fetch(endpoint, { method: "POST", body: new FormData(event.currentTarget) });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Unable to upload the document.");
+      setDocumentModal(null);
+      setToast("Document uploaded");
+      await loadData();
+    } catch (uploadFailure) {
+      setUploadError(friendlyError(uploadFailure, "Unable to upload the document."));
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function removeDocument(kind: DocumentKind, id: number, label: string) {
+    if (!window.confirm(`Delete "${label}" from the document vault? This cannot be undone.`)) return;
+    const endpoint = kind === "dog" ? "/api/dog-documents" : "/api/documents";
+    const response = await fetch(`${endpoint}?id=${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      setError(payload.error || "Unable to delete the document.");
+      return;
+    }
+    setToast("Document deleted");
     await loadData();
   }
 
@@ -432,7 +559,7 @@ export default function Home() {
     ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query)).slice(0, 8);
   }, [data, search]);
 
-  const activeViewProps = { data, openCreate, openEdit, remove };
+  const activeViewProps = { data, openCreate, openEdit, openDocumentUpload, remove, removeDocument };
   const quickResource = view === "Calendar" || view === "Care" ? "events" : view === "Families" || view === "Comms" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
   const viewCopy: Record<View, { title: string; text: string }> = {
     Command: { title: "Operating command", text: "Control surface for every record in the program." },
@@ -447,11 +574,24 @@ export default function Home() {
     Reports: { title: "Reports and intelligence", text: "Review performance, compliance, profitability, and export an operating snapshot." },
   };
   return <div className="app-shell">
-    <aside className="sidebar"><button className="brand" onClick={() => setView("Command")}><span>SV</span><b>SWVAOS</b><small>Operating system</small></button><nav>{views.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><i>{item.code}</i><span>{item.label}</span></button>)}</nav><div className="system-card"><span className={error ? "offline" : ""} /><b>{error ? "Action needed" : "System online"}</b><small>{analytics.readiness}% readiness / {analytics.docs} vault files</small></div></aside>
-    <main><header className="topbar"><div className="search"><span>SEARCH</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Dogs, buyers, payments, care, files..." />{searchResults.length > 0 && <div className="search-menu">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => { setView(item.view); setSearch(""); }}><b>{item.label}</b><small>{item.detail}</small></button>)}</div>}</div><div className="top-actions"><span>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span><button onClick={() => openCreate("transactions", { type: "Payment" })}>Log payment</button><button onClick={() => openCreate(quickResource)}>Quick add</button></div></header>
-      <div className="content"><div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div>{error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}{loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}</div>
+    <aside className="sidebar">
+      <button className="brand" onClick={() => setView("Command")}><span><CircleGauge size={22} /></span><b>SWVAOS</b><small>Operating system</small></button>
+      <nav aria-label="SWVAOS sections">{views.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><Icon size={18} /><span>{item.label}</span></button>; })}</nav>
+      <div className="system-card"><span className={error ? "offline" : ""} /><b>{error ? "Action needed" : "System online"}</b><small>{analytics.readiness}% readiness / {analytics.docs} vault files</small></div>
+    </aside>
+    <main>
+      <header className="topbar">
+        <div className="search"><SearchIcon size={18} /><input aria-label="Search SWVAOS" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search dogs, families, payments, care, files..." />{searchResults.length > 0 && <div className="search-menu">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => { setView(item.view); setSearch(""); }}><b>{item.label}</b><small>{item.detail}</small></button>)}</div>}</div>
+        <div className="top-actions"><span>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span><button onClick={() => openDocumentUpload(view === "Families" ? "buyer" : "dog")}><Upload size={16} /> Upload</button><button onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={16} /> Payment</button><button className="primary-action" onClick={() => openCreate(quickResource)}><Plus size={16} /> Add</button></div>
+      </header>
+      <div className="content">
+        <div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div>
+        {error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}
+        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
+      </div>
     </main>
     {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}
+    {documentModal && <DocumentUploadModal modal={documentModal} data={data} saving={saving} error={uploadError} onClose={() => setDocumentModal(null)} onKindChange={(kind) => setDocumentModal({ kind })} onSubmit={submitDocument} />}
     {toast && <div className="toast">{toast}</div>}
   </div>;
 }

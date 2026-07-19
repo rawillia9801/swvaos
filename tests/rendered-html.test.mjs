@@ -19,7 +19,7 @@ test("ships the SWVAOS command surface", async () => {
   assert.match(page, /\/api\/dog-documents/);
 });
 
-test("includes the redesigned operations styling", async () => {
+test("includes bright responsive operations styling and document uploads", async () => {
   const [page, css] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
@@ -34,10 +34,16 @@ test("includes the redesigned operations styling", async () => {
   assert.match(page, /Comms/);
   assert.match(page, /Calendar/);
   assert.match(page, /Reports/);
-  assert.match(css, /--cyan: #55d6ff/);
-  assert.match(css, /--mint: #43f0b5/);
+  assert.match(page, /DocumentUploadModal/);
+  assert.match(page, /Upload document/);
+  assert.doesNotMatch(page, /localStorage|sessionStorage/);
+  assert.match(css, /color-scheme: light/);
+  assert.match(css, /--canvas: #eaf4f2/);
+  assert.match(css, /--blue: #2768e8/);
   assert.match(css, /\.command-grid/);
-  assert.match(css, /\.stage-board/);
+  assert.match(css, /grid-auto-columns: minmax\(128px, 1fr\)/);
+  assert.match(css, /\.vault-upload/);
+  assert.match(css, /\.segment-control/);
   assert.match(css, /\.report-grid/);
 });
 
@@ -77,11 +83,10 @@ test("deploys the app directly without redirects", async () => {
 });
 
 test("includes buyer schema repair for existing projects", async () => {
-  const [repairSql, fullRepairSql, kennel, css] = await Promise.all([
+  const [repairSql, fullRepairSql, kennel] = await Promise.all([
     readFile(new URL("supabase/repair-buyers-schema.sql", root), "utf8"),
     readFile(new URL("supabase/repair-swvaos-schema.sql", root), "utf8"),
     readFile(new URL("db/supabase-kennel.ts", root), "utf8"),
-    readFile(new URL("app/globals.css", root), "utf8"),
   ]);
 
   assert.match(repairSql, /add column if not exists last_name/);
@@ -91,5 +96,4 @@ test("includes buyer schema repair for existing projects", async () => {
   assert.match(fullRepairSql, /create table if not exists dog_documents/);
   assert.match(kennel, /selectSafeAll/);
   assert.doesNotMatch(kennel, /order=last_name/);
-  assert.match(css, /\.grid > \.panel/);
 });
