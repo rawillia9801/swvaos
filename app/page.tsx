@@ -68,6 +68,13 @@ const views: { id: View; label: string; icon: LucideIcon }[] = [
 
 const dogDocumentTypes = ["Registration Certificate", "Pedigree", "Embark Results", "OFA Test Results", "Genetic Test Results", "Health Test Results", "Health Certificate", "Medical Documentation", "Other"];
 const buyerDocumentTypes = ["Bill of Sale", "Health Guarantee", "Payment Plan Agreement", "Other"];
+const paymentDescriptions = ["Puppy deposit", "Reservation fee", "Installment payment", "Final balance", "Delivery fee", "Registration fee", "Refund", "Other payment"];
+const costDescriptions = ["Veterinary care", "Vaccination", "Health testing", "Medication", "Food or supplements", "Kennel supplies", "Equipment", "Grooming", "Registration", "Breeding service", "Travel or delivery", "Payment processing fee", "Refund issued", "Other expense"];
+const paymentCategories = ["Puppy sale", "Deposit", "Reservation", "Installment", "Final balance", "Delivery", "Registration", "Refund", "Other income"];
+const costCategories = ["Veterinary", "Health testing", "Medication", "Food", "Supplies", "Equipment", "Grooming", "Registration", "Breeding", "Travel and delivery", "Payment processing", "Refund", "Other expense"];
+const transactionMethods = ["Cash", "Check", "Credit card", "Debit card", "Bank transfer / ACH", "PayPal", "Venmo", "Cash App", "Zelle", "Financing", "Other"];
+const transactionStatuses = ["Pending", "Due", "Partially paid", "Paid", "Overdue", "Refunded", "Reimbursed", "Voided"];
+const transactionFeePattern = /^\[Fee charged: \$([0-9]+(?:\.[0-9]{1,2})?)\]\s*/i;
 
 const money = (cents: number | null | undefined) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents ?? 0) / 100);
 const shortDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "Not set";
@@ -82,6 +89,22 @@ const fullName = (buyer: Buyer) => [buyer.first_name, buyer.last_name].filter(Bo
 const initials = (value: string) => value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
 const fileSize = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 const valueOf = (record: Record<string, unknown> | undefined, key: string, fallback = "") => String(record?.[key] ?? fallback);
+const transactionFeeDefault = (record?: Record<string, unknown>, preset?: Record<string, unknown>) => {
+  const explicit = valueOf(record, "fee_amount", valueOf(preset, "fee_amount"));
+  if (explicit) return explicit;
+  return String(record?.notes ?? preset?.notes ?? "").match(transactionFeePattern)?.[1] ?? "";
+};
+const transactionNotesDefault = (record?: Record<string, unknown>, preset?: Record<string, unknown>) => String(record?.notes ?? preset?.notes ?? "").replace(transactionFeePattern, "");
+const transactionFeeCents = (transaction: Transaction) => {
+  const fee = transaction.notes?.match(transactionFeePattern)?.[1];
+  return fee ? Math.round(Number(fee) * 100) : 0;
+};
+const transactionNotesWithFee = (notes: unknown, fee: unknown) => {
+  const cleanNotes = String(notes ?? "").replace(transactionFeePattern, "").trim();
+  const amount = Number(fee);
+  if (!Number.isFinite(amount) || amount <= 0) return cleanNotes;
+  return `[Fee charged: $${amount.toFixed(2)}]${cleanNotes ? `\n${cleanNotes}` : ""}`;
+};
 const includesAny = (value: string | null | undefined, terms: string[]) => terms.some((term) => (value ?? "").toLowerCase().includes(term));
 const friendlyError = (value: unknown, fallback: string) => {
   const message = value instanceof Error ? value.message : String(value || fallback);
@@ -117,6 +140,7 @@ function useAnalytics(data: DataSet) {
     const payments = data.transactions.filter((item) => item.type === "Payment");
     const paid = payments.filter((item) => item.status === "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
     const costs = data.transactions.filter((item) => item.type === "Cost").reduce((sum, item) => sum + item.amount_cents, 0);
+    const fees = data.transactions.reduce((sum, item) => sum + transactionFeeCents(item), 0);
     const outstanding = payments.filter((item) => item.status !== "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
     const overdue = payments.filter((item) => item.status !== "Paid" && item.due_date && item.due_date < today());
     const dueHealth = data.dog_medical_records.filter((item) => item.next_due_date && item.next_due_date <= today());
@@ -152,7 +176,7 @@ function useAnalytics(data: DataSet) {
     ))) : 0;
     const upcoming = data.events.filter((item) => item.event_date >= today() && item.status !== "Completed").sort((a, b) => `${a.event_date}${a.event_time ?? ""}`.localeCompare(`${b.event_date}${b.event_time ?? ""}`));
     const activePlanValue = data.payment_plans.filter((item) => item.status === "Active").reduce((sum, item) => sum + item.total_amount_cents, 0);
-    return { activeLitters, paid, costs, outstanding, overdue, dueHealth, unmatched, placed, approvedBuyers, pendingBuyers, registryCoverage, microchipCoverage, docs, docsNeeded, readiness, upcoming, activePlanValue, activePuppies, readyPuppies, careEvents, openTasks, upcomingCare, supplyCosts, inventorySpend, draftUpdates, publishedUpdates };
+    return { activeLitters, paid, costs, fees, outstanding, overdue, dueHealth, unmatched, placed, approvedBuyers, pendingBuyers, registryCoverage, microchipCoverage, docs, docsNeeded, readiness, upcoming, activePlanValue, activePuppies, readyPuppies, careEvents, openTasks, upcomingCare, supplyCosts, inventorySpend, draftUpdates, publishedUpdates };
   }, [data]);
 }
 
@@ -214,7 +238,7 @@ function FamiliesView({ data, openCreate, openEdit, openDocumentUpload, openCont
       {data.buyers.length ? <div className="family-record-list">{data.buyers.map((buyer) => <article key={buyer.id}><button className="family-record-main" onClick={() => openEdit("buyers", buyer as unknown as Record<string, unknown>)}><span><b>{fullName(buyer)}</b><small>{[buyer.email, buyer.phone, buyer.city, buyer.state].filter(Boolean).join(" / ") || "Contact information not recorded"}</small></span><Status tone={buyer.application_status === "Approved" ? "good" : "neutral"}>{buyer.application_status}</Status></button><button className="family-contract-action" onClick={() => openContracts(buyer.id)}><FileSignature size={15} /> Contracts</button></article>)}</div> : <Empty title="No buyers" text="Track applications, preferences, family notes, and contact details." action="Add buyer" onAction={() => openCreate("buyers")} />}
     </Section>
     <Section eyebrow="Puppy Placement" title="Puppies" action={<button className="ghost" onClick={() => openCreate("puppies")}>Add puppy</button>}>
-      {data.puppies.length ? <div className="card-grid compact">{data.puppies.map((puppy) => <article key={puppy.id} className="record-card"><span className="avatar">{initials(puppy.name)}</span><div><h3>{puppy.name}</h3><p>{[puppy.sex, puppy.color, money(puppy.price_cents)].filter(Boolean).join(" / ")}</p></div><Status tone={puppy.buyer_id ? "good" : "warn"}>{puppy.buyer_id ? "Assigned" : puppy.status}</Status><footer><button onClick={() => openEdit("puppies", puppy as unknown as Record<string, unknown>)}>Edit</button><button onClick={() => remove("puppies", puppy.id, puppy.name)}>Delete</button></footer></article>)}</div> : <Empty title="No puppies" text="Add puppy records and connect them to litters and buyers." action="Add puppy" onAction={() => openCreate("puppies")} />}
+      {data.puppies.length ? <div className="card-grid puppy-placement-grid">{data.puppies.map((puppy) => <article key={puppy.id} className="record-card"><span className="avatar">{initials(puppy.name)}</span><div><h3>{puppy.name}</h3><p>{[puppy.sex, puppy.color, money(puppy.price_cents)].filter(Boolean).join(" / ")}</p></div><Status tone={puppy.buyer_id ? "good" : "warn"}>{puppy.buyer_id ? "Assigned" : puppy.status}</Status><footer><button onClick={() => openEdit("puppies", puppy as unknown as Record<string, unknown>)}>Edit</button><button onClick={() => remove("puppies", puppy.id, puppy.name)}>Delete</button></footer></article>)}</div> : <Empty title="No puppies" text="Add puppy records and connect them to litters and buyers." action="Add puppy" onAction={() => openCreate("puppies")} />}
     </Section>
     <Section eyebrow="Family Portal" title="Published updates" action={<button className="ghost" onClick={() => openCreate("updates")}>New update</button>}>
       {data.updates.length ? <div className="mini-list">{data.updates.slice(0, 8).map((update) => <span key={update.id}><b>{update.title}</b><small>Week {update.week_number ?? "n/a"} / {update.published ? "Published" : "Draft"}</small></span>)}</div> : <Empty title="No updates" text="Publish growth notes, weights, milestones, and family-facing updates." action="New update" onAction={() => openCreate("updates")} />}
@@ -363,9 +387,9 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
 function FinanceView({ data, openCreate, openEdit }: ViewProps) {
   const a = useAnalytics(data);
   return <div className="grid">
-    <div className="metric-row panel-wide"><button><span>Payments received</span><b>{money(a.paid)}</b><small>Paid transactions</small></button><button><span>Recorded costs</span><b>{money(a.costs)}</b><small>Program expenses</small></button><button><span>Outstanding</span><b>{money(a.outstanding)}</b><small>{a.overdue.length} overdue items</small></button><button><span>Active plan value</span><b>{money(a.activePlanValue)}</b><small>Payment plans</small></button></div>
+    <div className="metric-row panel-wide"><button><span>Payments received</span><b>{money(a.paid)}</b><small>{money(a.fees)} in documented fees</small></button><button><span>Recorded costs</span><b>{money(a.costs)}</b><small>Program expenses</small></button><button><span>Outstanding</span><b>{money(a.outstanding)}</b><small>{a.overdue.length} overdue items</small></button><button><span>Active plan value</span><b>{money(a.activePlanValue)}</b><small>Payment plans</small></button></div>
     <Section eyebrow="Ledger" title="Transactions" action={<button className="ghost" onClick={() => openCreate("transactions", { type: "Payment" })}>Log transaction</button>}>
-      {data.transactions.length ? <div className="table-list">{data.transactions.map((item) => <button key={item.id} onClick={() => openEdit("transactions", item as unknown as Record<string, unknown>)}><span><b>{item.description}</b><small>{[item.type, item.category, item.status, item.due_date ? `Due ${shortDate(item.due_date)}` : null].filter(Boolean).join(" / ")}</small></span><strong>{money(item.amount_cents)}</strong></button>)}</div> : <Empty title="No ledger entries" text="Log deposits, balances, refunds, veterinary costs, supplies, and other financial events." action="Log transaction" onAction={() => openCreate("transactions", { type: "Payment" })} />}
+      {data.transactions.length ? <div className="table-list">{data.transactions.map((item) => { const fee = transactionFeeCents(item); return <button key={item.id} onClick={() => openEdit("transactions", item as unknown as Record<string, unknown>)}><span><b>{item.description}</b><small>{[item.type, item.category, item.method, item.status, fee ? `Fee ${money(fee)}` : null, item.due_date ? `Due ${shortDate(item.due_date)}` : null].filter(Boolean).join(" / ")}</small></span><strong>{money(item.amount_cents)}</strong></button>; })}</div> : <Empty title="No ledger entries" text="Log deposits, balances, refunds, veterinary costs, supplies, and other financial events." action="Log transaction" onAction={() => openCreate("transactions", { type: "Payment" })} />}
     </Section>
     <Section eyebrow="Payment Plans" title="Installments" action={<button className="ghost" onClick={() => openCreate("payment_plans")}>New plan</button>}>
       {data.payment_plans.length ? <div className="card-grid compact">{data.payment_plans.map((plan) => <article key={plan.id} className="record-card"><div><h3>{plan.name}</h3><p>{money(plan.payment_amount_cents)} {plan.frequency.toLowerCase()} / {plan.term_count} terms</p></div><b>{money(plan.total_amount_cents)}</b><Status tone={plan.status === "Active" ? "good" : "neutral"}>{plan.status}</Status><footer><button onClick={() => openEdit("payment_plans", plan as unknown as Record<string, unknown>)}>Edit</button></footer></article>)}</div> : <Empty title="No payment plans" text="Create installment schedules and connect them to buyers and puppies." action="New plan" onAction={() => openCreate("payment_plans")} />}
@@ -468,6 +492,39 @@ function TextArea({ label, name, record, preset }: { label: string; name: string
   return <label className="wide"><span>{label}</span><textarea name={name} defaultValue={valueOf(record, name, valueOf(preset, name))} rows={3} /></label>;
 }
 
+function TransactionFields({ data, record, preset }: { data: DataSet; record?: Record<string, unknown>; preset?: Record<string, unknown> }) {
+  const initialType = valueOf(record, "type", valueOf(preset, "type", "Payment")) === "Cost" ? "Cost" : "Payment";
+  const [type, setType] = useState<"Payment" | "Cost">(initialType);
+  const descriptions = type === "Payment" ? paymentDescriptions : costDescriptions;
+  const currentCategory = valueOf(record, "category", valueOf(preset, "category"));
+  const currentMethod = valueOf(record, "method", valueOf(preset, "method"));
+  const currentStatus = valueOf(record, "status", valueOf(preset, "status", "Paid"));
+  const knownCategories = [...paymentCategories, ...costCategories];
+  const dogOptions = data.dogs.map((dog) => ({ value: dog.id, label: dog.name }));
+  const buyerOptions = data.buyers.map((buyer) => ({ value: buyer.id, label: fullName(buyer) }));
+  const litterOptions = data.litters.map((litter) => ({ value: litter.id, label: litter.name }));
+  const puppyOptions = data.puppies.map((puppy) => ({ value: puppy.id, label: puppy.name }));
+  const planOptions = data.payment_plans.map((plan) => ({ value: plan.id, label: plan.name }));
+
+  return <>
+    <label><span>Transaction type</span><select name="type" value={type} onChange={(event) => setType(event.target.value as "Payment" | "Cost")} required><option value="Payment">Payment received</option><option value="Cost">Cost or expense</option></select></label>
+    <label><span>Category</span><select name="category" defaultValue={currentCategory}><option value="">Choose a category</option>{currentCategory && !knownCategories.includes(currentCategory) && <option value={currentCategory}>{currentCategory}</option>}<optgroup label="Payments and income">{paymentCategories.map((category) => <option key={`payment-${category}`} value={category}>{category}</option>)}</optgroup><optgroup label="Costs and expenses">{costCategories.map((category) => <option key={`cost-${category}`} value={category}>{category}</option>)}</optgroup></select></label>
+    <label className="wide"><span>What was this for?</span><input name="description" list="transaction-description-options" defaultValue={valueOf(record, "description", valueOf(preset, "description"))} placeholder={type === "Payment" ? "Example: Puppy deposit" : "Example: Veterinary care"} required /><datalist id="transaction-description-options">{descriptions.map((description) => <option key={description} value={description} />)}</datalist><small className="field-hint">Choose a suggestion or enter a specific description.</small></label>
+    <label><span>Transaction amount</span><input name="amount" type="number" min="0" step="0.01" inputMode="decimal" defaultValue={dollarDefault(record, "amount", "amount_cents", preset)} required /></label>
+    <label><span>Fee charged</span><input name="fee_amount" type="number" min="0" step="0.01" inputMode="decimal" defaultValue={transactionFeeDefault(record, preset)} placeholder="0.00" /><small className="field-hint">Processing, card, transfer, or other fee.</small></label>
+    <SelectField label="Buyer / family" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="No family" />
+    <SelectField label="Puppy" name="puppy_id" options={puppyOptions} record={record} preset={preset} empty="No puppy" />
+    <SelectField label="Dog" name="dog_id" options={dogOptions} record={record} preset={preset} empty="No breeding dog" />
+    <SelectField label="Litter" name="litter_id" options={litterOptions} record={record} preset={preset} empty="No litter" />
+    <SelectField label="Payment plan" name="payment_plan_id" options={planOptions} record={record} preset={preset} empty="No payment plan" />
+    <label><span>Payment method</span><select name="method" defaultValue={currentMethod}><option value="">Choose a method</option>{currentMethod && !transactionMethods.includes(currentMethod) && <option value={currentMethod}>{currentMethod}</option>}{transactionMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label>
+    <label><span>Status</span><select name="status" defaultValue={currentStatus}>{currentStatus && !transactionStatuses.includes(currentStatus) && <option value={currentStatus}>{currentStatus}</option>}{transactionStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+    <Field label="Due date" name="due_date" type="date" record={record} preset={preset} />
+    <Field label="Paid or processed date" name="paid_date" type="date" record={record} preset={preset} />
+    <label className="wide"><span>Receipt, reference, or internal notes</span><textarea name="notes" defaultValue={transactionNotesDefault(record, preset)} rows={3} placeholder="Receipt or confirmation number, check number, refund reason, or other details..." /></label>
+  </>;
+}
+
 function RecordModal({ modal, data, saving, onClose, onSubmit }: { modal: Exclude<ModalState, null>; data: DataSet; saving: boolean; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const { resource, record, preset } = modal;
   const editing = Boolean(record?.id);
@@ -475,13 +532,12 @@ function RecordModal({ modal, data, saving, onClose, onSubmit }: { modal: Exclud
   const buyerOptions = data.buyers.map((buyer) => ({ value: buyer.id, label: fullName(buyer) }));
   const litterOptions = data.litters.map((litter) => ({ value: litter.id, label: litter.name }));
   const puppyOptions = data.puppies.map((puppy) => ({ value: puppy.id, label: puppy.name }));
-  const planOptions = data.payment_plans.map((plan) => ({ value: plan.id, label: plan.name }));
   return <div className="modal-backdrop" role="dialog" aria-modal="true"><form className="modal" onSubmit={onSubmit}><header><span>{editing ? "Edit record" : "Create record"}</span><h2>{resource.replaceAll("_", " ")}</h2><button type="button" onClick={onClose}>Close</button></header><div className="form-grid">
     {resource === "dogs" && <><Field label="Name" name="name" record={record} preset={preset} required /><Field label="Registered name" name="registered_name" record={record} preset={preset} /><Field label="Sex" name="sex" record={record} preset={preset} required /><Field label="Role" name="role" record={record} preset={preset} required /><Field label="Birth date" name="date_of_birth" type="date" record={record} preset={preset} /><Field label="Color" name="color" record={record} preset={preset} /><Field label="Weight" name="weight" type="number" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><Field label="Microchip number" name="microchip_number" record={record} preset={preset} /><Field label="Primary registration number" name="registration_number" record={record} preset={preset} /><Field label="Acquired from" name="acquired_from" record={record} preset={preset} /><Field label="Acquisition date" name="acquisition_date" type="date" record={record} preset={preset} /><Field label="Purchase price" name="purchase_price" type="number" record={record} preset={preset} defaultValue={dollarDefault(record, "purchase_price", "purchase_price_cents", preset)} /><Field label="Next heat" name="next_heat_date" type="date" record={record} preset={preset} /><TextArea label="Health testing" name="health_testing" record={record} preset={preset} /><TextArea label="Acquisition notes" name="acquisition_notes" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
     {resource === "litters" && <><Field label="Name" name="name" record={record} preset={preset} required /><SelectField label="Dam" name="dam_id" options={dogOptions} record={record} preset={preset} empty="No dam" /><SelectField label="Sire" name="sire_id" options={dogOptions} record={record} preset={preset} empty="No sire" /><Field label="Breeding date" name="breeding_date" type="date" record={record} preset={preset} /><Field label="Due date" name="due_date" type="date" record={record} preset={preset} /><Field label="Birth date" name="birth_date" type="date" record={record} preset={preset} /><Field label="Expected count" name="expected_count" type="number" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
     {resource === "buyers" && <><Field label="First name" name="first_name" record={record} preset={preset} required /><Field label="Last name" name="last_name" record={record} preset={preset} required /><Field label="Email (optional)" name="email" type="email" record={record} preset={preset} /><Field label="Phone" name="phone" record={record} preset={preset} /><Field label="City" name="city" record={record} preset={preset} /><Field label="State" name="state" record={record} preset={preset} /><Field label="Application status" name="application_status" record={record} preset={preset} /><Field label="Preferred sex" name="preferred_sex" record={record} preset={preset} /><Field label="Preferred color" name="preferred_color" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
     {resource === "puppies" && <><SelectField label="Litter" name="litter_id" options={litterOptions} record={record} preset={preset} required /><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="No buyer" /><Field label="Name" name="name" record={record} preset={preset} required /><Field label="Sex" name="sex" record={record} preset={preset} /><Field label="Color" name="color" record={record} preset={preset} /><Field label="Birth date" name="birth_date" type="date" record={record} preset={preset} /><Field label="Birth weight" name="birth_weight" type="number" record={record} preset={preset} /><Field label="Current weight" name="current_weight" type="number" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><Field label="Price" name="price" type="number" record={record} preset={preset} defaultValue={dollarDefault(record, "price", "price_cents", preset)} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
-    {resource === "transactions" && <><Field label="Type" name="type" record={record} preset={preset} required /><Field label="Description" name="description" record={record} preset={preset} required /><Field label="Amount" name="amount" type="number" record={record} preset={preset} required defaultValue={dollarDefault(record, "amount", "amount_cents", preset)} /><Field label="Category" name="category" record={record} preset={preset} /><SelectField label="Dog" name="dog_id" options={dogOptions} record={record} preset={preset} empty="No dog" /><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="No buyer" /><SelectField label="Litter" name="litter_id" options={litterOptions} record={record} preset={preset} empty="No litter" /><SelectField label="Puppy" name="puppy_id" options={puppyOptions} record={record} preset={preset} empty="No puppy" /><SelectField label="Plan" name="payment_plan_id" options={planOptions} record={record} preset={preset} empty="No plan" /><Field label="Status" name="status" record={record} preset={preset} /><Field label="Due date" name="due_date" type="date" record={record} preset={preset} /><Field label="Paid date" name="paid_date" type="date" record={record} preset={preset} /><Field label="Method" name="method" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "transactions" && <TransactionFields data={data} record={record} preset={preset} />}
     {resource === "payment_plans" && <><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} /><Field label="Name" name="name" record={record} preset={preset} required /><Field label="Contract amount" name="total_amount" type="number" record={record} preset={preset} required defaultValue={dollarDefault(record, "total_amount", "total_amount_cents", preset)} /><Field label="Payment amount" name="payment_amount" type="number" record={record} preset={preset} required defaultValue={dollarDefault(record, "payment_amount", "payment_amount_cents", preset)} /><Field label="Number of payments" name="term_count" type="number" record={record} preset={preset} required /><Field label="Frequency" name="frequency" record={record} preset={preset} /><Field label="Next due date" name="next_due_date" type="date" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
     {resource === "events" && <><Field label="Title" name="title" record={record} preset={preset} required /><Field label="Type" name="event_type" record={record} preset={preset} required /><Field label="Date" name="event_date" type="date" record={record} preset={preset} required /><Field label="Time" name="event_time" type="time" record={record} preset={preset} /><Field label="Location" name="location" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
     {resource === "updates" && <><SelectField label="Puppy" name="puppy_id" options={puppyOptions} record={record} preset={preset} /><Field label="Title" name="title" record={record} preset={preset} required /><Field label="Week" name="week_number" type="number" record={record} preset={preset} /><Field label="Weight" name="weight" type="number" record={record} preset={preset} /><TextArea label="Body" name="body" record={record} preset={preset} /><label className="check wide"><input name="published" type="checkbox" defaultChecked={Boolean(record?.published ?? preset?.published)} /><span>Publish update</span></label></>}
@@ -557,6 +613,8 @@ function ContractModal({ modal, data, saving, error, onClose, onSubmit, onOpenPo
             <label><span>Assigned puppy</span><select name="puppy_id" value={selectedPuppy?.id ?? ""} onChange={(event) => { const next = Number(event.target.value); setPuppyId(next); const puppy = puppies.find((item) => item.id === next); setSalePrice(String((puppy?.price_cents ?? 0) / 100)); }} required>{puppies.map((puppy) => <option key={puppy.id} value={puppy.id}>{puppy.name}</option>)}</select></label>
             <label><span>Purchase price</span><input name="sale_price" type="number" min="0" step="0.01" value={salePrice} onChange={(event) => setSalePrice(event.target.value)} required /></label>
             <label><span>Deposit and payments recorded</span><input name="deposit_amount" type="number" min="0" step="0.01" defaultValue={(paid / 100).toFixed(2)} /></label>
+            <label><span>Deposit method</span><select name="deposit_method" defaultValue=""><option value="">Not recorded</option>{transactionMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label>
+            <label><span>Deposit/payment date</span><input name="deposit_paid_date" type="date" defaultValue={today()} /></label>
             <label><span>Balance due date</span><input name="balance_due_date" type="date" /></label>
             <label><span>Transfer or pickup date</span><input name="transfer_date" type="date" /></label>
             <label><span>Required veterinary exam</span><div className="field-with-unit"><input name="exam_hours" type="number" min="1" max="336" defaultValue="72" required /><small>hours</small></div></label>
@@ -622,6 +680,10 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     const values = Object.fromEntries(form.entries()) as Record<string, unknown>;
     if (modal.resource === "updates") values.published = form.get("published") === "on";
+    if (modal.resource === "transactions") {
+      values.notes = transactionNotesWithFee(values.notes, values.fee_amount);
+      delete values.fee_amount;
+    }
     try {
       const response = await fetch("/api/data", { method: modal.record?.id ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ resource: modal.resource, id: modal.record?.id, data: values }) });
       const payload = await response.json().catch(() => ({})) as { error?: string };

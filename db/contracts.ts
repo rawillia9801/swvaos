@@ -20,6 +20,8 @@ export type ContractPackageInput = {
   puppyId: number;
   salePriceCents?: number;
   depositCents?: number;
+  depositMethod?: string;
+  depositPaidDate?: string;
   balanceDueDate?: string;
   transferDate?: string;
   examHours?: number;
@@ -167,6 +169,27 @@ export async function prepareContractPackage(input: ContractPackageInput) {
   const seller = sellerDetails();
   const groupId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
+  const unloggedDepositCents = Math.max(0, depositCents - paidCents);
+  if (unloggedDepositCents > 0) {
+    await insert("transactions", {
+      type: "Payment",
+      dog_id: null,
+      buyer_id: buyerId,
+      litter_id: litterId,
+      puppy_id: puppyId,
+      payment_plan_id: null,
+      category: "Deposit",
+      description: `Puppy deposit - ${text(puppy, "name") || `Puppy #${puppyId}`}`,
+      amount_cents: unloggedDepositCents,
+      due_date: null,
+      paid_date: input.depositPaidDate?.trim() || createdAt.slice(0, 10),
+      status: "Paid",
+      method: input.depositMethod?.trim() || null,
+      notes: "Recorded while preparing the family contract package.",
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+  }
   const shared = {
     version: 1 as const,
     groupId,
@@ -216,8 +239,49 @@ export async function prepareContractPackage(input: ContractPackageInput) {
     buyerId,
     puppyId,
     token,
+    depositLoggedCents: unloggedDepositCents,
     contracts: documents.map((document) => contractSummary(document)).filter(Boolean),
   };
+}
+
+export async function reconcileContractDeposits(buyerIdValue: number) {
+  const buyerId = positiveId(buyerIdValue);
+  if (!buyerId) throw new Error("Choose a valid family account.");
+  const [documents, payments] = await Promise.all([
+    select<DocumentRow>("buyer_documents", `select=*&buyer_id=eq.${buyerId}&document_type=eq.Bill%20of%20Sale&order=created_at.desc`),
+    select<Row>("transactions", `select=*&buyer_id=eq.${buyerId}&type=eq.Payment`),
+  ]);
+  const latestByPuppy = new Map<number, ContractSnapshot>();
+  for (const document of documents) {
+    const snapshot = parseContractNotes(document.notes);
+    if (snapshot?.kind === "bill_of_sale" && !latestByPuppy.has(snapshot.puppyId)) latestByPuppy.set(snapshot.puppyId, snapshot);
+  }
+  const snapshots = [...latestByPuppy.values()];
+  const contractDeposits = snapshots.reduce((sum, snapshot) => sum + snapshot.depositCents, 0);
+  const recordedPayments = payments.filter((payment) => text(payment, "status") === "Paid").reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
+  const missingDeposit = Math.max(0, contractDeposits - recordedPayments);
+  const snapshot = snapshots[0];
+  if (!missingDeposit || !snapshot) return 0;
+  const now = new Date().toISOString();
+  await insert("transactions", {
+    type: "Payment",
+    dog_id: null,
+    buyer_id: buyerId,
+    litter_id: null,
+    puppy_id: snapshot.puppyId,
+    payment_plan_id: null,
+    category: "Deposit",
+    description: `Puppy deposit - ${snapshot.puppyName}`,
+    amount_cents: missingDeposit,
+    due_date: null,
+    paid_date: snapshot.createdAt.slice(0, 10),
+    status: "Paid",
+    method: null,
+    notes: "Recovered from the existing Bill of Sale contract record.",
+    created_at: now,
+    updated_at: now,
+  });
+  return missingDeposit;
 }
 
 export async function getPuppyPortal(token: string) {
@@ -231,12 +295,37 @@ export async function getPuppyPortal(token: string) {
     select<DocumentRow>("buyer_documents", `select=*&buyer_id=eq.${claims.buyerId}&order=created_at.desc`),
   ]);
   const puppyIds = puppies.map((puppy) => Number(puppy.id));
-  const [updates, links] = await Promise.all([
+  const litterIds = [...new Set(puppies.map((puppy) => positiveId(puppy.litter_id)).filter((id): id is number => Boolean(id)))];
+  const today = new Date().toISOString().slice(0, 10);
+  const [updates, links, litters, buyerEvents, puppyEvents] = await Promise.all([
     puppyIds.length ? select<Row>("puppy_updates", `select=*&published=eq.true&puppy_id=in.(${puppyIds.join(",")})&order=created_at.desc`) : Promise.resolve([]),
     documents.length ? select<Row>("buyer_document_puppies", `select=*&document_id=in.(${documents.map((document) => document.id).join(",")})`) : Promise.resolve([]),
+    litterIds.length ? select<Row>("litters", `select=*&id=in.(${litterIds.join(",")})`) : Promise.resolve([]),
+    select<Row>("events", `select=*&related_type=eq.buyers&related_id=eq.${claims.buyerId}&event_date=gte.${today}&status=neq.Completed&order=event_date.asc,event_time.asc`),
+    puppyIds.length ? select<Row>("events", `select=*&related_type=eq.puppies&related_id=in.(${puppyIds.join(",")})&event_date=gte.${today}&status=neq.Completed&order=event_date.asc,event_time.asc`) : Promise.resolve([]),
   ]);
+  const parentIds = [...new Set(litters.flatMap((litter) => [positiveId(litter.dam_id), positiveId(litter.sire_id)]).filter((id): id is number => Boolean(id)))];
+  const parents = parentIds.length ? await select<Row>("dogs", `select=id,name,registered_name&id=in.(${parentIds.join(",")})`) : [];
   const contracts = documents.map((document) => contractSummary(document, links.filter((link) => Number(link.document_id) === document.id).map((link) => Number(link.puppy_id)))).filter(Boolean);
   const payments = transactions.filter((transaction) => text(transaction, "type") === "Payment");
+  const latestBills = new Map<number, NonNullable<(typeof contracts)[number]>>();
+  for (const contract of contracts) if (contract?.kind === "bill_of_sale" && !latestBills.has(contract.puppyId)) latestBills.set(contract.puppyId, contract);
+  const contractDepositCents = [...latestBills.values()].reduce((sum, contract) => sum + contract.snapshot.depositCents, 0);
+  const recordedPaidCents = payments.filter((payment) => text(payment, "status") === "Paid").reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
+  const legacyDepositCents = Math.max(0, contractDepositCents - recordedPaidCents);
+  const portalPayments = legacyDepositCents > 0 ? [{ id: -1, description: "Puppy deposit", category: "Deposit", method: "Contract record", amount_cents: legacyDepositCents, status: "Paid", due_date: null, paid_date: [...latestBills.values()][0]?.createdAt.slice(0, 10) ?? "" }, ...payments] : payments;
+  const paidCents = recordedPaidCents + legacyDepositCents;
+  const pendingCents = payments.filter((payment) => text(payment, "status") !== "Paid").reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
+  const saleTotalCents = puppies.reduce((sum, puppy) => {
+    const bill = contracts
+      .filter((contract) => contract?.kind === "bill_of_sale" && contract.puppyId === Number(puppy.id))
+      .sort((left, right) => String(right?.createdAt ?? "").localeCompare(String(left?.createdAt ?? "")))[0];
+    return sum + Number(bill?.snapshot.salePriceCents ?? puppy.price_cents ?? 0);
+  }, 0);
+  const upcomingEvents = [...buyerEvents, ...puppyEvents]
+    .filter((event, index, items) => items.findIndex((candidate) => Number(candidate.id) === Number(event.id)) === index)
+    .sort((left, right) => `${text(left, "event_date")}${text(left, "event_time")}`.localeCompare(`${text(right, "event_date")}${text(right, "event_time")}`))
+    .slice(0, 12);
   return {
     buyer: {
       id: Number(buyer.id),
@@ -245,15 +334,23 @@ export async function getPuppyPortal(token: string) {
       phone: text(buyer, "phone"),
       location: [text(buyer, "city"), text(buyer, "state")].filter(Boolean).join(", "),
     },
-    puppies: puppies.map((puppy) => ({
-      id: Number(puppy.id), name: text(puppy, "name"), sex: text(puppy, "sex"), color: text(puppy, "color"), birthDate: text(puppy, "birth_date"), currentWeight: number(puppy, "current_weight"), status: text(puppy, "status"), priceCents: number(puppy, "price_cents"), notes: text(puppy, "notes"),
-    })),
+    puppies: puppies.map((puppy) => {
+      const litter = litters.find((candidate) => Number(candidate.id) === Number(puppy.litter_id));
+      const dam = parents.find((candidate) => Number(candidate.id) === Number(litter?.dam_id));
+      const sire = parents.find((candidate) => Number(candidate.id) === Number(litter?.sire_id));
+      return {
+        id: Number(puppy.id), name: text(puppy, "name"), sex: text(puppy, "sex"), color: text(puppy, "color"), birthDate: text(puppy, "birth_date"), birthWeight: number(puppy, "birth_weight"), currentWeight: number(puppy, "current_weight"), status: text(puppy, "status"), priceCents: number(puppy, "price_cents"), notes: text(puppy, "notes"), litterName: text(litter, "name"), damName: text(dam, "registered_name") || text(dam, "name"), sireName: text(sire, "registered_name") || text(sire, "name"),
+      };
+    }),
     updates: updates.map((update) => ({ id: Number(update.id), puppyId: Number(update.puppy_id), title: text(update, "title"), body: text(update, "body"), weekNumber: number(update, "week_number") || null, weight: number(update, "weight") || null, createdAt: text(update, "created_at") })),
     contracts,
+    documents: documents.map((document) => ({ id: Number(document.id), title: text(document, "title"), documentType: text(document, "document_type"), fileName: text(document, "file_name"), createdAt: text(document, "created_at"), isContract: Boolean(parseContractNotes(document.notes)), puppyIds: links.filter((link) => Number(link.document_id) === document.id).map((link) => Number(link.puppy_id)) })),
+    upcomingEvents: upcomingEvents.map((event) => ({ id: Number(event.id), title: text(event, "title"), eventType: text(event, "event_type"), date: text(event, "event_date"), time: text(event, "event_time"), location: text(event, "location"), status: text(event, "status"), puppyName: text(event, "related_type") === "puppies" ? text(puppies.find((puppy) => Number(puppy.id) === Number(event.related_id)), "name") : "" })),
     payments: {
-      paidCents: payments.filter((payment) => text(payment, "status") === "Paid").reduce((sum, payment) => sum + number(payment, "amount_cents"), 0),
-      outstandingCents: payments.filter((payment) => text(payment, "status") !== "Paid").reduce((sum, payment) => sum + number(payment, "amount_cents"), 0),
-      items: payments.slice(0, 20).map((payment) => ({ id: Number(payment.id), description: text(payment, "description"), amountCents: number(payment, "amount_cents"), status: text(payment, "status"), dueDate: text(payment, "due_date"), paidDate: text(payment, "paid_date") })),
+      saleTotalCents,
+      paidCents,
+      outstandingCents: Math.max(pendingCents, Math.max(0, saleTotalCents - paidCents)),
+      items: portalPayments.slice(0, 20).map((payment) => ({ id: Number(payment.id), description: text(payment, "description"), category: text(payment, "category"), method: text(payment, "method"), amountCents: number(payment, "amount_cents"), status: text(payment, "status"), dueDate: text(payment, "due_date"), paidDate: text(payment, "paid_date") })),
     },
   };
 }
@@ -262,7 +359,7 @@ export async function getPortalDocument(token: string, documentId: number) {
   const claims = await verifyPortalToken(token);
   if (!claims) return null;
   const document = await first<DocumentRow>("buyer_documents", `select=*&id=eq.${documentId}&buyer_id=eq.${claims.buyerId}`);
-  if (!document || !parseContractNotes(document.notes)) return null;
+  if (!document) return null;
   const object = await downloadObject(document.object_key);
   return object.ok ? { document, object } : null;
 }

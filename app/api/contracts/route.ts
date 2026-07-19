@@ -15,6 +15,8 @@ export async function POST(request: Request) {
       puppyId: Number(body.puppy_id),
       salePriceCents: cents(body.sale_price),
       depositCents: cents(body.deposit_amount),
+      depositMethod: String(body.deposit_method ?? ""),
+      depositPaidDate: String(body.deposit_paid_date ?? ""),
       balanceDueDate: String(body.balance_due_date ?? ""),
       transferDate: String(body.transfer_date ?? ""),
       examHours: Number(body.exam_hours ?? 72),

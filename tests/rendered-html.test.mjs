@@ -88,6 +88,22 @@ test("allows buyer records without an email address", async () => {
   assert.doesNotMatch(page, /label="Email" name="email"[^>]*required/);
 });
 
+test("provides guided transaction entry, documented fees, and readable puppy placement cards", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+
+  assert.match(page, /TransactionFields/);
+  assert.match(page, /Fee charged/);
+  assert.match(page, /transactionNotesWithFee/);
+  assert.match(page, /Payment received/);
+  assert.match(page, /Payment method/);
+  assert.match(page, /Receipt, reference, or internal notes/);
+  assert.match(page, /puppy-placement-grid/);
+  assert.match(css, /\.puppy-placement-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+});
+
 test("deploys the app directly without redirects", async () => {
   const [configuration, packageManifest, supabaseSchema, dataRoute] = await Promise.all([
     readFile(new URL("vercel.json", root), "utf8"),
@@ -170,10 +186,15 @@ test("generates e-signature contracts and retains them in the puppy portal", asy
   assert.match(page, /Create both documents/);
   assert.match(page, /Open existing portal/);
   assert.match(contracts, /prepareContractPackage/);
+  assert.match(contracts, /unloggedDepositCents/);
+  assert.match(contracts, /Puppy deposit/);
   assert.match(contracts, /buyer_document_puppies/);
   assert.match(contracts, /SHA-256/);
   assert.match(pdf, /SIGNED COPY/);
   assert.match(portal, /Agreements and signatures/);
+  assert.match(portal, /Family account details/);
+  assert.match(portal, /Additional documents/);
+  assert.match(portal, /Upcoming dates and next steps/);
   assert.match(signaturePage, /intend my typed name to be my electronic signature/);
   assert.doesNotMatch(`${page}${portal}${signaturePage}`, /localStorage|sessionStorage/);
   assert.match(env, /SWVAOS_PORTAL_SECRET/);
