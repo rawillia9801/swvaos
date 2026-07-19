@@ -8,6 +8,7 @@ import {
   Dog as DogIcon,
   ExternalLink,
   FileText,
+  FileSignature,
   FolderOpen,
   HeartPulse,
   Headphones,
@@ -26,6 +27,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { billOfSaleTerms, healthGuaranteeTerms } from "../lib/contract-templates";
 
 type Resource = "dogs" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates" | "dog_medical_records" | "dog_registrations";
 type BaseRecord = { id: number; created_at: string; updated_at: string };
@@ -41,11 +43,12 @@ type DogMedicalRecord = BaseRecord & { dog_id: number; record_type: string; titl
 type DogRegistration = BaseRecord & { dog_id: number; registry: string; registration_number: string; registered_name: string | null; issue_date: string | null; notes: string | null };
 type StoredDocument = BaseRecord & { title: string; file_name: string; content_type: string; size_bytes: number; document_type: string };
 type DogDocument = StoredDocument & { dog_id: number; registration_id: number | null; registry: string | null; registration_number: string | null };
-type BuyerDocument = StoredDocument & { buyer_id: number; payment_plan_id: number | null; puppy_ids: number[] };
+type BuyerDocument = StoredDocument & { buyer_id: number; payment_plan_id: number | null; puppy_ids: number[]; notes?: string | null };
 type DataSet = { dogs: Dog[]; litters: Litter[]; buyers: Buyer[]; puppies: Puppy[]; payment_plans: PaymentPlan[]; transactions: Transaction[]; events: KennelEvent[]; updates: PuppyUpdate[]; dog_medical_records: DogMedicalRecord[]; dog_registrations: DogRegistration[]; dog_documents: DogDocument[]; buyer_documents: BuyerDocument[] };
 type ModalState = { resource: Resource; record?: Record<string, unknown>; preset?: Record<string, unknown> } | null;
 type DocumentKind = "dog" | "buyer";
 type DocumentModalState = { kind: DocumentKind; ownerId?: number } | null;
+type ContractModalState = { buyerId: number; portalUrl?: string } | null;
 type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "CRM" | "Calendar" | "Vault" | "Reports";
 
 const emptyData: DataSet = { dogs: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], buyer_documents: [] };
@@ -205,10 +208,10 @@ function BreedingView({ data, openCreate, openEdit, openDocumentUpload, remove }
   </div>;
 }
 
-function FamiliesView({ data, openCreate, openEdit, openDocumentUpload, remove }: ViewProps) {
+function FamiliesView({ data, openCreate, openEdit, openDocumentUpload, openContracts, remove }: ViewProps) {
   return <div className="grid two-one">
     <Section eyebrow="Buyer Pipeline" title="Families" action={<div className="panel-actions"><button className="ghost" onClick={() => openCreate("buyers")}>Add buyer</button><button className="primary-action" onClick={() => openDocumentUpload("buyer")}><Upload size={15} /> Upload file</button></div>}>
-      {data.buyers.length ? <div className="table-list">{data.buyers.map((buyer) => <button key={buyer.id} onClick={() => openEdit("buyers", buyer as unknown as Record<string, unknown>)}><span><b>{fullName(buyer)}</b><small>{[buyer.email, buyer.phone, buyer.city, buyer.state].filter(Boolean).join(" / ")}</small></span><Status tone={buyer.application_status === "Approved" ? "good" : "neutral"}>{buyer.application_status}</Status></button>)}</div> : <Empty title="No buyers" text="Track applications, preferences, family notes, and contact details." action="Add buyer" onAction={() => openCreate("buyers")} />}
+      {data.buyers.length ? <div className="family-record-list">{data.buyers.map((buyer) => <article key={buyer.id}><button className="family-record-main" onClick={() => openEdit("buyers", buyer as unknown as Record<string, unknown>)}><span><b>{fullName(buyer)}</b><small>{[buyer.email, buyer.phone, buyer.city, buyer.state].filter(Boolean).join(" / ") || "Contact information not recorded"}</small></span><Status tone={buyer.application_status === "Approved" ? "good" : "neutral"}>{buyer.application_status}</Status></button><button className="family-contract-action" onClick={() => openContracts(buyer.id)}><FileSignature size={15} /> Contracts</button></article>)}</div> : <Empty title="No buyers" text="Track applications, preferences, family notes, and contact details." action="Add buyer" onAction={() => openCreate("buyers")} />}
     </Section>
     <Section eyebrow="Puppy Placement" title="Puppies" action={<button className="ghost" onClick={() => openCreate("puppies")}>Add puppy</button>}>
       {data.puppies.length ? <div className="card-grid compact">{data.puppies.map((puppy) => <article key={puppy.id} className="record-card"><span className="avatar">{initials(puppy.name)}</span><div><h3>{puppy.name}</h3><p>{[puppy.sex, puppy.color, money(puppy.price_cents)].filter(Boolean).join(" / ")}</p></div><Status tone={puppy.buyer_id ? "good" : "warn"}>{puppy.buyer_id ? "Assigned" : puppy.status}</Status><footer><button onClick={() => openEdit("puppies", puppy as unknown as Record<string, unknown>)}>Edit</button><button onClick={() => remove("puppies", puppy.id, puppy.name)}>Delete</button></footer></article>)}</div> : <Empty title="No puppies" text="Add puppy records and connect them to litters and buyers." action="Add puppy" onAction={() => openCreate("puppies")} />}
@@ -283,7 +286,7 @@ function CommunicationsView({ data, openCreate, openEdit }: ViewProps) {
   </div>;
 }
 
-function CallerCrmView({ data, openCreate, openEdit }: ViewProps) {
+function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps) {
   const callers = useMemo(() => data.buyers.filter((buyer) => buyer.phone).sort((left, right) => fullName(left).localeCompare(fullName(right))), [data.buyers]);
   const [selectedBuyerId, setSelectedBuyerId] = useState<number | null>(callers[0]?.id ?? null);
   const [callerSearch, setCallerSearch] = useState("");
@@ -301,6 +304,7 @@ function CallerCrmView({ data, openCreate, openEdit }: ViewProps) {
   const nextDue = payments.filter((item) => item.status !== "Paid" && item.due_date).sort((left, right) => String(left.due_date).localeCompare(String(right.due_date)))[0]?.due_date;
   const calls = selectedBuyer ? data.events.filter((event) => event.event_type === "Call" && event.related_type === "buyers" && event.related_id === selectedBuyer.id).sort((left, right) => `${right.event_date}${right.event_time ?? ""}`.localeCompare(`${left.event_date}${left.event_time ?? ""}`)) : [];
   const unmatchedCalls = data.events.filter((event) => event.event_type === "Call" && event.related_type === "caller");
+  const contractDocuments = selectedBuyer ? data.buyer_documents.filter((document) => document.buyer_id === selectedBuyer.id && ["Bill of Sale", "Health Guarantee"].includes(document.document_type)) : [];
   const knownMenu = ["Balance, payments, and payment-plan options", "Pickup, delivery, and scheduling", "Reservation details and next steps", "Application and approval status", "Leave a message", "Speak with someone", "Repeat menu"];
   const publicMenu = ["Available puppies", "Submitted application help", "Reserved puppy help", "Pickup or delivery questions", "Pup-Lift information", "Chihuahua HQ information", "Speak with someone"];
   const callPreset = selectedBuyer ? { event_type: "Call", related_type: "buyers", related_id: selectedBuyer.id, title: `Call with ${fullName(selectedBuyer)}`, event_date: today(), location: "Phone", status: "Completed" } : {};
@@ -321,7 +325,7 @@ function CallerCrmView({ data, openCreate, openEdit }: ViewProps) {
       })}</div> : <Empty title="No matching callers" text="Families need a phone number before incoming calls can be recognized." action="Add family" onAction={() => openCreate("buyers")} />}
     </Section>
 
-    <Section eyebrow="Active Caller" title={selectedBuyer ? fullName(selectedBuyer) : "No caller selected"} action={selectedBuyer && <div className="panel-actions"><button className="ghost" onClick={() => openEdit("buyers", selectedBuyer as unknown as Record<string, unknown>)}>Edit account</button><button className="primary-action" onClick={() => openCreate("events", callPreset)}><PhoneCall size={15} /> Log call</button></div>}>
+    <Section eyebrow="Active Caller" title={selectedBuyer ? fullName(selectedBuyer) : "No caller selected"} action={selectedBuyer && <div className="panel-actions"><button className="ghost" onClick={() => openEdit("buyers", selectedBuyer as unknown as Record<string, unknown>)}>Edit account</button><button className="ghost" onClick={() => openContracts(selectedBuyer.id)}><FileSignature size={15} /> Contracts</button><button className="primary-action" onClick={() => openCreate("events", callPreset)}><PhoneCall size={15} /> Log call</button></div>}>
       {selectedBuyer ? <div className="crm-account">
         <div className="crm-identity"><span className="avatar">{initials(fullName(selectedBuyer))}</span><div><b>{fullName(selectedBuyer)}</b><p>{[selectedBuyer.city, selectedBuyer.state].filter(Boolean).join(", ") || "Location not recorded"}</p><span><a href={`tel:${selectedBuyer.phone}`}>{selectedBuyer.phone}</a>{selectedBuyer.email && <a href={`mailto:${selectedBuyer.email}`}>{selectedBuyer.email}</a>}</span></div><Status tone={selectedBuyer.application_status === "Approved" ? "good" : "neutral"}>{selectedBuyer.application_status}</Status></div>
         <div className="crm-balance"><span><small>Paid</small><b>{money(paid)}</b></span><span><small>Outstanding</small><b>{money(outstanding)}</b></span><span><small>Next due</small><b>{shortDate(nextDue)}</b></span><span><small>Plans</small><b>{plans.filter((plan) => plan.status === "Active").length}</b></span></div>
@@ -333,6 +337,13 @@ function CallerCrmView({ data, openCreate, openEdit }: ViewProps) {
         const latest = updates.find((update) => update.puppy_id === puppy.id);
         return <article key={puppy.id}><span className="avatar">{initials(puppy.name)}</span><div><b>{puppy.name}</b><p>{[puppy.sex, puppy.color, puppy.status].filter(Boolean).join(" / ")}</p><small>{latest ? `${latest.title}: ${latest.body}` : "No published update yet"}</small></div><Status tone={puppy.status === "Available" || puppy.status === "Reserved" ? "good" : "neutral"}>{puppy.status}</Status></article>;
       })}</div> : <div className="crm-empty-line">No puppy is assigned to this caller account.</div>}
+    </Section>
+
+    <Section eyebrow="Contract Center" title="Agreements and puppy portal" action={selectedBuyer && <button className="ghost" onClick={() => openContracts(selectedBuyer.id)}><FileSignature size={15} /> Prepare documents</button>}>
+      {contractDocuments.length ? <div className="contract-records">{contractDocuments.map((document) => {
+        const signed = document.title.startsWith("Signed ");
+        return <a key={document.id} href={`/api/documents/${document.id}`} target="_blank" rel="noreferrer"><FileText size={17} /><span><b>{document.title}</b><small>{document.document_type} / {shortDate(document.updated_at)}</small></span><Status tone={signed ? "good" : "warn"}>{signed ? "Signed" : "Waiting"}</Status><ExternalLink size={15} /></a>;
+      })}</div> : <div className="crm-empty-line">No Bill of Sale or Health Guarantee has been prepared for this caller yet.</div>}
     </Section>
 
     <Section eyebrow="Call History" title="Conversations and messages" action={selectedBuyer && <button className="ghost" onClick={() => openCreate("events", callPreset)}><PhoneIncoming size={15} /> New entry</button>}>
@@ -436,6 +447,7 @@ type ViewProps = {
   openDocumentUpload: (kind: DocumentKind, ownerId?: number) => void;
   remove: (resource: Resource, id: number, label: string) => void;
   removeDocument: (kind: DocumentKind, id: number, label: string) => void;
+  openContracts: (buyerId: number) => void;
 };
 
 function dollarDefault(record: Record<string, unknown> | undefined, key: string, centsKey: string, preset?: Record<string, unknown>) {
@@ -512,6 +524,52 @@ function DocumentUploadModal({ modal, data, saving, error, onClose, onKindChange
   </div>;
 }
 
+function ContractModal({ modal, data, saving, error, onClose, onSubmit, onOpenPortal }: {
+  modal: Exclude<ContractModalState, null>;
+  data: DataSet;
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onOpenPortal: () => void;
+}) {
+  const buyer = data.buyers.find((item) => item.id === modal.buyerId);
+  const puppies = data.puppies.filter((puppy) => puppy.buyer_id === modal.buyerId);
+  const [puppyId, setPuppyId] = useState(puppies[0]?.id ?? 0);
+  const selectedPuppy = puppies.find((puppy) => puppy.id === puppyId) ?? puppies[0];
+  const paid = data.transactions.filter((item) => item.buyer_id === modal.buyerId && item.type === "Payment" && item.status === "Paid" && (!item.puppy_id || item.puppy_id === selectedPuppy?.id)).reduce((sum, item) => sum + item.amount_cents, 0);
+  const existingContracts = data.buyer_documents.filter((document) => document.buyer_id === modal.buyerId && ["Bill of Sale", "Health Guarantee"].includes(document.document_type));
+  const [salePrice, setSalePrice] = useState(String((selectedPuppy?.price_cents ?? 0) / 100));
+  const copyPortal = async () => {
+    if (!modal.portalUrl) return;
+    await navigator.clipboard.writeText(modal.portalUrl);
+  };
+
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="contract-modal-title">
+    <form className="modal contract-modal" onSubmit={onSubmit}>
+      <header><span>Contract center</span><h2 id="contract-modal-title">Bill of Sale and Health Guarantee</h2><button className="icon-button" type="button" onClick={onClose} aria-label="Close contracts"><X size={18} /></button></header>
+      <div className="contract-modal-body">
+        <div className="contract-recipient"><span><b>{buyer ? fullName(buyer) : "Family not found"}</b><small>{[buyer?.phone, buyer?.email].filter(Boolean).join(" / ") || "No contact information recorded"}</small></span><Status tone={existingContracts.some((document) => document.title.startsWith("Signed ")) ? "good" : "neutral"}>{`${existingContracts.length} stored`}</Status></div>
+        {error && <div className="inline-error">{error}</div>}
+        {modal.portalUrl && <div className="portal-link-result"><FileSignature size={22} /><div><b>Puppy portal ready</b><p>The family can review, sign, and retain both documents at this private link.</p><input aria-label="Puppy portal link" readOnly value={modal.portalUrl} /></div><button type="button" onClick={() => void copyPortal()}>Copy link</button><a href={modal.portalUrl} target="_blank" rel="noreferrer">Open portal <ExternalLink size={15} /></a></div>}
+        {!puppies.length ? <div className="inline-notice">Assign a puppy to this family before creating contracts.</div> : <>
+          <div className="form-grid contract-fields">
+            <label><span>Assigned puppy</span><select name="puppy_id" value={selectedPuppy?.id ?? ""} onChange={(event) => { const next = Number(event.target.value); setPuppyId(next); const puppy = puppies.find((item) => item.id === next); setSalePrice(String((puppy?.price_cents ?? 0) / 100)); }} required>{puppies.map((puppy) => <option key={puppy.id} value={puppy.id}>{puppy.name}</option>)}</select></label>
+            <label><span>Purchase price</span><input name="sale_price" type="number" min="0" step="0.01" value={salePrice} onChange={(event) => setSalePrice(event.target.value)} required /></label>
+            <label><span>Deposit and payments recorded</span><input name="deposit_amount" type="number" min="0" step="0.01" defaultValue={(paid / 100).toFixed(2)} /></label>
+            <label><span>Balance due date</span><input name="balance_due_date" type="date" /></label>
+            <label><span>Transfer or pickup date</span><input name="transfer_date" type="date" /></label>
+            <label><span>Required veterinary exam</span><div className="field-with-unit"><input name="exam_hours" type="number" min="1" max="336" defaultValue="72" required /><small>hours</small></div></label>
+            <label><span>Health guarantee period</span><div className="field-with-unit"><input name="guarantee_months" type="number" min="1" max="120" defaultValue="12" required /><small>months</small></div></label>
+          </div>
+          <details className="contract-terms"><summary>Review and edit contract language</summary><label><span>Bill of Sale terms</span><textarea name="bill_terms" rows={13} defaultValue={billOfSaleTerms.join("\n\n")} /></label><label><span>Health Guarantee terms</span><textarea name="health_terms" rows={15} defaultValue={healthGuaranteeTerms(72, 12).join("\n\n")} /></label><small>Each paragraph becomes a numbered clause in the generated PDF. Review these terms with your attorney before production use.</small></details>
+        </>}
+      </div>
+      <footer><button type="button" onClick={onClose}>Close</button>{existingContracts.length > 0 && <button type="button" onClick={onOpenPortal} disabled={saving}>Open existing portal</button>}<button className="primary-action" disabled={saving || !puppies.length}><FileSignature size={16} /> {saving ? "Preparing..." : "Create both documents"}</button></footer>
+    </form>
+  </div>;
+}
+
 export default function Home() {
   const [view, setView] = useState<View>("Command");
   const [data, setData] = useState<DataSet>(emptyData);
@@ -520,7 +578,9 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [documentModal, setDocumentModal] = useState<DocumentModalState>(null);
+  const [contractModal, setContractModal] = useState<ContractModalState>(null);
   const [uploadError, setUploadError] = useState("");
+  const [contractError, setContractError] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
   const analytics = useAnalytics(data);
@@ -550,6 +610,10 @@ export default function Home() {
   const openDocumentUpload = (kind: DocumentKind, ownerId?: number) => {
     setUploadError("");
     setDocumentModal({ kind, ownerId });
+  };
+  const openContracts = (buyerId: number) => {
+    setContractError("");
+    setContractModal({ buyerId });
   };
   async function submitRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -613,6 +677,40 @@ export default function Home() {
     setToast("Document deleted");
     await loadData();
   }
+  async function submitContracts(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!contractModal) return;
+    setSaving(true);
+    setContractError("");
+    const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+    try {
+      const response = await fetch("/api/contracts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...values, buyer_id: contractModal.buyerId }) });
+      const payload = await response.json() as { portalUrl?: string; error?: string };
+      if (!response.ok || !payload.portalUrl) throw new Error(payload.error || "Unable to prepare the contract package.");
+      setContractModal({ ...contractModal, portalUrl: payload.portalUrl });
+      setToast("Contracts prepared");
+      await loadData();
+    } catch (contractFailure) {
+      setContractError(friendlyError(contractFailure, "Unable to prepare the contract package."));
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function openExistingPortal() {
+    if (!contractModal) return;
+    setSaving(true);
+    setContractError("");
+    try {
+      const response = await fetch("/api/contracts/portal-link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ buyer_id: contractModal.buyerId }) });
+      const payload = await response.json() as { portalUrl?: string; error?: string };
+      if (!response.ok || !payload.portalUrl) throw new Error(payload.error || "Unable to open the puppy portal.");
+      setContractModal({ ...contractModal, portalUrl: payload.portalUrl });
+    } catch (portalFailure) {
+      setContractError(friendlyError(portalFailure, "Unable to open the puppy portal."));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const searchResults = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -629,7 +727,7 @@ export default function Home() {
     ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query)).slice(0, 8);
   }, [data, search]);
 
-  const activeViewProps = { data, openCreate, openEdit, openDocumentUpload, remove, removeDocument };
+  const activeViewProps = { data, openCreate, openEdit, openDocumentUpload, remove, removeDocument, openContracts };
   const quickResource = view === "Calendar" || view === "Care" || view === "CRM" ? "events" : view === "Families" || view === "Comms" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
   const viewCopy: Record<View, { title: string; text: string }> = {
     Command: { title: "Operating command", text: "Control surface for every record in the program." },
@@ -663,6 +761,7 @@ export default function Home() {
     </main>
     {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}
     {documentModal && <DocumentUploadModal modal={documentModal} data={data} saving={saving} error={uploadError} onClose={() => setDocumentModal(null)} onKindChange={(kind) => setDocumentModal({ kind })} onSubmit={submitDocument} />}
+    {contractModal && <ContractModal modal={contractModal} data={data} saving={saving} error={contractError} onClose={() => setContractModal(null)} onSubmit={submitContracts} onOpenPortal={() => void openExistingPortal()} />}
     {toast && <div className="toast">{toast}</div>}
   </div>;
 }

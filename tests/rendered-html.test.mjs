@@ -155,3 +155,26 @@ test("ships the caller CRM and complete recognized and public voice menus", asyn
   assert.match(env, /TWILIO_AUTH_TOKEN/);
   assert.match(env, /SWVAOS_CRM_API_KEY/);
 });
+
+test("generates e-signature contracts and retains them in the puppy portal", async () => {
+  const [page, contracts, pdf, portal, signaturePage, env] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("db/contracts.ts", root), "utf8"),
+    readFile(new URL("lib/contract-pdf.ts", root), "utf8"),
+    readFile(new URL("app/portal/[token]/page.tsx", root), "utf8"),
+    readFile(new URL("app/portal/[token]/contracts/[id]/page.tsx", root), "utf8"),
+    readFile(new URL(".env.example", root), "utf8"),
+  ]);
+
+  assert.match(page, /Bill of Sale and Health Guarantee/);
+  assert.match(page, /Create both documents/);
+  assert.match(page, /Open existing portal/);
+  assert.match(contracts, /prepareContractPackage/);
+  assert.match(contracts, /buyer_document_puppies/);
+  assert.match(contracts, /SHA-256/);
+  assert.match(pdf, /SIGNED COPY/);
+  assert.match(portal, /Agreements and signatures/);
+  assert.match(signaturePage, /intend my typed name to be my electronic signature/);
+  assert.doesNotMatch(`${page}${portal}${signaturePage}`, /localStorage|sessionStorage/);
+  assert.match(env, /SWVAOS_PORTAL_SECRET/);
+});
