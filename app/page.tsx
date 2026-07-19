@@ -15,14 +15,21 @@ import {
   LayoutDashboard,
   MessagesSquare,
   PackageSearch,
+  ClipboardCheck,
+  MessageSquareText,
   PhoneCall,
   PhoneIncoming,
+  PhoneMissed,
+  PhoneOutgoing,
   Plus,
   ReceiptText,
+  Route,
   Search as SearchIcon,
   Trash2,
   Upload,
+  UserRound,
   UsersRound,
+  Voicemail,
   WalletCards,
   X,
   type LucideIcon,
@@ -318,6 +325,9 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
   const callers = useMemo(() => data.buyers.filter((buyer) => buyer.phone).sort((left, right) => fullName(left).localeCompare(fullName(right))), [data.buyers]);
   const [selectedBuyerId, setSelectedBuyerId] = useState<number | null>(callers[0]?.id ?? null);
   const [callerSearch, setCallerSearch] = useState("");
+  const [inboxFilter, setInboxFilter] = useState<"All" | "Calls" | "Messages" | "Requests">("All");
+  const [selectedInteractionId, setSelectedInteractionId] = useState<number | null>(null);
+  const [routingReady, setRoutingReady] = useState<boolean | null>(null);
   const selectedBuyer = data.buyers.find((buyer) => buyer.id === selectedBuyerId) ?? callers[0] ?? null;
 
   const filteredCallers = callers.filter((buyer) => `${fullName(buyer)} ${buyer.phone} ${buyer.email} ${buyer.city} ${buyer.state}`.toLowerCase().includes(callerSearch.trim().toLowerCase()));
@@ -333,17 +343,62 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
   const calls = selectedBuyer ? data.events.filter((event) => event.event_type === "Call" && event.related_type === "buyers" && event.related_id === selectedBuyer.id).sort((left, right) => `${right.event_date}${right.event_time ?? ""}`.localeCompare(`${left.event_date}${left.event_time ?? ""}`)) : [];
   const unmatchedCalls = data.events.filter((event) => event.event_type === "Call" && event.related_type === "caller");
   const contractDocuments = selectedBuyer ? data.buyer_documents.filter((document) => document.buyer_id === selectedBuyer.id && ["Bill of Sale", "Health Guarantee"].includes(document.document_type)) : [];
-  const knownMenu = ["Balance, payments, and payment-plan options", "Pickup, delivery, and scheduling", "Reservation details and next steps", "Application and approval status", "Leave a message", "Speak with someone", "Repeat menu"];
-  const publicMenu = ["Available puppies", "Submitted application help", "Reserved puppy help", "Pickup or delivery questions", "Pup-Lift information", "Chihuahua HQ information", "Speak with someone"];
+  const knownMenu = [
+    ["1", "Account and payments", "Balance, payments, due dates, and active payment plans"],
+    ["2", "Pickup or delivery", "Scheduling and assigned-puppy transportation context"],
+    ["3", "Puppy details", "Assigned puppy profile and latest published update"],
+    ["4", "Application status", "Current family approval or placement stage"],
+    ["5", "Leave a message", "Records a message and connects it to the family account"],
+    ["6", "Speak with someone", "Connects the caller to the configured team line"],
+    ["9", "Repeat menu", "Returns to the beginning of the recognized-caller menu"],
+  ];
+  const publicMenu = [
+    ["1", "Available puppies", "Current availability from SWVAOS records"],
+    ["2", "Application help", "Help locating a submitted family application"],
+    ["3", "Reserved puppy help", "Help locating an existing puppy reservation"],
+    ["4", "Pickup or delivery", "General transportation information"],
+    ["5", "Pup-Lift", "Current delivery-service information"],
+    ["6", "Chihuahua HQ", "Current community information"],
+    ["7", "Speak with someone", "Connects the caller to the team"],
+    ["9", "Repeat menu", "Returns to the beginning of the public menu"],
+  ];
   const callPreset = selectedBuyer ? { event_type: "Call", related_type: "buyers", related_id: selectedBuyer.id, title: `Call with ${fullName(selectedBuyer)}`, event_date: today(), location: "Phone", status: "Completed" } : {};
+  const callbackPreset = selectedBuyer ? { event_type: "Call", related_type: "buyers", related_id: selectedBuyer.id, title: `Callback - ${fullName(selectedBuyer)}`, event_date: addDays(1), location: "Phone", status: "Scheduled" } : { event_type: "Call", event_date: addDays(1), location: "Phone", status: "Scheduled" };
+  const interactions = data.events
+    .filter((event) => ["Call", "Portal Request", "Transportation"].includes(event.event_type))
+    .sort((left, right) => `${right.event_date}${right.event_time ?? ""}${right.created_at}`.localeCompare(`${left.event_date}${left.event_time ?? ""}${left.created_at}`));
+  const filteredInteractions = interactions.filter((event) => {
+    if (inboxFilter === "Calls") return event.event_type === "Call" && !/message/i.test(event.title);
+    if (inboxFilter === "Messages") return event.event_type === "Call" && /message/i.test(event.title);
+    if (inboxFilter === "Requests") return ["Portal Request", "Transportation"].includes(event.event_type);
+    return true;
+  });
+  const selectedInteraction = data.events.find((event) => event.id === selectedInteractionId) ?? filteredInteractions[0] ?? null;
+  const selectedInteractionBuyer = selectedInteraction?.related_type === "buyers" ? data.buyers.find((buyer) => buyer.id === selectedInteraction.related_id) ?? null : null;
+  const interactionPhone = selectedInteraction?.notes?.match(/^Caller:\s*(.+)$/m)?.[1]?.trim() || selectedInteractionBuyer?.phone || "";
+  const interactionDetail = selectedInteraction?.notes?.replace(/^\[Family request\]\s*/i, "").replace(/^Call:\s*.+$/gm, "").replace(/^Recording(?: ID)?:\s*.+$/gm, "").trim() || "No additional details recorded.";
+  const todayCalls = interactions.filter((event) => event.event_type === "Call" && event.event_date === today());
+  const newMessages = interactions.filter((event) => /message/i.test(event.title) && ["New", "Unheard"].includes(event.status));
+  const callbacks = interactions.filter((event) => event.event_type === "Call" && ["Scheduled", "Callback", "Follow-up"].includes(event.status));
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/voice/status", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((status: { voice_webhook_configured?: boolean; caller_lookup_configured?: boolean } | null) => { if (active) setRoutingReady(Boolean(status?.voice_webhook_configured && status?.caller_lookup_configured)); })
+      .catch(() => { if (active) setRoutingReady(false); });
+    return () => { active = false; };
+  }, []);
 
   return <div className="grid crm-grid">
     <div className="metric-row panel-wide">
-      <button><span>Recognized callers</span><b>{callers.length}</b><small>Families with a phone number</small></button>
-      <button><span>Assigned puppies</span><b>{data.puppies.filter((puppy) => puppy.buyer_id).length}</b><small>Available to caller lookup</small></button>
-      <button><span>Published updates</span><b>{data.updates.filter((update) => Boolean(update.published)).length}</b><small>Ready for family accounts</small></button>
-      <button><span>Unmatched calls</span><b>{unmatchedCalls.length}</b><small>Caller records needing review</small></button>
+      <button><span>Calls today</span><b>{todayCalls.length}</b><small>{unmatchedCalls.length} unmatched caller records</small></button>
+      <button><span>New messages</span><b>{newMessages.length}</b><small>Recorded messages needing review</small></button>
+      <button><span>Callbacks</span><b>{callbacks.length}</b><small>Scheduled or marked for follow-up</small></button>
+      <button><span>Recognized families</span><b>{callers.length}</b><small>{data.puppies.filter((puppy) => puppy.buyer_id).length} assigned puppies</small></button>
     </div>
+
+    <section className="crm-routing panel-wide"><div className={routingReady ? "online" : routingReady === false ? "attention" : "checking"}><PhoneIncoming size={19} /><span><b>{routingReady ? "Phone routing online" : routingReady === false ? "Phone routing needs setup" : "Checking phone routing"}</b><small>{routingReady ? "Caller recognition, account menus, and message recording are ready." : "The CRM remains available while phone routing is checked."}</small></span></div><div><button onClick={() => openCreate("events", callPreset)}><PhoneOutgoing size={15} /> Log call</button><button onClick={() => openCreate("events", callbackPreset)}><ClipboardCheck size={15} /> Schedule callback</button></div></section>
 
     <Section eyebrow="Caller Directory" title="Recognized phone numbers" action={<button className="ghost" onClick={() => openCreate("buyers")}>Add family</button>}>
       <label className="crm-search"><SearchIcon size={16} /><input value={callerSearch} onChange={(event) => setCallerSearch(event.target.value)} placeholder="Search name or phone number" aria-label="Search caller directory" /></label>
@@ -360,6 +415,19 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
       </div> : <Empty title="No recognized callers" text="Add a family phone number to activate account matching." action="Add family" onAction={() => openCreate("buyers")} />}
     </Section>
 
+    <Section eyebrow="Interaction Inbox" title="Calls, messages, and requests" action={<button className="ghost" onClick={() => openCreate("events", callbackPreset)}><ClipboardCheck size={15} /> Callback</button>}>
+      <div className="crm-inbox-tabs">{(["All", "Calls", "Messages", "Requests"] as const).map((filter) => <button key={filter} className={inboxFilter === filter ? "active" : ""} onClick={() => { setInboxFilter(filter); setSelectedInteractionId(null); }}>{filter}<b>{filter === "All" ? interactions.length : filter === "Calls" ? interactions.filter((event) => event.event_type === "Call" && !/message/i.test(event.title)).length : filter === "Messages" ? interactions.filter((event) => event.event_type === "Call" && /message/i.test(event.title)).length : interactions.filter((event) => ["Portal Request", "Transportation"].includes(event.event_type)).length}</b></button>)}</div>
+      {filteredInteractions.length ? <div className="crm-inbox-list">{filteredInteractions.slice(0, 24).map((event) => {
+        const buyer = event.related_type === "buyers" ? data.buyers.find((candidate) => candidate.id === event.related_id) : null;
+        const Icon = event.event_type === "Transportation" ? Route : event.event_type === "Portal Request" ? MessageSquareText : /message/i.test(event.title) ? Voicemail : event.status === "Missed" ? PhoneMissed : PhoneIncoming;
+        return <button key={event.id} className={selectedInteraction?.id === event.id ? "active" : ""} onClick={() => setSelectedInteractionId(event.id)}><span><Icon size={16} /></span><span><b>{event.title}</b><small>{buyer ? fullName(buyer) : event.related_type === "caller" ? "Unrecognized caller" : "General record"} / {shortDate(event.event_date)}{event.event_time ? ` at ${event.event_time}` : ""}</small></span><Status tone={["New", "Scheduled", "Follow-up", "Callback"].includes(event.status) ? "warn" : event.status === "Failed" ? "bad" : "good"}>{event.status}</Status></button>;
+      })}</div> : <div className="crm-empty-line">No records match this inbox view.</div>}
+    </Section>
+
+    <Section eyebrow="Selected Interaction" title={selectedInteraction?.title || "Nothing selected"} action={selectedInteraction && <button className="ghost" onClick={() => openEdit("events", selectedInteraction as unknown as Record<string, unknown>)}>Edit record</button>}>
+      {selectedInteraction ? <div className="crm-interaction-detail"><div className="crm-interaction-head"><span>{selectedInteraction.event_type === "Transportation" ? <Route size={20} /> : selectedInteraction.event_type === "Portal Request" ? <MessageSquareText size={20} /> : /message/i.test(selectedInteraction.title) ? <Voicemail size={20} /> : <PhoneCall size={20} />}</span><div><b>{selectedInteractionBuyer ? fullName(selectedInteractionBuyer) : interactionPhone || "Unrecognized caller"}</b><small>{[interactionPhone, selectedInteraction.event_type, shortDate(selectedInteraction.event_date), selectedInteraction.event_time].filter(Boolean).join(" / ")}</small></div><Status tone={["New", "Scheduled", "Follow-up", "Callback"].includes(selectedInteraction.status) ? "warn" : selectedInteraction.status === "Failed" ? "bad" : "good"}>{selectedInteraction.status}</Status></div><p>{interactionDetail}</p><div>{interactionPhone && <a href={`tel:${interactionPhone}`}><PhoneCall size={15} /> Call back</a>}<button onClick={() => openCreate("events", { ...callbackPreset, related_id: selectedInteractionBuyer?.id ?? null, related_type: selectedInteractionBuyer ? "buyers" : "caller", notes: interactionPhone ? `Caller: ${interactionPhone}` : "" })}><ClipboardCheck size={15} /> Schedule callback</button>{selectedInteractionBuyer && <button onClick={() => setSelectedBuyerId(selectedInteractionBuyer.id)}><UserRound size={15} /> Open account</button>}</div></div> : <div className="crm-empty-line">Choose a call, message, or family request to review it.</div>}
+    </Section>
+
     <Section eyebrow="Assigned Records" title="Puppies and latest updates" action={selectedBuyer && assignedPuppies[0] && <button className="ghost" onClick={() => openCreate("updates", { puppy_id: assignedPuppies[0].id, published: true })}>Add update</button>}>
       {assignedPuppies.length ? <div className="crm-puppies">{assignedPuppies.map((puppy) => {
         const latest = updates.find((update) => update.puppy_id === puppy.id);
@@ -374,17 +442,11 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
       })}</div> : <div className="crm-empty-line">No Bill of Sale or Health Guarantee has been prepared for this caller yet.</div>}
     </Section>
 
-    <Section eyebrow="Call History" title="Conversations and messages" action={selectedBuyer && <button className="ghost" onClick={() => openCreate("events", callPreset)}><PhoneIncoming size={15} /> New entry</button>}>
+    <Section eyebrow="Account History" title="Conversations and messages" action={selectedBuyer && <button className="ghost" onClick={() => openCreate("events", callPreset)}><PhoneIncoming size={15} /> New entry</button>}>
       {calls.length ? <div className="crm-history">{calls.slice(0, 8).map((call) => <button key={call.id} onClick={() => openEdit("events", call as unknown as Record<string, unknown>)}><span><b>{call.title}</b><small>{shortDate(call.event_date)}{call.event_time ? ` / ${call.event_time}` : ""}</small></span><Status tone={call.status === "Completed" ? "good" : "neutral"}>{call.status}</Status><p>{call.notes || "No notes recorded"}</p></button>)}</div> : <div className="crm-empty-line">No calls or recorded messages are connected to this account yet.</div>}
     </Section>
 
-    <Section eyebrow="Recognized Caller Flow" title="Account-aware voice menu">
-      <div className="crm-menu-list">{knownMenu.map((item, index) => <span key={item}><b>{index === knownMenu.length - 1 ? 9 : index + 1}</b><small>{item}</small></span>)}</div>
-    </Section>
-
-    <Section eyebrow="Unrecognized Caller Flow" title="Public information menu">
-      <div className="crm-menu-list public">{publicMenu.map((item, index) => <span key={item}><b>{index + 1}</b><small>{item}</small></span>)}</div>
-    </Section>
+    <section className="crm-menu-console panel-wide"><header><div><span>CALLER MENUS</span><h2>Account-aware phone routing</h2><p>Recognized callers receive their own account information. New callers receive public options without exposing private records.</p></div><Status tone={routingReady ? "good" : "warn"}>{routingReady ? "Online" : "Review setup"}</Status></header><div><section><h3>Recognized caller flow</h3><div className="crm-menu-list">{knownMenu.map(([key, label, description]) => <span key={key}><b>{key}</b><small><strong>{label}</strong>{description}</small></span>)}</div></section><section><h3>Public caller flow</h3><div className="crm-menu-list public">{publicMenu.map(([key, label, description]) => <span key={key}><b>{key}</b><small><strong>{label}</strong>{description}</small></span>)}</div></section></div></section>
   </div>;
 }
 

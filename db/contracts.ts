@@ -30,6 +30,13 @@ export type ContractPackageInput = {
   healthTerms?: string[];
 };
 
+export type PortalRequestInput = {
+  kind: "support" | "transportation";
+  subject: string;
+  message: string;
+  requestedDate?: string;
+};
+
 const text = (row: Row | null | undefined, key: string) => String(row?.[key] ?? "").trim();
 const number = (row: Row | null | undefined, key: string) => Number(row?.[key] ?? 0) || 0;
 const fullName = (row: Row) => [text(row, "first_name"), text(row, "last_name")].filter(Boolean).join(" ") || text(row, "email") || `Family #${row.id}`;
@@ -299,11 +306,11 @@ export async function getPuppyPortal(token: string) {
   const puppyIds = puppies.map((puppy) => Number(puppy.id));
   const litterIds = [...new Set(puppies.map((puppy) => positiveId(puppy.litter_id)).filter((id): id is number => Boolean(id)))];
   const today = new Date().toISOString().slice(0, 10);
-  const [updates, links, litters, buyerEvents, puppyEvents] = await Promise.all([
+  const [updates, links, litters, buyerActivity, puppyEvents] = await Promise.all([
     puppyIds.length ? select<Row>("puppy_updates", `select=*&published=eq.true&puppy_id=in.(${puppyIds.join(",")})&order=created_at.desc`) : Promise.resolve([]),
     documents.length ? select<Row>("buyer_document_puppies", `select=*&document_id=in.(${documents.map((document) => document.id).join(",")})`) : Promise.resolve([]),
     litterIds.length ? select<Row>("litters", `select=*&id=in.(${litterIds.join(",")})`) : Promise.resolve([]),
-    select<Row>("events", `select=*&related_type=eq.buyers&related_id=eq.${claims.buyerId}&event_date=gte.${today}&status=neq.Completed&order=event_date.asc,event_time.asc`),
+    select<Row>("events", `select=*&related_type=eq.buyers&related_id=eq.${claims.buyerId}&order=event_date.desc,event_time.desc&limit=100`),
     puppyIds.length ? select<Row>("events", `select=*&related_type=eq.puppies&related_id=in.(${puppyIds.join(",")})&event_date=gte.${today}&status=neq.Completed&order=event_date.asc,event_time.asc`) : Promise.resolve([]),
   ]);
   const parentIds = [...new Set(litters.flatMap((litter) => [positiveId(litter.dam_id), positiveId(litter.sire_id)]).filter((id): id is number => Boolean(id)))];
@@ -324,9 +331,12 @@ export async function getPuppyPortal(token: string) {
       .sort((left, right) => String(right?.createdAt ?? "").localeCompare(String(left?.createdAt ?? "")))[0];
     return sum + Number(bill?.snapshot.salePriceCents ?? puppy.price_cents ?? 0);
   }, 0);
-  const upcomingEvents = [...buyerEvents, ...puppyEvents]
+  const upcomingEvents = [...buyerActivity.filter((event) => text(event, "event_date") >= today && text(event, "status") !== "Completed" && text(event, "event_type") !== "Portal Request"), ...puppyEvents]
     .filter((event, index, items) => items.findIndex((candidate) => Number(candidate.id) === Number(event.id)) === index)
     .sort((left, right) => `${text(left, "event_date")}${text(left, "event_time")}`.localeCompare(`${text(right, "event_date")}${text(right, "event_time")}`))
+    .slice(0, 12);
+  const requests = buyerActivity
+    .filter((event) => ["Portal Request", "Transportation"].includes(text(event, "event_type")) && text(event, "notes").startsWith("[Family request]"))
     .slice(0, 12);
   return {
     buyer: {
@@ -335,6 +345,9 @@ export async function getPuppyPortal(token: string) {
       email: text(buyer, "email"),
       phone: text(buyer, "phone"),
       location: [text(buyer, "city"), text(buyer, "state")].filter(Boolean).join(", "),
+      applicationStatus: text(buyer, "application_status") || "Inquiry",
+      preferredSex: text(buyer, "preferred_sex"),
+      preferredColor: text(buyer, "preferred_color"),
     },
     puppies: puppies.map((puppy) => {
       const litter = litters.find((candidate) => Number(candidate.id) === Number(puppy.litter_id));
@@ -348,6 +361,11 @@ export async function getPuppyPortal(token: string) {
     contracts,
     documents: documents.map((document) => ({ id: Number(document.id), title: text(document, "title"), documentType: text(document, "document_type"), fileName: text(document, "file_name"), createdAt: text(document, "created_at"), isContract: Boolean(parseContractNotes(document.notes)), puppyIds: links.filter((link) => Number(link.document_id) === document.id).map((link) => Number(link.puppy_id)) })),
     upcomingEvents: upcomingEvents.map((event) => ({ id: Number(event.id), title: text(event, "title"), eventType: text(event, "event_type"), date: text(event, "event_date"), time: text(event, "event_time"), location: text(event, "location"), status: text(event, "status"), puppyName: text(event, "related_type") === "puppies" ? text(puppies.find((puppy) => Number(puppy.id) === Number(event.related_id)), "name") : "" })),
+    requests: requests.map((event) => ({ id: Number(event.id), kind: text(event, "event_type") === "Transportation" ? "transportation" : "support", subject: text(event, "title"), status: text(event, "status"), requestedDate: text(event, "event_date"), createdAt: text(event, "created_at") })),
+    support: {
+      phone: process.env.SWVAOS_SUPPORT_PHONE?.trim() || "",
+      email: process.env.SWVAOS_SUPPORT_EMAIL?.trim() || "",
+    },
     payments: {
       saleTotalCents,
       paidCents,
@@ -355,6 +373,34 @@ export async function getPuppyPortal(token: string) {
       items: portalPayments.slice(0, 20).map((payment) => ({ id: Number(payment.id), description: text(payment, "description"), category: text(payment, "category"), method: text(payment, "method"), amountCents: number(payment, "amount_cents"), status: text(payment, "status"), dueDate: text(payment, "due_date"), paidDate: text(payment, "paid_date") })),
     },
   };
+}
+
+export async function createPortalRequest(token: string, input: PortalRequestInput) {
+  const claims = await verifyPortalToken(token);
+  if (!claims) throw new Error("This puppy portal link is invalid or has expired.");
+  const buyer = await first<Row>("buyers", `select=id&id=eq.${claims.buyerId}`);
+  if (!buyer) throw new Error("The family account was not found.");
+  const subject = input.subject.trim().replace(/\s+/g, " ").slice(0, 120);
+  const message = input.message.trim().slice(0, 2000);
+  if (subject.length < 3) throw new Error("Enter a short subject for this request.");
+  if (message.length < 5) throw new Error("Add a little more detail so the team can help.");
+  const today = new Date().toISOString().slice(0, 10);
+  const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(input.requestedDate ?? "") ? String(input.requestedDate) : today;
+  const now = new Date().toISOString();
+  const eventType = input.kind === "transportation" ? "Transportation" : "Portal Request";
+  return insert<Row>("events", {
+    title: subject,
+    event_type: eventType,
+    event_date: requestedDate,
+    event_time: null,
+    related_type: "buyers",
+    related_id: claims.buyerId,
+    location: input.kind === "transportation" ? "Pickup or delivery" : "Puppy portal",
+    status: "New",
+    notes: `[Family request]\n${message}`,
+    created_at: now,
+    updated_at: now,
+  });
 }
 
 export async function getPortalDocument(token: string, documentId: number) {

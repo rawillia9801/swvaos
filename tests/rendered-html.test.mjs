@@ -154,8 +154,8 @@ test("ships the caller CRM and complete recognized and public voice menus", asyn
 
   assert.match(page, /Caller CRM/);
   assert.match(page, /suppressHydrationWarning/);
-  assert.match(page, /Recognized Caller Flow/);
-  assert.match(page, /Unrecognized Caller Flow/);
+  assert.match(page, /Recognized caller flow/);
+  assert.match(page, /Public caller flow/);
   assert.match(page, /Assigned Records/);
   assert.match(page, /Conversations and messages/);
   assert.doesNotMatch(page, /localStorage|sessionStorage/);
@@ -200,4 +200,31 @@ test("generates e-signature contracts and retains them in the puppy portal", asy
   assert.match(signaturePage, /intend my typed name to be my electronic signature/);
   assert.doesNotMatch(`${page}${portal}${signaturePage}`, /localStorage|sessionStorage/);
   assert.match(env, /SWVAOS_PORTAL_SECRET/);
+});
+
+test("unifies phone operations and family requests inside SWVAOS", async () => {
+  const [page, portal, contracts, requestRoute, css] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/portal/[token]/page.tsx", root), "utf8"),
+    readFile(new URL("db/contracts.ts", root), "utf8"),
+    readFile(new URL("app/api/portal/[token]/requests/route.ts", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+
+  assert.match(page, /Interaction Inbox/);
+  assert.match(page, /Calls, messages, and requests/);
+  assert.match(page, /Schedule callback/);
+  assert.match(page, /Account-aware phone routing/);
+  assert.match(page, /Phone routing online/);
+  assert.match(portal, /YOUR PUPPY JOURNEY/);
+  assert.match(portal, /Pickup and transportation/);
+  assert.match(portal, /Messages and requests/);
+  assert.match(portal, /Ready for home/);
+  assert.match(portal, /Send request/);
+  assert.match(contracts, /createPortalRequest/);
+  assert.match(contracts, /\[Family request\]/);
+  assert.match(requestRoute, /createPortalRequest/);
+  assert.match(css, /family-journey\.png/);
+  assert.match(css, /\.crm-inbox-list/);
+  assert.doesNotMatch(`${page}${portal}`, /localStorage|sessionStorage/);
 });
