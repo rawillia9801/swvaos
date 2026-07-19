@@ -62,6 +62,24 @@ test("persists dog medical records and private documents", async () => {
   assert.match(schema, /create table if not exists dog_registrations/);
 });
 
+test("opens complete dog profiles with connected operations", async () => {
+  const [command, profile] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/dogs/[id]/page.tsx", root), "utf8"),
+  ]);
+
+  assert.match(command, /window\.open\(`\/dogs\/\$\{dog\.id\}`/);
+  assert.match(command, /Add registry/);
+  assert.match(command, /Add medical/);
+  assert.match(command, /Add cost/);
+  assert.match(profile, /Registries and identifiers/);
+  assert.match(profile, /Health, testing, and care/);
+  assert.match(profile, /Expenses and purchases/);
+  assert.match(profile, /Acquired from/);
+  assert.match(profile, /\/api\/dog-documents/);
+  assert.doesNotMatch(profile, /localStorage|sessionStorage/);
+});
+
 test("deploys the app directly without redirects", async () => {
   const [configuration, packageManifest, supabaseSchema, dataRoute] = await Promise.all([
     readFile(new URL("vercel.json", root), "utf8"),
