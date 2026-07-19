@@ -26,6 +26,7 @@ export type ContractPackageInput = {
   transferDate?: string;
   examHours?: number;
   guaranteeMonths?: number;
+  microToy?: boolean;
   billTerms?: string[];
   healthTerms?: string[];
 };
@@ -46,7 +47,7 @@ const isSettledRow = (row: Row) => ["Paid", "Complete"].includes(text(row, "stat
 
 function sellerDetails() {
   return {
-    name: process.env.SWVAOS_SELLER_NAME?.trim() || "Southwest Virginia Chihuahua",
+    name: process.env.SWVAOS_SELLER_NAME?.trim() || "Southwest Virginia Chihuahua LLC",
     location: process.env.SWVAOS_SELLER_LOCATION?.trim() || "Southwest Virginia",
   };
 }
@@ -173,8 +174,9 @@ export async function prepareContractPackage(input: ContractPackageInput) {
   const salePriceCents = Math.max(0, Number(input.salePriceCents ?? puppy.price_cents ?? 0));
   const depositCents = Math.max(0, Number(input.depositCents ?? paidCents));
   const balanceCents = Math.max(0, salePriceCents - depositCents);
-  const examHours = Math.max(1, Math.min(336, Number(input.examHours ?? 72)));
+  const examHours = Math.max(1, Math.min(336, Number(input.examHours ?? 240)));
   const guaranteeMonths = Math.max(1, Math.min(120, Number(input.guaranteeMonths ?? 12)));
+  const microToy = input.microToy === true;
   const seller = sellerDetails();
   const groupId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
@@ -224,6 +226,7 @@ export async function prepareContractPackage(input: ContractPackageInput) {
     transferDate: input.transferDate?.trim() || "",
     sellerName: seller.name,
     sellerLocation: seller.location,
+    microToy,
   };
   const snapshots: ContractSnapshot[] = [
     {
@@ -238,7 +241,7 @@ export async function prepareContractPackage(input: ContractPackageInput) {
       kind: "health_guarantee",
       title: `Health Guarantee - ${shared.puppyName}`,
       introduction: `This Health Guarantee describes the limited health commitments and buyer responsibilities connected to ${shared.puppyName}.`,
-      terms: input.healthTerms?.filter(Boolean) ?? healthGuaranteeTerms(examHours, guaranteeMonths),
+      terms: input.healthTerms?.filter(Boolean) ?? healthGuaranteeTerms(examHours, guaranteeMonths, microToy),
     },
   ];
   const documents = [];
@@ -412,7 +415,7 @@ export async function getPortalDocument(token: string, documentId: number) {
   return object.ok ? { document, object } : null;
 }
 
-export async function signPortalContract(token: string, documentId: number, signerName: string, ipAddress: string, userAgent: string) {
+export async function signPortalContract(token: string, documentId: number, signerName: string, ipAddress: string, userAgent: string, consent: { electronicConsent: boolean; healthAcknowledged: boolean }) {
   const claims = await verifyPortalToken(token);
   if (!claims) throw new Error("This puppy portal link is invalid or has expired.");
   const document = await first<DocumentRow>("buyer_documents", `select=*&id=eq.${documentId}&buyer_id=eq.${claims.buyerId}`);
@@ -420,16 +423,18 @@ export async function signPortalContract(token: string, documentId: number, sign
   const snapshot = parseContractNotes(document.notes);
   if (!snapshot || snapshot.buyerId !== claims.buyerId) throw new Error("The contract is not available in this portal.");
   if (snapshot.status === "signed") return contractSummary(document);
+  if (!consent.electronicConsent) throw new Error("Separately consent to use electronic records and an electronic signature.");
+  if (snapshot.kind === "health_guarantee" && !consent.healthAcknowledged) throw new Error("Acknowledge the Health Guarantee and Virginia Consumer Notice before signing.");
   const cleanedName = signerName.trim().replace(/\s+/g, " ").slice(0, 120);
   if (cleanedName.length < 3) throw new Error("Enter the buyer's full legal name.");
   const signedAt = new Date().toISOString();
-  const auditPayload = JSON.stringify({ snapshot, signerName: cleanedName, signedAt, ipAddress, userAgent });
+  const auditPayload = JSON.stringify({ snapshot, signerName: cleanedName, signedAt, ipAddress, userAgent, electronicConsent: true, healthAcknowledged: snapshot.kind === "health_guarantee" });
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(auditPayload));
   const auditHash = Buffer.from(digest).toString("hex");
   const signedSnapshot: ContractSnapshot = {
     ...snapshot,
     status: "signed",
-    signature: { signerName: cleanedName, signedAt, ipAddress: ipAddress.slice(0, 100), userAgent: userAgent.slice(0, 500), auditHash },
+    signature: { signerName: cleanedName, signedAt, ipAddress: ipAddress.slice(0, 100), userAgent: userAgent.slice(0, 500), auditHash, electronicConsent: true, ...(snapshot.kind === "health_guarantee" ? { healthAcknowledged: true as const } : {}) },
   };
   const pdf = await renderContractPdf(signedSnapshot);
   await uploadPdf(document.object_key, pdf, true);

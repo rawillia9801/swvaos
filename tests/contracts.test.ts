@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
-import { billOfSaleTerms } from "../lib/contract-templates.ts";
+import { billOfSaleTerms, healthGuaranteeTerms, virginiaConsumerNotice } from "../lib/contract-templates.ts";
+import { parseContractTerm } from "../lib/contract-format.ts";
 import { contractNotes, parseContractNotes, renderContractPdf, type ContractSnapshot } from "../lib/contract-pdf.ts";
 import { createPortalToken, verifyPortalToken } from "../lib/portal-token.ts";
 
@@ -42,6 +43,7 @@ const snapshot: ContractSnapshot = {
     ipAddress: "203.0.113.42",
     userAgent: "Test browser",
     auditHash: "64c853aa5922525b41b1fbbcc6eec5cff1c88dc6ccff828909f8c3bd4c8b79ec",
+    electronicConsent: true,
   },
 };
 
@@ -60,7 +62,31 @@ test("freezes contract data in buyer document metadata", () => {
 test("renders a signed letter-size PDF with document metadata", async () => {
   const bytes = await renderContractPdf(snapshot);
   const pdf = await PDFDocument.load(bytes);
-  assert.equal(pdf.getPageCount(), 1);
+  assert.ok(pdf.getPageCount() >= 1 && pdf.getPageCount() <= 2);
   assert.equal(pdf.getTitle(), "Bill of Sale - Bubba");
-  assert.deepEqual(pdf.getPage(0).getSize(), { width: 612, height: 792 });
+  for (const page of pdf.getPages()) {
+    assert.deepEqual(page.getSize(), { width: 612, height: 792 });
+  }
+});
+
+test("builds a sectioned Virginia health guarantee with Micro-Toy safeguards", async () => {
+  const terms = healthGuaranteeTerms(240, 12, true);
+  assert.equal(parseContractTerm(terms[0]).kind, "section");
+  assert.match(terms.join("\n"), /10 calendar days/);
+  assert.match(terms.join("\n"), /Micro-Toy Puppy/);
+  assert.match(terms.join("\n"), /does not eliminate or restrict a right or remedy that cannot legally be waived/);
+  assert.match(virginiaConsumerNotice, /Virginia Consumer Protection Act/);
+  assert.match(virginiaConsumerNotice, /within 14 days following receipt if the animal is infected with parvovirus/);
+
+  const healthSnapshot: ContractSnapshot = {
+    ...snapshot,
+    kind: "health_guarantee",
+    title: "Health Guarantee - Bubba",
+    terms,
+    microToy: true,
+    signature: { ...snapshot.signature!, healthAcknowledged: true },
+  };
+  const bytes = await renderContractPdf(healthSnapshot);
+  const pdf = await PDFDocument.load(bytes);
+  assert.ok(pdf.getPageCount() >= 4);
 });

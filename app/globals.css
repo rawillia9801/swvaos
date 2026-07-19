@@ -1578,6 +1578,7 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
 .contract-terms[open] summary { border-bottom: 1px solid #d3e3e1; }
 .contract-terms label { padding: 13px 14px 0; display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .contract-terms textarea { width: 100%; min-height: 190px; padding: 11px; resize: vertical; border: 1px solid #bfd5d2; border-radius: 7px; background: #f9fcfb; color: var(--ink); line-height: 1.45; }
+.contract-terms-reset { min-height: 36px; margin: 12px 14px 0; padding: 0 11px; border: 1px solid #9fc7c3; border-radius: 7px; background: #e7f4f2; color: #255e67; font-weight: 740; cursor: pointer; }
 .contract-terms > small { display: block; padding: 12px 14px 15px; color: #785e25; line-height: 1.45; }
 .portal-link-result {
   padding: 14px;
@@ -1799,6 +1800,13 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
 .contract-facts b { margin-top: 7px; overflow-wrap: anywhere; font-size: 13px; }
 .contract-paper ol { margin: 0; padding-left: 22px; }
 .contract-paper li { padding: 0 0 13px 6px; color: #334f56; line-height: 1.65; }
+.contract-term-list { display: grid; gap: 11px; }
+.contract-term-list h3 { margin: 16px 0 2px; padding: 10px 12px; border-left: 4px solid #18a5b5; background: #edf7f6; color: #185663; font-size: 13px; text-transform: uppercase; }
+.contract-term-list h3:first-child { margin-top: 0; }
+.contract-clause { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 9px; align-items: start; }
+.contract-clause > span { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid #b9d5d1; border-radius: 6px; background: #f0f7f6; color: #2b6871; font: 760 10px var(--font-geist-mono), monospace; }
+.contract-clause p { margin: 2px 0 0; color: #334f56; line-height: 1.65; }
+.contract-statutory-notice { padding: 16px; border: 2px solid #315c65; border-radius: 6px; background: #f7fbfa; color: #173d46; font-size: 10pt; font-weight: 800; line-height: 1.55; white-space: pre-line; }
 .signed-audit { padding: 15px; display: flex; gap: 12px; align-items: flex-start; border: 1px solid #94cbbd; border-radius: 7px; background: #e8f6f1; color: #176754; }
 .signed-audit h2 { margin-bottom: 5px !important; padding: 0 !important; border: 0 !important; color: #176754 !important; }
 .signed-audit p { margin: 0; }
@@ -1814,6 +1822,8 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
 .signature-consent { margin: 13px 0; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; align-items: start; }
 .signature-consent input { margin-top: 3px; }
 .signature-consent span { line-height: 1.45; }
+.signature-consent.health-consent, .signature-consent.electronic-consent { padding: 10px; border: 1px solid #b5d2ce; border-radius: 7px; background: #eef7f5; }
+.signature-consent.electronic-consent { border-color: #aebfe8; background: #eef3ff; }
 .signature-panel button, .signature-panel > a { width: 100%; min-height: 42px; margin-top: 9px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--blue); border-radius: 7px; background: var(--blue); color: white; font-weight: 750; text-decoration: none; cursor: pointer; }
 .signature-panel > a:last-child { border-color: #a7cac5; background: #edf7f5; color: #285d62; }
 .signature-panel form > small { margin-top: 11px; color: #846626; line-height: 1.45; }

@@ -663,6 +663,14 @@ function ContractModal({ modal, data, saving, error, onClose, onSubmit, onOpenPo
   const paid = data.transactions.filter((item) => item.buyer_id === modal.buyerId && isPaidTransaction(item) && (!item.puppy_id || item.puppy_id === selectedPuppy?.id)).reduce((sum, item) => sum + item.amount_cents, 0);
   const existingContracts = data.buyer_documents.filter((document) => document.buyer_id === modal.buyerId && ["Bill of Sale", "Health Guarantee"].includes(document.document_type));
   const [salePrice, setSalePrice] = useState(String((selectedPuppy?.price_cents ?? 0) / 100));
+  const [examDays, setExamDays] = useState(10);
+  const [guaranteeMonths, setGuaranteeMonths] = useState(12);
+  const [microToy, setMicroToy] = useState(false);
+  const [healthTermsEdited, setHealthTermsEdited] = useState(false);
+  const [healthTerms, setHealthTerms] = useState(() => healthGuaranteeTerms(240, 12, false).join("\n\n"));
+  const regenerateHealthTerms = (nextExamDays: number, nextGuaranteeMonths: number, nextMicroToy: boolean) => {
+    if (!healthTermsEdited) setHealthTerms(healthGuaranteeTerms(nextExamDays * 24, nextGuaranteeMonths, nextMicroToy).join("\n\n"));
+  };
   const copyPortal = async () => {
     if (!modal.portalUrl) return;
     await navigator.clipboard.writeText(modal.portalUrl);
@@ -684,10 +692,11 @@ function ContractModal({ modal, data, saving, error, onClose, onSubmit, onOpenPo
             <label><span>Deposit/payment date</span><input name="deposit_paid_date" type="date" defaultValue={today()} /></label>
             <label><span>Balance due date</span><input name="balance_due_date" type="date" /></label>
             <label><span>Transfer or pickup date</span><input name="transfer_date" type="date" /></label>
-            <label><span>Required veterinary exam</span><div className="field-with-unit"><input name="exam_hours" type="number" min="1" max="336" defaultValue="72" required /><small>hours</small></div></label>
-            <label><span>Health guarantee period</span><div className="field-with-unit"><input name="guarantee_months" type="number" min="1" max="120" defaultValue="12" required /><small>months</small></div></label>
+            <label><span>Required veterinary exam</span><div className="field-with-unit"><input name="exam_days" type="number" min="1" max="14" value={examDays} onChange={(event) => { const next = Number(event.target.value); setExamDays(next); regenerateHealthTerms(next, guaranteeMonths, microToy); }} required /><small>days</small></div></label>
+            <label><span>Voluntary guarantee period</span><div className="field-with-unit"><input name="guarantee_months" type="number" min="1" max="120" value={guaranteeMonths} onChange={(event) => { const next = Number(event.target.value); setGuaranteeMonths(next); regenerateHealthTerms(examDays, next, microToy); }} required /><small>months</small></div></label>
+            <label className="check wide"><input name="micro_toy" type="checkbox" checked={microToy} onChange={(event) => { const next = event.target.checked; setMicroToy(next); regenerateHealthTerms(examDays, guaranteeMonths, next); }} /><span>Designate this puppy as Micro-Toy and apply the voluntary extended-guarantee exclusion.</span></label>
           </div>
-          <details className="contract-terms"><summary>Review and edit contract language</summary><label><span>Bill of Sale terms</span><textarea name="bill_terms" rows={13} defaultValue={billOfSaleTerms.join("\n\n")} /></label><label><span>Health Guarantee terms</span><textarea name="health_terms" rows={15} defaultValue={healthGuaranteeTerms(72, 12).join("\n\n")} /></label><small>Each paragraph becomes a numbered clause in the generated PDF. Review these terms with your attorney before production use.</small></details>
+          <details className="contract-terms"><summary>Review and edit contract language</summary><label><span>Bill of Sale terms</span><textarea name="bill_terms" rows={13} defaultValue={billOfSaleTerms.join("\n\n")} /></label><label><span>Health Guarantee terms</span><textarea name="health_terms" rows={28} value={healthTerms} onChange={(event) => { setHealthTermsEdited(true); setHealthTerms(event.target.value); }} /></label><button className="contract-terms-reset" type="button" onClick={() => { setHealthTermsEdited(false); setHealthTerms(healthGuaranteeTerms(examDays * 24, guaranteeMonths, microToy).join("\n\n")); }}>Restore revised standard language</button><small>Section markers organize the signed portal agreement and PDF. The Virginia Consumer Notice is rendered in bold 10-point type. Have Virginia counsel review business-specific terms before relying on them.</small></details>
         </>}
       </div>
       <footer><button type="button" onClick={onClose}>Close</button>{existingContracts.length > 0 && <button type="button" onClick={onOpenPortal} disabled={saving}>Open existing portal</button>}<button className="primary-action" disabled={saving || !puppies.length}><FileSignature size={16} /> {saving ? "Preparing..." : "Create both documents"}</button></footer>

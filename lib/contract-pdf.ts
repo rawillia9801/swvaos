@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { parseContractTerm } from "./contract-format.ts";
 
 export type ContractKind = "bill_of_sale" | "health_guarantee";
 
@@ -8,6 +9,8 @@ export type ContractSignature = {
   ipAddress: string;
   userAgent: string;
   auditHash: string;
+  electronicConsent: true;
+  healthAcknowledged?: true;
 };
 
 export type ContractSnapshot = {
@@ -36,6 +39,7 @@ export type ContractSnapshot = {
   transferDate: string;
   sellerName: string;
   sellerLocation: string;
+  microToy?: boolean;
   title: string;
   introduction: string;
   terms: string[];
@@ -167,12 +171,27 @@ export async function renderContractPdf(snapshot: ContractSnapshot) {
   }
 
   section("Agreement terms");
-  snapshot.terms.forEach((term, index) => textBlock(`${index + 1}. ${term}`, { size: 9.2, indent: 2, gap: 7 }));
+  let clauseNumber = 0;
+  snapshot.terms.forEach((term) => {
+    const parsed = parseContractTerm(term);
+    if (parsed.kind === "section") {
+      section(parsed.text);
+      return;
+    }
+    if (parsed.kind === "notice") {
+      parsed.text.split(/\n\s*\n/).filter(Boolean).forEach((paragraph) => textBlock(paragraph, { size: 10, font: bold, indent: 2, gap: 9 }));
+      return;
+    }
+    clauseNumber += 1;
+    textBlock(`${clauseNumber}. ${parsed.text}`, { size: 9.2, indent: 2, gap: 7 });
+  });
 
+  ensure(snapshot.signature ? 140 : 65);
   section("Electronic signature");
   if (snapshot.signature) {
     textBlock(`Signed electronically by ${snapshot.signature.signerName} on ${new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeStyle: "short" }).format(new Date(snapshot.signature.signedAt))}.`, { font: bold, size: 10, gap: 4 });
-    textBlock("The signer affirmatively agreed to use an electronic signature and confirmed that the typed name represents their signature on this exact document.", { size: 8.5, color: muted, gap: 5 });
+    textBlock("The signer separately consented to conduct this transaction electronically and confirmed that the typed name represents their signature on this exact document.", { size: 8.5, color: muted, gap: 5 });
+    if (snapshot.kind === "health_guarantee" && snapshot.signature.healthAcknowledged) textBlock("The signer specifically acknowledged the health terms, care responsibilities, voluntary limitations, applicable Micro-Toy designation, and Virginia Consumer Notice.", { size: 8.5, color: muted, gap: 5 });
     textBlock(`Audit record: ${snapshot.signature.auditHash} | Network: ${snapshot.signature.ipAddress || "Unavailable"}`, { font: italic, size: 7, color: muted, gap: 2 });
   } else {
     textBlock("This document is awaiting the buyer's electronic signature in the secure puppy portal.", { font: italic, size: 9.5, color: muted });

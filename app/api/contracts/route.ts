@@ -19,8 +19,9 @@ export async function POST(request: Request) {
       depositPaidDate: String(body.deposit_paid_date ?? ""),
       balanceDueDate: String(body.balance_due_date ?? ""),
       transferDate: String(body.transfer_date ?? ""),
-      examHours: Number(body.exam_hours ?? 72),
+      examHours: Number(body.exam_days ?? 10) * 24,
       guaranteeMonths: Number(body.guarantee_months ?? 12),
+      microToy: body.micro_toy === true || body.micro_toy === "on",
       billTerms: terms(body.bill_terms),
       healthTerms: terms(body.health_terms),
     });

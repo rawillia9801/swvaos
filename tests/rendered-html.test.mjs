@@ -175,12 +175,14 @@ test("ships the caller CRM and complete recognized and public voice menus", asyn
 });
 
 test("generates e-signature contracts and retains them in the puppy portal", async () => {
-  const [page, contracts, pdf, portal, signaturePage, env] = await Promise.all([
+  const [page, contracts, pdf, templates, portal, signaturePage, signatureRoute, env] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("db/contracts.ts", root), "utf8"),
     readFile(new URL("lib/contract-pdf.ts", root), "utf8"),
+    readFile(new URL("lib/contract-templates.ts", root), "utf8"),
     readFile(new URL("app/portal/[token]/page.tsx", root), "utf8"),
     readFile(new URL("app/portal/[token]/contracts/[id]/page.tsx", root), "utf8"),
+    readFile(new URL("app/api/portal/[token]/contracts/[id]/sign/route.ts", root), "utf8"),
     readFile(new URL(".env.example", root), "utf8"),
   ]);
 
@@ -197,7 +199,14 @@ test("generates e-signature contracts and retains them in the puppy portal", asy
   assert.match(portal, /Family account details/);
   assert.match(portal, /Additional documents/);
   assert.match(portal, /Upcoming dates and next steps/);
-  assert.match(signaturePage, /intend my typed name to be my electronic signature/);
+  assert.match(page, /Designate this puppy as Micro-Toy/);
+  assert.match(page, /exam_days/);
+  assert.match(templates, /Virginia Consumer Protection Act/);
+  assert.match(templates, /within 14 days following receipt if the animal is infected with parvovirus/);
+  assert.match(signaturePage, /separately agree to conduct this transaction electronically/);
+  assert.match(signaturePage, /Virginia Consumer Notice/);
+  assert.match(signatureRoute, /electronic_consent/);
+  assert.match(signatureRoute, /health_acknowledged/);
   assert.doesNotMatch(`${page}${portal}${signaturePage}`, /localStorage|sessionStorage/);
   assert.match(env, /SWVAOS_PORTAL_SECRET/);
 });
