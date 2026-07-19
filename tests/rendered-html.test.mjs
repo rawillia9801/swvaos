@@ -135,6 +135,7 @@ test("ships the caller CRM and complete recognized and public voice menus", asyn
   ]);
 
   assert.match(page, /Caller CRM/);
+  assert.match(page, /suppressHydrationWarning/);
   assert.match(page, /Recognized Caller Flow/);
   assert.match(page, /Unrecognized Caller Flow/);
   assert.match(page, /Assigned Records/);
