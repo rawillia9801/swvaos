@@ -81,6 +81,13 @@ test("opens complete dog profiles with connected operations", async () => {
   assert.doesNotMatch(profile, /localStorage|sessionStorage/);
 });
 
+test("allows buyer records without an email address", async () => {
+  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+
+  assert.match(page, /Field label="Email \(optional\)" name="email" type="email" record=\{record\} preset=\{preset\} \/>/);
+  assert.doesNotMatch(page, /label="Email" name="email"[^>]*required/);
+});
+
 test("deploys the app directly without redirects", async () => {
   const [configuration, packageManifest, supabaseSchema, dataRoute] = await Promise.all([
     readFile(new URL("vercel.json", root), "utf8"),
