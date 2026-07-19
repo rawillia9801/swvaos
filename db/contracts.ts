@@ -34,6 +34,8 @@ const text = (row: Row | null | undefined, key: string) => String(row?.[key] ?? 
 const number = (row: Row | null | undefined, key: string) => Number(row?.[key] ?? 0) || 0;
 const fullName = (row: Row) => [text(row, "first_name"), text(row, "last_name")].filter(Boolean).join(" ") || text(row, "email") || `Family #${row.id}`;
 const positiveId = (value: unknown) => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
+const isPaymentRow = (row: Row) => ["Payment", "Deposit"].includes(text(row, "type"));
+const isSettledRow = (row: Row) => ["Paid", "Complete"].includes(text(row, "status"));
 
 function sellerDetails() {
   return {
@@ -157,10 +159,10 @@ export async function prepareContractPackage(input: ContractPackageInput) {
   const [dam, sire, payments] = await Promise.all([
     positiveId(litter?.dam_id) ? first<Row>("dogs", `select=id,name,registered_name&id=eq.${litter?.dam_id}`) : Promise.resolve(null),
     positiveId(litter?.sire_id) ? first<Row>("dogs", `select=id,name,registered_name&id=eq.${litter?.sire_id}`) : Promise.resolve(null),
-    select<Row>("transactions", `select=*&buyer_id=eq.${buyerId}&type=eq.Payment`),
+    select<Row>("transactions", `select=*&buyer_id=eq.${buyerId}&type=in.(Payment,Deposit)`),
   ]);
 
-  const paidCents = payments.filter((payment) => text(payment, "status") === "Paid" && (!payment.puppy_id || Number(payment.puppy_id) === puppyId)).reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
+  const paidCents = payments.filter((payment) => isSettledRow(payment) && (!payment.puppy_id || Number(payment.puppy_id) === puppyId)).reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
   const salePriceCents = Math.max(0, Number(input.salePriceCents ?? puppy.price_cents ?? 0));
   const depositCents = Math.max(0, Number(input.depositCents ?? paidCents));
   const balanceCents = Math.max(0, salePriceCents - depositCents);
@@ -249,7 +251,7 @@ export async function reconcileContractDeposits(buyerIdValue: number) {
   if (!buyerId) throw new Error("Choose a valid family account.");
   const [documents, payments] = await Promise.all([
     select<DocumentRow>("buyer_documents", `select=*&buyer_id=eq.${buyerId}&document_type=eq.Bill%20of%20Sale&order=created_at.desc`),
-    select<Row>("transactions", `select=*&buyer_id=eq.${buyerId}&type=eq.Payment`),
+    select<Row>("transactions", `select=*&buyer_id=eq.${buyerId}&type=in.(Payment,Deposit)`),
   ]);
   const latestByPuppy = new Map<number, ContractSnapshot>();
   for (const document of documents) {
@@ -258,7 +260,7 @@ export async function reconcileContractDeposits(buyerIdValue: number) {
   }
   const snapshots = [...latestByPuppy.values()];
   const contractDeposits = snapshots.reduce((sum, snapshot) => sum + snapshot.depositCents, 0);
-  const recordedPayments = payments.filter((payment) => text(payment, "status") === "Paid").reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
+  const recordedPayments = payments.filter(isSettledRow).reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
   const missingDeposit = Math.max(0, contractDeposits - recordedPayments);
   const snapshot = snapshots[0];
   if (!missingDeposit || !snapshot) return 0;
@@ -307,15 +309,15 @@ export async function getPuppyPortal(token: string) {
   const parentIds = [...new Set(litters.flatMap((litter) => [positiveId(litter.dam_id), positiveId(litter.sire_id)]).filter((id): id is number => Boolean(id)))];
   const parents = parentIds.length ? await select<Row>("dogs", `select=id,name,registered_name&id=in.(${parentIds.join(",")})`) : [];
   const contracts = documents.map((document) => contractSummary(document, links.filter((link) => Number(link.document_id) === document.id).map((link) => Number(link.puppy_id)))).filter(Boolean);
-  const payments = transactions.filter((transaction) => text(transaction, "type") === "Payment");
+  const payments = transactions.filter(isPaymentRow);
   const latestBills = new Map<number, NonNullable<(typeof contracts)[number]>>();
   for (const contract of contracts) if (contract?.kind === "bill_of_sale" && !latestBills.has(contract.puppyId)) latestBills.set(contract.puppyId, contract);
   const contractDepositCents = [...latestBills.values()].reduce((sum, contract) => sum + contract.snapshot.depositCents, 0);
-  const recordedPaidCents = payments.filter((payment) => text(payment, "status") === "Paid").reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
+  const recordedPaidCents = payments.filter(isSettledRow).reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
   const legacyDepositCents = Math.max(0, contractDepositCents - recordedPaidCents);
   const portalPayments = legacyDepositCents > 0 ? [{ id: -1, description: "Puppy deposit", category: "Deposit", method: "Contract record", amount_cents: legacyDepositCents, status: "Paid", due_date: null, paid_date: [...latestBills.values()][0]?.createdAt.slice(0, 10) ?? "" }, ...payments] : payments;
   const paidCents = recordedPaidCents + legacyDepositCents;
-  const pendingCents = payments.filter((payment) => text(payment, "status") !== "Paid").reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
+  const pendingCents = payments.filter((payment) => !isSettledRow(payment)).reduce((sum, payment) => sum + number(payment, "amount_cents"), 0);
   const saleTotalCents = puppies.reduce((sum, puppy) => {
     const bill = contracts
       .filter((contract) => contract?.kind === "bill_of_sale" && contract.puppyId === Number(puppy.id))

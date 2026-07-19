@@ -36,7 +36,7 @@ type Litter = BaseRecord & { name: string; dam_id: number | null; sire_id: numbe
 type Buyer = BaseRecord & { first_name: string; last_name: string; email: string; phone: string | null; city: string | null; state: string | null; postal_code?: string | null; application_status: string; preferred_sex: string | null; preferred_color: string | null; notes: string | null };
 type Puppy = BaseRecord & { litter_id: number; buyer_id: number | null; name: string; sex: string | null; color: string | null; birth_date: string | null; birth_weight: number | null; current_weight: number | null; status: string; price_cents: number | null; notes: string | null };
 type PaymentPlan = BaseRecord & { buyer_id: number; name: string; total_amount_cents: number; payment_amount_cents: number; term_count: number; frequency: string; next_due_date: string | null; status: string; puppy_ids: number[] };
-type Transaction = BaseRecord & { type: "Payment" | "Cost"; dog_id: number | null; buyer_id: number | null; litter_id: number | null; puppy_id: number | null; payment_plan_id: number | null; category: string | null; description: string; amount_cents: number; due_date: string | null; paid_date: string | null; status: string; method: string | null; notes: string | null };
+type Transaction = BaseRecord & { type: "Payment" | "Deposit" | "Cost"; dog_id: number | null; buyer_id: number | null; litter_id: number | null; puppy_id: number | null; payment_plan_id: number | null; category: string | null; description: string; amount_cents: number; due_date: string | null; paid_date: string | null; status: string; method: string | null; notes: string | null };
 type KennelEvent = BaseRecord & { title: string; event_type: string; event_date: string; event_time: string | null; related_type: string | null; related_id: number | null; location: string | null; status: string; notes: string | null };
 type PuppyUpdate = BaseRecord & { puppy_id: number; title: string; body: string; week_number: number | null; weight: number | null; published: number | boolean };
 type DogMedicalRecord = BaseRecord & { dog_id: number; record_type: string; title: string; record_date: string | null; provider: string | null; cost_cents: number; next_due_date: string | null; notes: string | null };
@@ -75,6 +75,8 @@ const costCategories = ["Veterinary", "Health testing", "Medication", "Food", "S
 const transactionMethods = ["Cash", "Check", "Credit card", "Debit card", "Bank transfer / ACH", "PayPal", "Venmo", "Cash App", "Zelle", "Financing", "Other"];
 const transactionStatuses = ["Pending", "Due", "Partially paid", "Paid", "Overdue", "Refunded", "Reimbursed", "Voided"];
 const transactionFeePattern = /^\[Fee charged: \$([0-9]+(?:\.[0-9]{1,2})?)\]\s*/i;
+const paymentTypes = new Set(["Payment", "Deposit"]);
+const paidStatuses = new Set(["Paid", "Complete"]);
 
 const money = (cents: number | null | undefined) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents ?? 0) / 100);
 const shortDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "Not set";
@@ -105,6 +107,8 @@ const transactionNotesWithFee = (notes: unknown, fee: unknown) => {
   if (!Number.isFinite(amount) || amount <= 0) return cleanNotes;
   return `[Fee charged: $${amount.toFixed(2)}]${cleanNotes ? `\n${cleanNotes}` : ""}`;
 };
+const isPaymentTransaction = (transaction: Transaction) => paymentTypes.has(transaction.type);
+const isPaidTransaction = (transaction: Transaction) => isPaymentTransaction(transaction) && paidStatuses.has(transaction.status);
 const includesAny = (value: string | null | undefined, terms: string[]) => terms.some((term) => (value ?? "").toLowerCase().includes(term));
 const friendlyError = (value: unknown, fallback: string) => {
   const message = value instanceof Error ? value.message : String(value || fallback);
@@ -137,12 +141,12 @@ function Empty({ title, text, action, onAction }: { title: string; text: string;
 function useAnalytics(data: DataSet) {
   return useMemo(() => {
     const activeLitters = data.litters.filter((item) => !["Completed", "Archived"].includes(item.status));
-    const payments = data.transactions.filter((item) => item.type === "Payment");
-    const paid = payments.filter((item) => item.status === "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
+    const payments = data.transactions.filter(isPaymentTransaction);
+    const paid = payments.filter(isPaidTransaction).reduce((sum, item) => sum + item.amount_cents, 0);
     const costs = data.transactions.filter((item) => item.type === "Cost").reduce((sum, item) => sum + item.amount_cents, 0);
     const fees = data.transactions.reduce((sum, item) => sum + transactionFeeCents(item), 0);
-    const outstanding = payments.filter((item) => item.status !== "Paid").reduce((sum, item) => sum + item.amount_cents, 0);
-    const overdue = payments.filter((item) => item.status !== "Paid" && item.due_date && item.due_date < today());
+    const outstanding = payments.filter((item) => !paidStatuses.has(item.status)).reduce((sum, item) => sum + item.amount_cents, 0);
+    const overdue = payments.filter((item) => !paidStatuses.has(item.status) && item.due_date && item.due_date < today());
     const dueHealth = data.dog_medical_records.filter((item) => item.next_due_date && item.next_due_date <= today());
     const unmatched = data.puppies.filter((item) => !item.buyer_id && !["Placed", "Retained"].includes(item.status));
     const placed = data.puppies.filter((item) => item.buyer_id || item.status === "Placed");
@@ -322,10 +326,10 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
   const updates = data.updates.filter((update) => puppyIds.has(update.puppy_id) && Boolean(update.published)).sort((left, right) => right.created_at.localeCompare(left.created_at));
   const plans = selectedBuyer ? data.payment_plans.filter((plan) => plan.buyer_id === selectedBuyer.id) : [];
   const transactions = selectedBuyer ? data.transactions.filter((item) => item.buyer_id === selectedBuyer.id || (item.puppy_id ? puppyIds.has(item.puppy_id) : false)) : [];
-  const payments = transactions.filter((item) => item.type === "Payment");
-  const paid = sumBy(payments.filter((item) => item.status === "Paid"), (item) => item.amount_cents);
-  const outstanding = sumBy(payments.filter((item) => item.status !== "Paid"), (item) => item.amount_cents);
-  const nextDue = payments.filter((item) => item.status !== "Paid" && item.due_date).sort((left, right) => String(left.due_date).localeCompare(String(right.due_date)))[0]?.due_date;
+  const payments = transactions.filter(isPaymentTransaction);
+  const paid = sumBy(payments.filter(isPaidTransaction), (item) => item.amount_cents);
+  const outstanding = sumBy(payments.filter((item) => !paidStatuses.has(item.status)), (item) => item.amount_cents);
+  const nextDue = payments.filter((item) => !paidStatuses.has(item.status) && item.due_date).sort((left, right) => String(left.due_date).localeCompare(String(right.due_date)))[0]?.due_date;
   const calls = selectedBuyer ? data.events.filter((event) => event.event_type === "Call" && event.related_type === "buyers" && event.related_id === selectedBuyer.id).sort((left, right) => `${right.event_date}${right.event_time ?? ""}`.localeCompare(`${left.event_date}${left.event_time ?? ""}`)) : [];
   const unmatchedCalls = data.events.filter((event) => event.event_type === "Call" && event.related_type === "caller");
   const contractDocuments = selectedBuyer ? data.buyer_documents.filter((document) => document.buyer_id === selectedBuyer.id && ["Bill of Sale", "Health Guarantee"].includes(document.document_type)) : [];
@@ -425,7 +429,7 @@ function ReportsView({ data, openCreate }: Pick<ViewProps, "data" | "openCreate"
   const a = useAnalytics(data);
   const litterReports = data.litters.map((litter) => {
     const puppies = data.puppies.filter((puppy) => puppy.litter_id === litter.id);
-    const revenue = sumBy(data.transactions.filter((item) => item.litter_id === litter.id && item.type === "Payment" && item.status === "Paid"), (item) => item.amount_cents);
+    const revenue = sumBy(data.transactions.filter((item) => item.litter_id === litter.id && isPaidTransaction(item)), (item) => item.amount_cents);
     const costs = sumBy(data.transactions.filter((item) => item.litter_id === litter.id && item.type === "Cost"), (item) => item.amount_cents);
     return { litter, puppies, revenue, costs, net: revenue - costs };
   }).sort((left, right) => right.net - left.net);
@@ -493,9 +497,10 @@ function TextArea({ label, name, record, preset }: { label: string; name: string
 }
 
 function TransactionFields({ data, record, preset }: { data: DataSet; record?: Record<string, unknown>; preset?: Record<string, unknown> }) {
-  const initialType = valueOf(record, "type", valueOf(preset, "type", "Payment")) === "Cost" ? "Cost" : "Payment";
-  const [type, setType] = useState<"Payment" | "Cost">(initialType);
-  const descriptions = type === "Payment" ? paymentDescriptions : costDescriptions;
+  const initialValue = valueOf(record, "type", valueOf(preset, "type", "Payment"));
+  const initialType = initialValue === "Cost" ? "Cost" : initialValue === "Deposit" ? "Deposit" : "Payment";
+  const [type, setType] = useState<"Payment" | "Deposit" | "Cost">(initialType);
+  const descriptions = type === "Cost" ? costDescriptions : paymentDescriptions;
   const currentCategory = valueOf(record, "category", valueOf(preset, "category"));
   const currentMethod = valueOf(record, "method", valueOf(preset, "method"));
   const currentStatus = valueOf(record, "status", valueOf(preset, "status", "Paid"));
@@ -507,9 +512,9 @@ function TransactionFields({ data, record, preset }: { data: DataSet; record?: R
   const planOptions = data.payment_plans.map((plan) => ({ value: plan.id, label: plan.name }));
 
   return <>
-    <label><span>Transaction type</span><select name="type" value={type} onChange={(event) => setType(event.target.value as "Payment" | "Cost")} required><option value="Payment">Payment received</option><option value="Cost">Cost or expense</option></select></label>
+    <label><span>Transaction type</span><select name="type" value={type} onChange={(event) => setType(event.target.value as "Payment" | "Deposit" | "Cost")} required><option value="Payment">Payment received</option><option value="Deposit">Deposit received</option><option value="Cost">Cost or expense</option></select></label>
     <label><span>Category</span><select name="category" defaultValue={currentCategory}><option value="">Choose a category</option>{currentCategory && !knownCategories.includes(currentCategory) && <option value={currentCategory}>{currentCategory}</option>}<optgroup label="Payments and income">{paymentCategories.map((category) => <option key={`payment-${category}`} value={category}>{category}</option>)}</optgroup><optgroup label="Costs and expenses">{costCategories.map((category) => <option key={`cost-${category}`} value={category}>{category}</option>)}</optgroup></select></label>
-    <label className="wide"><span>What was this for?</span><input name="description" list="transaction-description-options" defaultValue={valueOf(record, "description", valueOf(preset, "description"))} placeholder={type === "Payment" ? "Example: Puppy deposit" : "Example: Veterinary care"} required /><datalist id="transaction-description-options">{descriptions.map((description) => <option key={description} value={description} />)}</datalist><small className="field-hint">Choose a suggestion or enter a specific description.</small></label>
+    <label className="wide"><span>What was this for?</span><input name="description" list="transaction-description-options" defaultValue={valueOf(record, "description", valueOf(preset, "description"))} placeholder={type === "Cost" ? "Example: Veterinary care" : "Example: Puppy deposit"} required /><datalist id="transaction-description-options">{descriptions.map((description) => <option key={description} value={description} />)}</datalist><small className="field-hint">Choose a suggestion or enter a specific description.</small></label>
     <label><span>Transaction amount</span><input name="amount" type="number" min="0" step="0.01" inputMode="decimal" defaultValue={dollarDefault(record, "amount", "amount_cents", preset)} required /></label>
     <label><span>Fee charged</span><input name="fee_amount" type="number" min="0" step="0.01" inputMode="decimal" defaultValue={transactionFeeDefault(record, preset)} placeholder="0.00" /><small className="field-hint">Processing, card, transfer, or other fee.</small></label>
     <SelectField label="Buyer / family" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="No family" />
@@ -593,7 +598,7 @@ function ContractModal({ modal, data, saving, error, onClose, onSubmit, onOpenPo
   const puppies = data.puppies.filter((puppy) => puppy.buyer_id === modal.buyerId);
   const [puppyId, setPuppyId] = useState(puppies[0]?.id ?? 0);
   const selectedPuppy = puppies.find((puppy) => puppy.id === puppyId) ?? puppies[0];
-  const paid = data.transactions.filter((item) => item.buyer_id === modal.buyerId && item.type === "Payment" && item.status === "Paid" && (!item.puppy_id || item.puppy_id === selectedPuppy?.id)).reduce((sum, item) => sum + item.amount_cents, 0);
+  const paid = data.transactions.filter((item) => item.buyer_id === modal.buyerId && isPaidTransaction(item) && (!item.puppy_id || item.puppy_id === selectedPuppy?.id)).reduce((sum, item) => sum + item.amount_cents, 0);
   const existingContracts = data.buyer_documents.filter((document) => document.buyer_id === modal.buyerId && ["Bill of Sale", "Health Guarantee"].includes(document.document_type));
   const [salePrice, setSalePrice] = useState(String((selectedPuppy?.price_cents ?? 0) / 100));
   const copyPortal = async () => {

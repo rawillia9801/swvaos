@@ -98,8 +98,8 @@ export async function getCallerCrmProfile(phone: string): Promise<CallerCrmProfi
   const puppyIds = new Set(assignedPuppies.map((puppy) => id(puppy, "id")));
   const puppyName = (puppyId: number) => text(assignedPuppies.find((puppy) => id(puppy, "id") === puppyId) ?? {}, "name") || `Puppy ${puppyId}`;
   const buyerTransactions = buyer ? transactions.filter((transaction) => id(transaction, "buyer_id") === buyerId || puppyIds.has(id(transaction, "puppy_id"))) : [];
-  const unpaid = buyerTransactions.filter((transaction) => text(transaction, "type") === "Payment" && text(transaction, "status") !== "Paid");
-  const paid = buyerTransactions.filter((transaction) => text(transaction, "type") === "Payment" && text(transaction, "status") === "Paid");
+  const unpaid = buyerTransactions.filter((transaction) => ["Payment", "Deposit"].includes(text(transaction, "type")) && !["Paid", "Complete"].includes(text(transaction, "status")));
+  const paid = buyerTransactions.filter((transaction) => ["Payment", "Deposit"].includes(text(transaction, "type")) && ["Paid", "Complete"].includes(text(transaction, "status")));
   const today = new Date().toISOString().slice(0, 10);
   const buyerPlans = buyer ? plans.filter((plan) => id(plan, "buyer_id") === buyerId) : [];
   const nextDueDates = [...unpaid.map((transaction) => text(transaction, "due_date")), ...buyerPlans.filter((plan) => text(plan, "status") === "Active").map((plan) => text(plan, "next_due_date"))].filter(Boolean).sort();

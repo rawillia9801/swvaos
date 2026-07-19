@@ -98,6 +98,8 @@ test("provides guided transaction entry, documented fees, and readable puppy pla
   assert.match(page, /Fee charged/);
   assert.match(page, /transactionNotesWithFee/);
   assert.match(page, /Payment received/);
+  assert.match(page, /Deposit received/);
+  assert.match(page, /paidStatuses = new Set\(\["Paid", "Complete"\]\)/);
   assert.match(page, /Payment method/);
   assert.match(page, /Receipt, reference, or internal notes/);
   assert.match(page, /puppy-placement-grid/);
