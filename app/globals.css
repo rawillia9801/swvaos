@@ -1093,6 +1093,39 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
 .crm-routing > div:first-child small { margin-top: 4px; color: var(--muted); }
 .crm-routing > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .crm-routing button, .crm-interaction-detail > div:last-child button, .crm-interaction-detail > div:last-child a { min-height: 38px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #9ec8c4; border-radius: 7px; background: #edf7f5; color: #275d66; font-weight: 740; text-decoration: none; cursor: pointer; }
+.crm-dialer { min-width: 0; padding: 18px; border: 1px solid #bcd7d3; border-radius: 8px; background: rgba(248, 252, 251, .94); box-shadow: var(--shadow); }
+.crm-dialer > header { margin-bottom: 15px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.crm-dialer > header > div { min-width: 0; }
+.crm-dialer > header span:first-child { color: var(--cyan); font: 760 9px var(--font-geist-mono), monospace; }
+.crm-dialer > header h2 { margin: 5px 0 4px; font-size: 20px; }
+.crm-dialer > header p { max-width: 820px; margin: 0; color: var(--muted); line-height: 1.45; }
+.crm-dialer-body { display: grid; grid-template-columns: minmax(250px, 1fr) minmax(220px, 310px) minmax(250px, 1fr); gap: 20px; align-items: center; }
+.crm-dial-screen { min-width: 0; display: grid; gap: 8px; }
+.crm-dial-screen > label { color: #476570; font-size: 11px; font-weight: 750; }
+.crm-dial-screen > input { width: 100%; min-width: 0; height: 54px; padding: 0 14px; border: 1px solid #9fc6c2; border-radius: 8px; background: #fff; color: #153f4b; font: 700 21px var(--font-geist-mono), monospace; letter-spacing: .035em; }
+.crm-dial-screen > input:focus { outline: 3px solid rgba(33, 158, 177, .15); border-color: var(--cyan); }
+.crm-dial-screen > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.crm-dial-screen button { min-height: 35px; padding: 0 10px; border: 1px solid #b4cecb; border-radius: 7px; background: #eef6f5; color: #345d66; font-weight: 720; cursor: pointer; }
+.crm-dial-screen button:disabled { cursor: not-allowed; opacity: .45; }
+.crm-dial-match { padding: 8px 9px; border-radius: 6px; background: #e1f3ec; color: #18715c; line-height: 1.4; }
+.crm-keypad { display: grid; grid-template-columns: repeat(3, minmax(58px, 1fr)); gap: 8px; }
+.crm-keypad button { aspect-ratio: 1.3; min-height: 52px; display: grid; place-content: center; gap: 2px; border: 1px solid #b6d1ce; border-radius: 10px; background: #fff; color: #183f4a; cursor: pointer; box-shadow: 0 3px 10px rgba(35, 76, 82, .06); }
+.crm-keypad button:hover { border-color: #66aaa6; background: #eaf7f5; }
+.crm-keypad button:active { transform: translateY(1px); background: #dff1ee; }
+.crm-keypad b { font: 760 20px var(--font-geist-mono), monospace; }
+.crm-keypad small { min-height: 9px; color: #668089; font: 700 8px var(--font-geist-mono), monospace; letter-spacing: .16em; }
+.crm-dial-actions { min-width: 0; display: grid; gap: 10px; }
+.crm-dial-actions fieldset { min-width: 0; margin: 0; padding: 5px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; border: 1px solid #c4d8d5; border-radius: 8px; }
+.crm-dial-actions legend { padding: 0 5px; color: #526f77; font-size: 10px; font-weight: 750; }
+.crm-dial-actions fieldset label { min-height: 37px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: 6px; color: #526b73; font-weight: 730; cursor: pointer; }
+.crm-dial-actions fieldset label.active { border-color: #92bdb8; background: #e6f3f1; color: #176a72; }
+.crm-dial-actions fieldset input { accent-color: var(--cyan); }
+.crm-start-call { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #14715f; border-radius: 8px; background: #16836d; color: #fff; font-weight: 780; cursor: pointer; }
+.crm-start-call:disabled { cursor: not-allowed; opacity: .45; }
+.crm-dial-actions > small { color: var(--muted); font-size: 10px; line-height: 1.45; text-align: center; }
+.crm-dial-actions > p { margin: 0; padding: 9px; border-radius: 7px; font-size: 11px; line-height: 1.45; }
+.crm-dial-actions > p.good { background: #def2e9; color: #12694f; }
+.crm-dial-actions > p.bad { background: #ffebe7; color: #9a3b2d; }
 .crm-inbox-tabs { margin-bottom: 10px; padding: 4px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; border: 1px solid #d0e0de; border-radius: 7px; background: #eef5f4; }
 .crm-inbox-tabs button { min-width: 0; min-height: 35px; padding: 0 7px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
 .crm-inbox-tabs button b { min-width: 20px; padding: 2px 5px; border-radius: 999px; background: #dce9e7; color: #41616a; font: 750 9px var(--font-geist-mono), monospace; }
@@ -1135,6 +1168,20 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
   color: #0f705b;
   box-shadow: var(--shadow);
 }
+
+.login-page { min-height: 100vh; padding: 24px; display: grid; place-items: center; background-color: #eaf5f3; background-image: linear-gradient(rgba(68, 123, 128, .07) 1px, transparent 1px), linear-gradient(90deg, rgba(68, 123, 128, .07) 1px, transparent 1px); background-size: 32px 32px; }
+.login-card { width: min(100%, 430px); padding: 34px; border: 1px solid #afd0cc; border-radius: 12px; background: rgba(249, 253, 252, .97); box-shadow: 0 24px 70px rgba(28, 69, 75, .16); }
+.login-mark { width: 54px; height: 54px; margin-bottom: 20px; display: grid; place-items: center; border: 1px solid #89c2bd; border-radius: 10px; background: #dff3f0; color: #008da3; }
+.login-card > span { color: var(--cyan); font: 780 10px var(--font-geist-mono), monospace; letter-spacing: .08em; }
+.login-card h1 { margin: 7px 0 7px; color: #143d49; font-size: 28px; }
+.login-card > p { margin: 0 0 24px; color: var(--muted); line-height: 1.5; }
+.login-card form { display: grid; gap: 10px; }
+.login-card form > label { color: #3f616a; font-size: 11px; font-weight: 750; }
+.login-card form > div { height: 48px; padding: 0 12px; display: flex; align-items: center; gap: 9px; border: 1px solid #a9c9c6; border-radius: 8px; background: #fff; color: #668089; }
+.login-card form input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: #173f4b; font-size: 15px; }
+.login-card form > small { padding: 9px; border-radius: 6px; background: #ffebe7; color: #9a3b2d; line-height: 1.4; }
+.login-card form > button { min-height: 46px; margin-top: 4px; border: 1px solid #1d62ca; border-radius: 8px; background: #2869d8; color: #fff; font-weight: 780; cursor: pointer; }
+.login-card form > button:disabled { cursor: not-allowed; opacity: .55; }
 
 @media (max-width: 1250px) {
   .app-shell { grid-template-columns: 226px minmax(0, 1fr); }
@@ -1210,6 +1257,8 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
   .crm-routing { align-items: stretch; flex-direction: column; }
   .crm-routing > div:last-child { justify-content: stretch; }
   .crm-routing > div:last-child button { flex: 1; }
+  .crm-dialer-body { grid-template-columns: minmax(0, 1fr); }
+  .crm-keypad { width: min(100%, 310px); justify-self: center; }
   .crm-inbox-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .crm-inbox-list > button { grid-template-columns: 36px minmax(0, 1fr); }
   .crm-inbox-list > button > .status { grid-column: 2; justify-self: start; }

@@ -86,6 +86,7 @@ const paymentTypes = new Set(["Payment", "Deposit"]);
 const paidStatuses = new Set(["Paid", "Complete"]);
 
 const money = (cents: number | null | undefined) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents ?? 0) / 100);
+const normalizePhone = (value: string | null | undefined) => String(value ?? "").replace(/\D/g, "").slice(-10);
 const shortDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "Not set";
 const today = () => new Date().toISOString().slice(0, 10);
 const addDays = (days: number) => {
@@ -328,7 +329,15 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
   const [inboxFilter, setInboxFilter] = useState<"All" | "Calls" | "Messages" | "Requests">("All");
   const [selectedInteractionId, setSelectedInteractionId] = useState<number | null>(null);
   const [routingReady, setRoutingReady] = useState<boolean | null>(null);
+  const [dialNumber, setDialNumber] = useState("");
+  const [dialOperator, setDialOperator] = useState<"cristy" | "robert">("cristy");
+  const [dialing, setDialing] = useState(false);
+  const [dialMessage, setDialMessage] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
   const selectedBuyer = data.buyers.find((buyer) => buyer.id === selectedBuyerId) ?? callers[0] ?? null;
+  const dialTarget = dialNumber.replace(/[^\d+]/g, "");
+  const canDial = dialTarget.replace(/\D/g, "").length >= 7;
+  const dialBuyer = data.buyers.find((buyer) => buyer.phone && normalizePhone(buyer.phone) === normalizePhone(dialTarget)) ?? null;
+  const dialKeys = [["1", ""], ["2", "ABC"], ["3", "DEF"], ["4", "GHI"], ["5", "JKL"], ["6", "MNO"], ["7", "PQRS"], ["8", "TUV"], ["9", "WXYZ"], ["*", ""], ["0", "+"], ["#", ""]];
 
   const filteredCallers = callers.filter((buyer) => `${fullName(buyer)} ${buyer.phone} ${buyer.email} ${buyer.city} ${buyer.state}`.toLowerCase().includes(callerSearch.trim().toLowerCase()));
   const assignedPuppies = selectedBuyer ? data.puppies.filter((puppy) => puppy.buyer_id === selectedBuyer.id) : [];
@@ -381,6 +390,30 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
   const newMessages = interactions.filter((event) => /message/i.test(event.title) && ["New", "Unheard"].includes(event.status));
   const callbacks = interactions.filter((event) => event.event_type === "Call" && ["Scheduled", "Callback", "Follow-up"].includes(event.status));
 
+  async function startOutboundCall() {
+    if (!canDial || dialing) return;
+    setDialing(true);
+    setDialMessage(null);
+    try {
+      const response = await fetch("/api/voice/outbound", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ number: dialTarget, operator: dialOperator, buyerId: dialBuyer?.id, label: dialBuyer ? fullName(dialBuyer) : "" }),
+      });
+      const result = await response.json() as { error?: string; operator?: string };
+      if (response.status === 401) {
+        window.location.assign(`/login?next=${encodeURIComponent("/")}`);
+        return;
+      }
+      if (!response.ok) throw new Error(result.error || "Unable to start the call.");
+      setDialMessage({ tone: "good", text: `${result.operator || "The selected operator"}'s phone is ringing. Answer it to connect the call.` });
+    } catch (error) {
+      setDialMessage({ tone: "bad", text: error instanceof Error ? error.message : "Unable to start the call." });
+    } finally {
+      setDialing(false);
+    }
+  }
+
   useEffect(() => {
     let active = true;
     fetch("/api/voice/status", { cache: "no-store" })
@@ -406,6 +439,25 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
     </div>
 
     <section className="crm-routing panel-wide"><div className={routingReady ? "online" : routingReady === false ? "attention" : "checking"}><PhoneIncoming size={19} /><span><b>{routingReady ? "Phone routing online" : routingReady === false ? "Phone routing needs setup" : "Checking phone routing"}</b><small>{routingReady ? "Caller recognition, account menus, and message recording are ready." : "The CRM remains available while phone routing is checked."}</small></span></div><div><button onClick={() => openCreate("events", callPreset)}><PhoneOutgoing size={15} /> Log call</button><button onClick={() => openCreate("events", callbackPreset)}><ClipboardCheck size={15} /> Schedule callback</button></div></section>
+
+    <section className="crm-dialer panel-wide">
+      <header><div><span>OUTBOUND PHONE</span><h2>Dial a customer or call request</h2><p>Enter any number or load a family. Twilio rings the selected operator first, then connects the destination through the SWVAOS line.</p></div><Status tone={routingReady ? "good" : "warn"}>{routingReady ? "Ready" : "Check setup"}</Status></header>
+      <div className="crm-dialer-body">
+        <div className="crm-dial-screen">
+          <label htmlFor="crm-dial-number">Number to call</label>
+          <input id="crm-dial-number" type="tel" inputMode="tel" autoComplete="tel" value={dialNumber} onChange={(event) => { setDialNumber(event.target.value); setDialMessage(null); }} placeholder="Enter phone number" />
+          <div><button type="button" onClick={() => setDialNumber((current) => current.slice(0, -1))} disabled={!dialNumber}>Delete</button><button type="button" onClick={() => setDialNumber("")} disabled={!dialNumber}>Clear</button>{selectedBuyer?.phone && <button type="button" onClick={() => setDialNumber(selectedBuyer.phone || "")}>Load {fullName(selectedBuyer)}</button>}</div>
+          {dialBuyer && <small className="crm-dial-match">Matched to {fullName(dialBuyer)}. This call will be added to their history.</small>}
+        </div>
+        <div className="crm-keypad" aria-label="Phone keypad">{dialKeys.map(([digit, letters]) => <button key={digit} type="button" onClick={() => { setDialNumber((current) => `${current}${digit}`); setDialMessage(null); }} aria-label={`Dial ${digit}`}><b>{digit}</b>{letters && <small>{letters}</small>}</button>)}</div>
+        <div className="crm-dial-actions">
+          <fieldset><legend>Ring me first</legend><label className={dialOperator === "cristy" ? "active" : ""}><input type="radio" name="dial-operator" value="cristy" checked={dialOperator === "cristy"} onChange={() => setDialOperator("cristy")} /> Cristy</label><label className={dialOperator === "robert" ? "active" : ""}><input type="radio" name="dial-operator" value="robert" checked={dialOperator === "robert"} onChange={() => setDialOperator("robert")} /> Robert</label></fieldset>
+          <button className="crm-start-call" type="button" onClick={startOutboundCall} disabled={!canDial || dialing}><PhoneCall size={18} /> {dialing ? "Starting call..." : "Start outbound call"}</button>
+          <small>Answer your ringing phone; SWVAOS then connects the number above and displays the business caller ID.</small>
+          {dialMessage && <p className={dialMessage.tone}>{dialMessage.text}</p>}
+        </div>
+      </div>
+    </section>
 
     <Section eyebrow="Caller Directory" title="Recognized phone numbers" action={<button className="ghost" onClick={() => openCreate("buyers")}>Add family</button>}>
       <label className="crm-search"><SearchIcon size={16} /><input value={callerSearch} onChange={(event) => setCallerSearch(event.target.value)} placeholder="Search name or phone number" aria-label="Search caller directory" /></label>

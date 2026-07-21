@@ -1,7 +1,10 @@
 import { isResource, type ResourceInput } from "../../../db/resources";
 import { createSupabaseResource, deleteSupabaseResource, getKennelDataFromSupabase, updateSupabaseResource } from "../../../db/supabase-kennel";
+import { requireAdminSession } from "../../../lib/admin-session";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const unauthorized = requireAdminSession(request);
+  if (unauthorized) return unauthorized;
   try {
     return Response.json(await getKennelDataFromSupabase());
   } catch (error) {
@@ -10,6 +13,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = requireAdminSession(request);
+  if (unauthorized) return unauthorized;
   try {
     const body = await request.json() as { resource?: unknown; data?: ResourceInput };
     if (!isResource(body.resource) || !body.data) return Response.json({ error: "A valid resource and data are required." }, { status: 400 });
@@ -20,6 +25,8 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const unauthorized = requireAdminSession(request);
+  if (unauthorized) return unauthorized;
   try {
     const body = await request.json() as { resource?: unknown; id?: unknown; data?: ResourceInput };
     const id = Number(body.id);
@@ -31,6 +38,8 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const unauthorized = requireAdminSession(request);
+  if (unauthorized) return unauthorized;
   try {
     const url = new URL(request.url);
     const resource = url.searchParams.get("resource");
