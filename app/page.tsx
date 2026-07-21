@@ -34,8 +34,10 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { billOfSaleTerms, healthGuaranteeTerms } from "../lib/contract-templates";
+import { healthGuaranteeTerms } from "../lib/contract-templates";
 import { uploadDocumentDirect } from "../lib/direct-document-upload";
+import { defaultTemplatesConfig, type TemplatesConfig } from "../lib/template-defaults";
+import { TemplatesCenter } from "../components/templates-center";
 
 type Resource = "dogs" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates" | "dog_medical_records" | "dog_registrations";
 type BaseRecord = { id: number; created_at: string; updated_at: string };
@@ -57,7 +59,7 @@ type ModalState = { resource: Resource; record?: Record<string, unknown>; preset
 type DocumentKind = "dog" | "buyer";
 type DocumentModalState = { kind: DocumentKind; ownerId?: number } | null;
 type ContractModalState = { buyerId: number; portalUrl?: string } | null;
-type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "CRM" | "Calendar" | "Vault" | "Reports";
+type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "CRM" | "Calendar" | "Vault" | "Templates" | "Reports";
 
 const emptyData: DataSet = { dogs: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], buyer_documents: [] };
 const views: { id: View; label: string; icon: LucideIcon }[] = [
@@ -71,6 +73,7 @@ const views: { id: View; label: string; icon: LucideIcon }[] = [
   { id: "CRM", label: "Caller CRM", icon: Headphones },
   { id: "Calendar", label: "Calendar", icon: CalendarDays },
   { id: "Vault", label: "Vault", icon: FolderOpen },
+  { id: "Templates", label: "Templates", icon: FileText },
   { id: "Reports", label: "Reports", icon: ChartNoAxesCombined },
 ];
 
@@ -711,9 +714,10 @@ function DocumentUploadModal({ modal, data, saving, error, onClose, onKindChange
   </div>;
 }
 
-function ContractModal({ modal, data, saving, error, onClose, onSubmit, onOpenPortal }: {
+function ContractModal({ modal, data, templates, saving, error, onClose, onSubmit, onOpenPortal }: {
   modal: Exclude<ContractModalState, null>;
   data: DataSet;
+  templates: TemplatesConfig;
   saving: boolean;
   error: string;
   onClose: () => void;
@@ -730,8 +734,9 @@ function ContractModal({ modal, data, saving, error, onClose, onSubmit, onOpenPo
   const [examDays, setExamDays] = useState(10);
   const [guaranteeMonths, setGuaranteeMonths] = useState(12);
   const [microToy, setMicroToy] = useState(false);
-  const [healthTermsEdited, setHealthTermsEdited] = useState(false);
-  const [healthTerms, setHealthTerms] = useState(() => healthGuaranteeTerms(240, 12, false).join("\n\n"));
+  const standardHealthTerms = healthGuaranteeTerms(240, 12, false).join("\n\n");
+  const [healthTermsEdited, setHealthTermsEdited] = useState(templates.documents.health_guarantee.content !== standardHealthTerms);
+  const [healthTerms, setHealthTerms] = useState(() => templates.documents.health_guarantee.content);
   const regenerateHealthTerms = (nextExamDays: number, nextGuaranteeMonths: number, nextMicroToy: boolean) => {
     if (!healthTermsEdited) setHealthTerms(healthGuaranteeTerms(nextExamDays * 24, nextGuaranteeMonths, nextMicroToy).join("\n\n"));
   };
@@ -760,7 +765,7 @@ function ContractModal({ modal, data, saving, error, onClose, onSubmit, onOpenPo
             <label><span>Voluntary guarantee period</span><div className="field-with-unit"><input name="guarantee_months" type="number" min="1" max="120" value={guaranteeMonths} onChange={(event) => { const next = Number(event.target.value); setGuaranteeMonths(next); regenerateHealthTerms(examDays, next, microToy); }} required /><small>months</small></div></label>
             <label className="check wide"><input name="micro_toy" type="checkbox" checked={microToy} onChange={(event) => { const next = event.target.checked; setMicroToy(next); regenerateHealthTerms(examDays, guaranteeMonths, next); }} /><span>Designate this puppy as Micro-Toy and apply the voluntary extended-guarantee exclusion.</span></label>
           </div>
-          <details className="contract-terms"><summary>Review and edit contract language</summary><label><span>Bill of Sale terms</span><textarea name="bill_terms" rows={13} defaultValue={billOfSaleTerms.join("\n\n")} /></label><label><span>Health Guarantee terms</span><textarea name="health_terms" rows={28} value={healthTerms} onChange={(event) => { setHealthTermsEdited(true); setHealthTerms(event.target.value); }} /></label><button className="contract-terms-reset" type="button" onClick={() => { setHealthTermsEdited(false); setHealthTerms(healthGuaranteeTerms(examDays * 24, guaranteeMonths, microToy).join("\n\n")); }}>Restore revised standard language</button><small>Section markers organize the signed portal agreement and PDF. The Virginia Consumer Notice is rendered in bold 10-point type. Have Virginia counsel review business-specific terms before relying on them.</small></details>
+          <details className="contract-terms"><summary>Review and edit contract language</summary><label><span>Bill of Sale terms</span><textarea name="bill_terms" rows={13} defaultValue={templates.documents.bill_of_sale.content} /></label><label><span>Health Guarantee terms</span><textarea name="health_terms" rows={28} value={healthTerms} onChange={(event) => { setHealthTermsEdited(true); setHealthTerms(event.target.value); }} /></label><button className="contract-terms-reset" type="button" onClick={() => { setHealthTermsEdited(true); setHealthTerms(templates.documents.health_guarantee.content); }}>Reload saved global template</button><button className="contract-terms-reset" type="button" onClick={() => { setHealthTermsEdited(false); setHealthTerms(healthGuaranteeTerms(examDays * 24, guaranteeMonths, microToy).join("\n\n")); }}>Use generated standard language</button><small>Section markers organize the signed portal agreement and PDF. The Virginia Consumer Notice is rendered in bold 10-point type. Have Virginia counsel review business-specific terms before relying on them.</small></details>
         </>}
       </div>
       <footer><button type="button" onClick={onClose}>Close</button>{existingContracts.length > 0 && <button type="button" onClick={onOpenPortal} disabled={saving}>Open existing portal</button>}<button className="primary-action" disabled={saving || !puppies.length}><FileSignature size={16} /> {saving ? "Preparing..." : "Create both documents"}</button></footer>
@@ -771,6 +776,7 @@ function ContractModal({ modal, data, saving, error, onClose, onSubmit, onOpenPo
 export default function Home() {
   const [view, setView] = useState<View>("Command");
   const [data, setData] = useState<DataSet>(emptyData);
+  const [templates, setTemplates] = useState<TemplatesConfig>(defaultTemplatesConfig);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -786,10 +792,11 @@ export default function Home() {
   const loadData = useCallback(async () => {
     setError("");
     try {
-      const response = await fetch("/api/data", { cache: "no-store" });
-      const payload = await response.json() as DataSet & { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Unable to load records.");
+      const [dataResponse, templateResponse] = await Promise.all([fetch("/api/data", { cache: "no-store" }), fetch("/api/templates/config", { cache: "no-store" })]);
+      const payload = await dataResponse.json() as DataSet & { error?: string };
+      if (!dataResponse.ok) throw new Error(payload.error || "Unable to load records.");
       setData({ ...emptyData, ...payload });
+      if (templateResponse.ok) setTemplates(await templateResponse.json() as TemplatesConfig);
     } catch (loadError) {
       setError(friendlyError(loadError, "Unable to load records."));
     } finally {
@@ -939,6 +946,7 @@ export default function Home() {
     CRM: { title: "Caller CRM", text: "Identify callers and surface their account, assigned puppy, payment, update, and conversation records." },
     Calendar: { title: "Mission calendar", text: "Schedule care, breeding, pickup, buyer, and reminder events." },
     Vault: { title: "Document vault", text: "Access buyer files, dog files, certificates, agreements, and reports." },
+    Templates: { title: "Templates and automation", text: "Edit signed documents and the automatic emails sent throughout each customer journey." },
     Reports: { title: "Reports and intelligence", text: "Review performance, compliance, profitability, and export an operating snapshot." },
   };
   return <div className="app-shell">
@@ -955,12 +963,12 @@ export default function Home() {
       <div className="content">
         <div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div>
         {error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}
-        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "CRM" && <CallerCrmView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
+        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "CRM" && <CallerCrmView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
       </div>
     </main>
     {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}
     {documentModal && <DocumentUploadModal modal={documentModal} data={data} saving={saving} error={uploadError} onClose={() => setDocumentModal(null)} onKindChange={(kind) => setDocumentModal({ kind })} onSubmit={submitDocument} />}
-    {contractModal && <ContractModal modal={contractModal} data={data} saving={saving} error={contractError} onClose={() => setContractModal(null)} onSubmit={submitContracts} onOpenPortal={() => void openExistingPortal()} />}
+    {contractModal && <ContractModal modal={contractModal} data={data} templates={templates} saving={saving} error={contractError} onClose={() => setContractModal(null)} onSubmit={submitContracts} onOpenPortal={() => void openExistingPortal()} />}
     {toast && <div className="toast">{toast}</div>}
   </div>;
 }
