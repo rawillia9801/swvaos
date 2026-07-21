@@ -491,8 +491,12 @@ function ReportsView({ data, openCreate }: Pick<ViewProps, "data" | "openCreate"
   const a = useAnalytics(data);
   const litterReports = data.litters.map((litter) => {
     const puppies = data.puppies.filter((puppy) => puppy.litter_id === litter.id);
-    const revenue = sumBy(data.transactions.filter((item) => item.litter_id === litter.id && isPaidTransaction(item)), (item) => item.amount_cents);
-    const costs = sumBy(data.transactions.filter((item) => item.litter_id === litter.id && item.type === "Cost"), (item) => item.amount_cents);
+    const puppyIds = new Set(puppies.map((puppy) => puppy.id));
+    const buyerIds = new Set(puppies.map((puppy) => puppy.buyer_id).filter((buyerId): buyerId is number => Boolean(buyerId)));
+    const planIds = new Set(data.payment_plans.filter((plan) => plan.puppy_ids.some((puppyId) => puppyIds.has(puppyId)) || buyerIds.has(plan.buyer_id)).map((plan) => plan.id));
+    const linkedTransactions = data.transactions.filter((item) => item.litter_id === litter.id || (item.puppy_id ? puppyIds.has(item.puppy_id) : false) || (item.payment_plan_id ? planIds.has(item.payment_plan_id) : false) || (item.buyer_id ? buyerIds.has(item.buyer_id) : false));
+    const revenue = sumBy(linkedTransactions.filter(isPaidTransaction), (item) => item.amount_cents);
+    const costs = sumBy(linkedTransactions.filter((item) => item.type === "Cost"), (item) => item.amount_cents);
     return { litter, puppies, revenue, costs, net: revenue - costs };
   }).sort((left, right) => right.net - left.net);
   const reportCards = [
@@ -517,7 +521,7 @@ function ReportsView({ data, openCreate }: Pick<ViewProps, "data" | "openCreate"
       <div className="report-grid">{reportCards.map((card) => <article key={card.label} className="report-card"><span>{card.label}</span><b>{card.value}</b><small>{card.detail}</small></article>)}</div>
     </Section>
     <Section eyebrow="Litter Economics" title="Profitability by litter" action={<button className="ghost" onClick={() => openCreate("transactions", { type: "Payment" })}>Add ledger</button>}>
-      {litterReports.length ? <div className="table-list">{litterReports.map((item) => <button key={item.litter.id}><span><b>{item.litter.name}</b><small>{item.puppies.length} puppies / revenue {money(item.revenue)} / costs {money(item.costs)}</small></span><strong>{money(item.net)}</strong></button>)}</div> : <Empty title="No litter reports" text="Create litters and connect transactions to see profitability." action="Create litter" onAction={() => openCreate("litters")} />}
+      {litterReports.length ? <div className="table-list">{litterReports.map((item) => <a href={`/litters/${item.litter.id}`} key={item.litter.id}><span><b>{item.litter.name}</b><small>{item.puppies.length} puppies / revenue {money(item.revenue)} / costs {money(item.costs)}</small></span><strong>{money(item.net)}</strong></a>)}</div> : <Empty title="No litter reports" text="Create litters and connect transactions to see profitability." action="Create litter" onAction={() => openCreate("litters")} />}
     </Section>
     <Section eyebrow="Compliance Matrix" title="Documents and registrations">
       <div className="progress-list">
