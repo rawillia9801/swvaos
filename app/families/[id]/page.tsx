@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, Dog, ExternalLink, FileText, Mail, MapPin, Phone, ReceiptText, UserRound, WalletCards } from "lucide-react";
+import { FormEvent, use, useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Dog, ExternalLink, FileText, Mail, MapPin, MessageSquareText, ReceiptText, Trash2, UserRound, WalletCards } from "lucide-react";
 
 type Buyer = { id: number; first_name: string; last_name: string; email: string; phone: string | null; city: string | null; state: string | null; postal_code?: string | null; application_status: string; preferred_sex: string | null; preferred_color: string | null; notes: string | null; created_at: string; updated_at: string };
 type Puppy = { id: number; buyer_id: number | null; name: string; sex: string | null; color: string | null; birth_date: string | null; current_weight: number | null; status: string; price_cents: number | null };
@@ -10,10 +10,11 @@ type PaymentPlan = { id: number; buyer_id: number; name: string; total_amount_ce
 type Transaction = { id: number; buyer_id: number | null; puppy_id: number | null; payment_plan_id: number | null; type: string; description: string; amount_cents: number; due_date: string | null; paid_date: string | null; status: string; method: string | null };
 type BuyerDocument = { id: number; buyer_id: number; payment_plan_id: number | null; puppy_ids: number[]; document_type: string; title: string; file_name: string; size_bytes: number; created_at: string };
 type PuppyUpdate = { id: number; puppy_id: number; title: string; body: string; week_number: number | null; weight: number | null; published: number | boolean; created_at: string };
-type DataSet = { buyers: Buyer[]; puppies: Puppy[]; payment_plans: PaymentPlan[]; transactions: Transaction[]; buyer_documents: BuyerDocument[]; updates: PuppyUpdate[] };
-type Tab = "Overview" | "Application" | "Puppies" | "Payments" | "Documents" | "Updates";
+type Communication = { id: number; title: string; event_type: string; event_date: string; event_time: string | null; related_type: string | null; related_id: number | null; location: string | null; status: string; notes: string | null; created_at: string };
+type DataSet = { buyers: Buyer[]; puppies: Puppy[]; payment_plans: PaymentPlan[]; transactions: Transaction[]; buyer_documents: BuyerDocument[]; updates: PuppyUpdate[]; events: Communication[] };
+type Tab = "Overview" | "Application" | "Puppies" | "Payments" | "Communications" | "Documents" | "Updates";
 
-const tabs: Tab[] = ["Overview", "Application", "Puppies", "Payments", "Documents", "Updates"];
+const tabs: Tab[] = ["Overview", "Application", "Puppies", "Payments", "Communications", "Documents", "Updates"];
 const money = (cents: number | null | undefined) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents ?? 0) / 100);
 const date = (value: string | null | undefined) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value.slice(0, 10)}T12:00:00`)) : "Not recorded";
 const fullName = (buyer: Buyer) => [buyer.first_name, buyer.last_name].filter(Boolean).join(" ") || buyer.email || `Family #${buyer.id}`;
@@ -30,6 +31,9 @@ export default function FamilyProfilePage({ params }: { params: Promise<{ id: st
   const [tab, setTab] = useState<Tab>("Overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [savingCommunication, setSavingCommunication] = useState(false);
+  const [communicationError, setCommunicationError] = useState("");
+  const [toast, setToast] = useState("");
 
   const load = useCallback(async () => {
     setError("");
@@ -46,6 +50,7 @@ export default function FamilyProfilePage({ params }: { params: Promise<{ id: st
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2800); return () => window.clearTimeout(timer); }, [toast]);
   const family = data?.buyers.find((buyer) => buyer.id === familyId) ?? null;
   useEffect(() => { if (family) document.title = `${fullName(family)} | SWVAOS`; }, [family]);
 
@@ -57,10 +62,61 @@ export default function FamilyProfilePage({ params }: { params: Promise<{ id: st
     const transactions = data.transactions.filter((transaction) => transaction.buyer_id === family.id || (transaction.puppy_id ? puppyIds.has(transaction.puppy_id) : false)).sort((left, right) => String(right.paid_date || right.due_date || "").localeCompare(String(left.paid_date || left.due_date || "")));
     const documents = data.buyer_documents.filter((document) => document.buyer_id === family.id).sort((left, right) => right.id - left.id);
     const updates = data.updates.filter((update) => puppyIds.has(update.puppy_id)).sort((left, right) => right.id - left.id);
+    const communications = data.events.filter((event) => event.related_id === family.id && ["buyer", "family"].some((type) => (event.related_type || "").toLowerCase().includes(type)) && event.event_type.toLowerCase().startsWith("communication")).sort((left, right) => `${right.event_date}${right.event_time || ""}${right.id}`.localeCompare(`${left.event_date}${left.event_time || ""}${left.id}`));
     const paid = transactions.filter((transaction) => ["Paid", "Completed", "Cleared"].includes(transaction.status)).reduce((sum, transaction) => sum + transaction.amount_cents, 0);
     const outstanding = transactions.filter((transaction) => !["Paid", "Completed", "Cleared", "Cancelled", "Voided"].includes(transaction.status)).reduce((sum, transaction) => sum + transaction.amount_cents, 0);
-    return { puppies, plans, transactions, documents, updates, paid, outstanding };
+    return { puppies, plans, transactions, documents, updates, communications, paid, outstanding };
   }, [data, family]);
+
+  async function addCommunication(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!family) return;
+    const formElement = event.currentTarget;
+    setSavingCommunication(true);
+    setCommunicationError("");
+    const form = new FormData(formElement);
+    const channel = String(form.get("channel") || "Other");
+    const response = await fetch("/api/data", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        resource: "events",
+        data: {
+          title: String(form.get("subject") || `${channel} communication`),
+          event_type: `Communication: ${channel}`,
+          event_date: String(form.get("event_date") || new Date().toISOString().slice(0, 10)),
+          event_time: String(form.get("event_time") || "") || null,
+          related_type: "Buyer",
+          related_id: family.id,
+          location: String(form.get("direction") || "Outgoing"),
+          status: String(form.get("outcome") || "Completed"),
+          notes: String(form.get("notes") || "") || null,
+        },
+      }),
+    });
+    const payload = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setCommunicationError(payload.error || "Unable to save this communication.");
+      setSavingCommunication(false);
+      return;
+    }
+    formElement.reset();
+    setToast("Communication saved to this family");
+    await load();
+    setSavingCommunication(false);
+  }
+
+  async function removeCommunication(communication: Communication) {
+    if (!window.confirm(`Delete "${communication.title}" from this family's communication history?`)) return;
+    const response = await fetch(`/api/data?resource=events&id=${communication.id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      setCommunicationError(payload.error || "Unable to delete this communication.");
+      return;
+    }
+    setToast("Communication deleted");
+    await load();
+  }
 
   if (loading) return <main className="record-state">Loading family profile...</main>;
   if (error && !data) return <main className="record-state"><b>Unable to load this family</b><p>{error}</p><button onClick={() => void load()}>Try again</button></main>;
@@ -104,10 +160,27 @@ export default function FamilyProfilePage({ params }: { params: Promise<{ id: st
       .record-row small { margin-top: 4px; color: #6a8184; }
       .record-row strong { color: #176c60; }
       .record-notes { margin: 0; color: #49686c; line-height: 1.65; white-space: pre-wrap; }
+      .communication-form { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+      .communication-form label { min-width: 0; display: grid; gap: 6px; color: #526f73; font-size: 11px; font-weight: 750; }
+      .communication-form label.wide { grid-column: 1/-1; }
+      .communication-form input, .communication-form select, .communication-form textarea { width: 100%; min-width: 0; min-height: 42px; padding: 9px 11px; border: 1px solid #bdd5d1; border-radius: 8px; background: #f6fbfa; color: #173b43; font: inherit; }
+      .communication-form textarea { min-height: 110px; resize: vertical; }
+      .communication-form footer { grid-column: 1/-1; display: flex; justify-content: flex-end; }
+      .communication-form footer button { min-height: 42px; padding: 0 16px; border: 1px solid #087c88; border-radius: 8px; background: #087c88; color: white; font-weight: 800; cursor: pointer; }
+      .communication-form footer button:disabled { opacity: .6; cursor: wait; }
+      .communication-error { grid-column: 1/-1; padding: 11px 13px; border: 1px solid #e1a9a2; border-radius: 8px; background: #fff0ed; color: #963d35; }
+      .communication-row { align-items: start; }
+      .communication-copy { min-width: 0; }
+      .communication-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+      .communication-meta i { padding: 4px 7px; border-radius: 999px; background: #e6f2f0; color: #3f686c; font-size: 10px; font-style: normal; font-weight: 750; }
+      .communication-actions { display: flex; align-items: center; gap: 9px; }
+      .communication-actions button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #d8b0ac; border-radius: 7px; background: #fff2f0; color: #a34b42; cursor: pointer; }
+      .record-toast { position: fixed; right: 22px; bottom: 22px; z-index: 50; padding: 13px 16px; border-radius: 9px; background: #143f42; color: white; box-shadow: 0 12px 36px rgba(0,0,0,.2); }
       .record-empty, .record-state { padding: 52px 20px; color: #617c7e; text-align: center; }
       .record-empty b, .record-state b { display: block; margin-bottom: 7px; color: #24464c; }
       .record-state a, .record-state button { display: inline-flex; align-items: center; gap: 7px; padding: 10px 13px; border: 1px solid #aacbc7; border-radius: 8px; background: white; color: #1c646b; text-decoration: none; }
-      @media (max-width: 760px) { .record-page { padding: 14px; } .record-hero { grid-template-columns: auto 1fr; } .record-status { grid-column: 1/-1; width: fit-content; } .record-grid, .record-facts { grid-template-columns: 1fr; } .record-stats { grid-template-columns: repeat(2,1fr); } .record-content { padding: 14px; } }
+      @media (max-width: 900px) { .communication-form { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+      @media (max-width: 760px) { .record-page { padding: 14px; } .record-hero { grid-template-columns: auto 1fr; } .record-status { grid-column: 1/-1; width: fit-content; } .record-grid, .record-facts, .communication-form { grid-template-columns: 1fr; } .record-stats { grid-template-columns: repeat(2,1fr); } .record-content { padding: 14px; } .communication-form label.wide, .communication-form footer { grid-column: auto; } }
     `}</style>
     <div className="record-shell">
       <Link className="record-back" href="/?view=Families"><ArrowLeft size={16} /> Back to Families and placement</Link>
@@ -118,9 +191,11 @@ export default function FamilyProfilePage({ params }: { params: Promise<{ id: st
         {tab === "Application" && <div className="record-grid"><section className="record-panel"><header><UserRound size={18} /><h2>Applicant information</h2></header><div className="record-facts"><span><small>Applicant</small><b>{fullName(family)}</b></span><span><small>Application status</small><b>{family.application_status || "Inquiry"}</b></span><span><small>Email</small><b>{family.email || "Not recorded"}</b></span><span><small>Phone</small><b>{family.phone || "Not recorded"}</b></span><span><small>Location</small><b>{location}</b></span><span><small>Submitted/created</small><b>{date(family.created_at)}</b></span></div></section><section className="record-panel"><header><MapPin size={18} /><h2>Preferences</h2></header><div className="record-facts"><span><small>Preferred sex</small><b>{family.preferred_sex || "Flexible"}</b></span><span><small>Preferred color</small><b>{family.preferred_color || "Flexible"}</b></span></div><p className="record-notes">{family.notes || "No additional application responses are stored on this record."}</p></section></div>}
         {tab === "Puppies" && (profile.puppies.length ? <div className="record-list">{profile.puppies.map((puppy) => <Link className="record-row" href={`/puppies/${puppy.id}`} key={puppy.id}><span><b>{puppy.name}</b><small>{[puppy.sex, puppy.color, date(puppy.birth_date), puppy.status].filter(Boolean).join(" / ")}</small></span><strong>{money(puppy.price_cents)}</strong></Link>)}</div> : <Empty title="No puppy assigned" text="Puppies assigned to this family will appear here." />)}
         {tab === "Payments" && <div className="record-grid"><section className="record-panel wide"><header><WalletCards size={18} /><h2>Payment plans</h2></header>{profile.plans.length ? <div className="record-list">{profile.plans.map((plan) => <div className="record-row" key={plan.id}><span><b>{plan.name}</b><small>{plan.term_count} × {money(plan.payment_amount_cents)} {plan.frequency.toLowerCase()} / next due {date(plan.next_due_date)}</small></span><strong>{plan.status} · {money(plan.total_amount_cents)}</strong></div>)}</div> : <Empty title="No payment plans" text="Payment plans connected to this family will appear here." />}</section><section className="record-panel wide"><header><ReceiptText size={18} /><h2>Transaction ledger</h2></header>{profile.transactions.length ? <div className="record-list">{profile.transactions.map((transaction) => <div className="record-row" key={transaction.id}><span><b>{transaction.description}</b><small>{[transaction.type, transaction.method, transaction.status, date(transaction.paid_date || transaction.due_date)].filter(Boolean).join(" / ")}</small></span><strong>{money(transaction.amount_cents)}</strong></div>)}</div> : <Empty title="No transactions" text="Payments, deposits, charges, and scheduled amounts will appear here." />}</section></div>}
+        {tab === "Communications" && <div className="record-grid"><section className="record-panel wide"><header><MessageSquareText size={18} /><h2>Log a communication</h2></header><form className="communication-form" onSubmit={addCommunication}><label><span>Method</span><select name="channel" required defaultValue="Text message"><option>Text message</option><option>Email</option><option>Phone call</option><option>In person</option><option>Word of mouth</option><option>Client portal</option><option>Social media</option><option>Other</option></select></label><label><span>Direction</span><select name="direction" required defaultValue="Outgoing"><option>Outgoing</option><option>Incoming</option><option>Internal note</option></select></label><label><span>Date</span><input name="event_date" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label><label><span>Time</span><input name="event_time" type="time" /></label><label className="wide"><span>Subject or short summary</span><input name="subject" required placeholder="What was discussed?" /></label><label><span>Outcome</span><select name="outcome" required defaultValue="Completed"><option>Completed</option><option>Waiting for reply</option><option>Follow-up needed</option><option>No response</option><option>Resolved</option></select></label><label className="wide"><span>Notes</span><textarea name="notes" placeholder="Record the conversation, commitments, questions, follow-up steps, or other relevant details." /></label>{communicationError && <div className="communication-error">{communicationError}</div>}<footer><button disabled={savingCommunication}>{savingCommunication ? "Saving..." : "Save communication"}</button></footer></form></section><section className="record-panel wide"><header><MessageSquareText size={18} /><h2>Communication history</h2></header>{profile.communications.length ? <div className="record-list">{profile.communications.map((communication) => <article className="record-row communication-row" key={communication.id}><div className="communication-copy"><div className="communication-meta"><i>{communication.event_type.replace(/^Communication:\s*/i, "")}</i><i>{communication.location || "Direction not recorded"}</i><i>{communication.status}</i></div><b>{communication.title}</b><small>{date(communication.event_date)}{communication.event_time ? ` at ${new Date(`2000-01-01T${communication.event_time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""}</small>{communication.notes && <p className="record-notes">{communication.notes}</p>}</div><div className="communication-actions"><button onClick={() => void removeCommunication(communication)} aria-label={`Delete ${communication.title}`} title="Delete communication"><Trash2 size={15} /></button></div></article>)}</div> : <Empty title="No communications recorded" text="Text messages, emails, phone calls, in-person conversations, word-of-mouth notes, and other contact will appear here." />}</section></div>}
         {tab === "Documents" && (profile.documents.length ? <div className="record-list">{profile.documents.map((document) => <a className="record-row" href={`/api/documents/${document.id}`} target="_blank" rel="noreferrer" key={document.id}><span><b>{document.title}</b><small>{document.document_type} / {fileSize(document.size_bytes)} / added {date(document.created_at)}</small></span><ExternalLink size={17} /></a>)}</div> : <Empty title="No documents" text="Contracts, health guarantees, payment agreements, and uploaded records will appear here." />)}
         {tab === "Updates" && (profile.updates.length ? <div className="record-list">{profile.updates.map((update) => <article className="record-row" key={update.id}><span><b>{update.title}</b><small>{profile.puppies.find((puppy) => puppy.id === update.puppy_id)?.name || `Puppy #${update.puppy_id}`} / Week {update.week_number ?? "—"} / {update.published ? "Published" : "Draft"}</small><p className="record-notes">{update.body}</p></span><strong>{update.weight ? `${update.weight} lb` : date(update.created_at)}</strong></article>)}</div> : <Empty title="No family updates" text="Updates connected to this family's puppies will appear here." />)}
       </div>
     </div>
+    {toast && <div className="record-toast">{toast}</div>}
   </main>;
 }
