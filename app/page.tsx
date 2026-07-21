@@ -385,7 +385,14 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
     let active = true;
     fetch("/api/voice/status", { cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)
-      .then((status: { voice_webhook_configured?: boolean; caller_lookup_configured?: boolean } | null) => { if (active) setRoutingReady(Boolean(status?.voice_webhook_configured && status?.caller_lookup_configured)); })
+      .then((status: { voice_webhook_configured?: boolean; webhook_base_configured?: boolean; call_forwarding_configured?: boolean; caller_id_configured?: boolean } | null) => {
+        if (active) setRoutingReady(Boolean(
+          status?.voice_webhook_configured
+          && status?.webhook_base_configured
+          && status?.call_forwarding_configured
+          && status?.caller_id_configured
+        ));
+      })
       .catch(() => { if (active) setRoutingReady(false); });
     return () => { active = false; };
   }, []);
