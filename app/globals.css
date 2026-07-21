@@ -464,7 +464,7 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
   display: grid;
   gap: 8px;
 }
-.signal-list button, .table-list button, .event-stack button, .ops-list button {
+.signal-list button, .table-list button, .table-list > a, .event-stack button, .ops-list button {
   min-width: 0;
   width: 100%;
   min-height: 58px;
@@ -476,10 +476,12 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
   border: 1px solid #d2e2e0;
   border-radius: 7px;
   background: #f4f9f8;
+  color: inherit;
+  text-decoration: none;
   text-align: left;
   cursor: pointer;
 }
-.signal-list button:hover, .table-list button:hover, .event-stack button:hover, .ops-list button:hover {
+.signal-list button:hover, .table-list button:hover, .table-list > a:hover, .event-stack button:hover, .ops-list button:hover {
   border-color: #8bbab7;
   background: #eaf5f3;
 }
@@ -1381,6 +1383,33 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none !important; 
 .profile-stat-grid span { color: var(--muted); font: 700 9px var(--font-geist-mono), monospace; text-transform: uppercase; }
 .profile-stat-grid b { display: block; margin: 10px 0 4px; color: #1d5263; font: 780 23px var(--font-geist-mono), monospace; overflow-wrap: anywhere; }
 .profile-stat-grid small { color: var(--dim); font-size: 10px; }
+.entity-tabs {
+  margin: 14px 0;
+  padding: 0 12px;
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  position: sticky;
+  top: 70px;
+  z-index: 20;
+  border: 1px solid #bdd8d5;
+  border-radius: 8px;
+  background: rgba(247, 251, 250, .94);
+  backdrop-filter: blur(15px);
+}
+.entity-tabs button {
+  min-height: 50px;
+  padding: 0 15px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 740;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.entity-tabs button.active { border-bottom-color: var(--cyan); color: var(--cyan); }
+.entity-tab-content { min-height: 390px; }
 .profile-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .profile-section {
   min-width: 0;
