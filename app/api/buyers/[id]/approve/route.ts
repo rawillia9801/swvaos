@@ -1,9 +1,13 @@
 import { supabaseRequest } from "../../../../../db/supabase";
+import { requireAdminSession } from "../../../../../lib/admin-session";
+import { sendBuyerAutomation } from "../../../../../lib/automation-email";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const unauthorized = requireAdminSession(request);
+  if (unauthorized) return unauthorized;
   try {
     const { id } = await params;
     const buyerId = Number(id);
@@ -63,6 +67,11 @@ export async function POST(
       );
     }
 
+    try {
+      await sendBuyerAutomation("application_approved", buyerId, { dedupeKey: `buyer-${buyerId}-approved` });
+    } catch (emailError) {
+      console.error("Application approval email failed", emailError instanceof Error ? emailError.message : emailError);
+    }
     return Response.json({ buyer: buyers[0] });
   } catch (error) {
     return Response.json(

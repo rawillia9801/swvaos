@@ -33,6 +33,7 @@ export type PaymentAgreementInput = {
   onTimeCreditCents: number;
   autopayRequired: boolean;
   notes?: string;
+  standardTerms?: string;
 };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -171,6 +172,7 @@ export async function renderPaymentAgreementPdf(input: PaymentAgreementInput) {
     ["20. Final Acknowledgments", "The Buyer acknowledges reviewing the amount financed, APR, finance charge, total of payments, fees, due dates, payment schedule, plan type, default and cure provisions, and early-payment terms. The Buyer enters this Agreement voluntarily and believes the scheduled payments can be met."],
   ];
   for (const [title, text] of clauses) { heading(title); paragraph(text); }
+  if (input.standardTerms?.trim()) { heading("STANDARD BUSINESS TERMS"); paragraph(input.standardTerms.trim()); }
   if (input.notes?.trim()) { heading("Additional Written Terms"); paragraph(input.notes.trim()); }
 
   heading("FINANCING ACKNOWLEDGMENT");

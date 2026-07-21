@@ -1,6 +1,7 @@
 import { isResource, type ResourceInput } from "../../../db/resources";
 import { createSupabaseResource, deleteSupabaseResource, getKennelDataFromSupabase, updateSupabaseResource } from "../../../db/supabase-kennel";
 import { requireAdminSession } from "../../../lib/admin-session";
+import { sendBuyerAutomation, sendPublishedUpdate, sendTransactionReceipt } from "../../../lib/automation-email";
 
 export async function GET(request: Request) {
   const unauthorized = requireAdminSession(request);
@@ -18,7 +19,15 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as { resource?: unknown; data?: ResourceInput };
     if (!isResource(body.resource) || !body.data) return Response.json({ error: "A valid resource and data are required." }, { status: 400 });
-    return Response.json(await createSupabaseResource(body.resource, body.data), { status: 201 });
+    const created = await createSupabaseResource(body.resource, body.data);
+    try {
+      if (body.resource === "buyers" && Number(created.id) > 0) await sendBuyerAutomation("application_received", Number(created.id), { dedupeKey: `buyer-${Number(created.id)}` });
+      if (body.resource === "transactions") await sendTransactionReceipt(created);
+      if (body.resource === "updates") await sendPublishedUpdate(created, new URL(request.url).origin);
+    } catch (emailError) {
+      console.error("Automatic email failed after record creation", emailError instanceof Error ? emailError.message : emailError);
+    }
+    return Response.json(created, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to save the record." }, { status: 500 });
   }
@@ -31,7 +40,14 @@ export async function PUT(request: Request) {
     const body = await request.json() as { resource?: unknown; id?: unknown; data?: ResourceInput };
     const id = Number(body.id);
     if (!isResource(body.resource) || !Number.isInteger(id) || !body.data) return Response.json({ error: "A valid resource, id, and data are required." }, { status: 400 });
-    return Response.json(await updateSupabaseResource(body.resource, id, body.data));
+    const updated = await updateSupabaseResource(body.resource, id, body.data);
+    try {
+      if (body.resource === "transactions") await sendTransactionReceipt(updated);
+      if (body.resource === "updates") await sendPublishedUpdate(updated, new URL(request.url).origin);
+    } catch (emailError) {
+      console.error("Automatic email failed after record update", emailError instanceof Error ? emailError.message : emailError);
+    }
+    return Response.json(updated);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to update the record." }, { status: 500 });
   }

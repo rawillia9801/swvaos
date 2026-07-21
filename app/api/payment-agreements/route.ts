@@ -1,5 +1,6 @@
 import { getSupabaseConfig, supabaseRequest } from "../../../db/supabase";
 import { renderPaymentAgreementPdf, type PaymentAgreementInput } from "../../../lib/payment-agreement";
+import { getTemplatesConfig } from "../../../lib/templates-config";
 
 const cents = (value: unknown) => Math.max(0, Math.round((Number(value) || 0) * 100));
 const text = (value: unknown) => String(value ?? "").trim();
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
     const paymentPlanId = Number(planRows[0]?.id);
     if (!paymentPlanId) throw new Error("The payment plan could not be created.");
 
+    const templateConfig = await getTemplatesConfig();
     const input: PaymentAgreementInput = {
       buyerName,
       coBuyerName: text(body.co_buyer_name),
@@ -86,6 +88,7 @@ export async function POST(request: Request) {
       returnedPaymentFeeCents: cents(body.returned_payment_fee),
       onTimeCreditCents: cents(body.on_time_credit),
       autopayRequired: body.autopay_required === true,
+      standardTerms: templateConfig.documents.payment_agreement.enabled ? templateConfig.documents.payment_agreement.content : "",
       notes: text(body.notes),
     };
 

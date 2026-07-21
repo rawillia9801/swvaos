@@ -16,7 +16,7 @@ function wrap(font: PDFFont, text: string, size: number, width: number) {
   return lines;
 }
 
-export async function renderPuppyApplicationPdf() {
+export async function renderPuppyApplicationPdf(introduction = "Thank you for considering Southwest Virginia Chihuahua. This application helps us evaluate safety, care readiness, household fit, and puppy preferences. Submission does not guarantee approval or reserve a puppy.") {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -69,7 +69,7 @@ export async function renderPuppyApplicationPdf() {
   newPage();
   page.drawText("PUPPY APPLICATION", { x: margin, y, size: 20, font: bold, color: green });
   y -= 26;
-  paragraph("Thank you for considering Southwest Virginia Chihuahua. This application helps us evaluate safety, care readiness, household fit, and puppy preferences. Submission does not guarantee approval or reserve a puppy.", 9.5);
+  paragraph(introduction, 9.5);
 
   heading("1. Applicant Information");
   field("Applicant name"); field("Co-applicant name"); field("Street address"); field("City / state / ZIP");
