@@ -61,8 +61,8 @@ export async function renderPaymentAgreementPdf(input: PaymentAgreementInput) {
   const margin = 44;
   const width = 612;
   const height = 792;
-  let page: PDFPage;
-  let y: number;
+  let page!: PDFPage;
+  let y!: number;
 
   const newPage = () => {
     page = pdf.addPage([width, height]);
