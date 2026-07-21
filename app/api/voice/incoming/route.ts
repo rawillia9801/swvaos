@@ -15,7 +15,12 @@ export async function POST(request: Request) {
     const profile = await getCallerCrmProfile(phone);
     if (new URL(request.url).searchParams.get("repeat") !== "1") {
       const pupLift = isPupLiftLine(calledNumber);
-      await logCallerEvent({ phone, callSid: form.CallSid, buyerId: profile.buyer?.id, title: pupLift ? `Pup-Lift inbound call${profile.recognized ? ` - ${profile.buyer?.name}` : ""}` : profile.recognized ? `Inbound call - ${profile.buyer?.name}` : "Inbound call - unrecognized caller", status: "Completed", details: `${pupLift ? "Line: Pup-Lift Support\n" : "Line: SWVAOS Main\n"}${profile.recognized ? "Caller matched to family account." : "Caller was not matched to a family account."}` }).catch(() => null);
+      try {
+        const event = await logCallerEvent({ phone, callSid: form.CallSid, buyerId: profile.buyer?.id, title: pupLift ? `Pup-Lift inbound call${profile.recognized ? ` - ${profile.buyer?.name}` : ""}` : profile.recognized ? `Inbound call - ${profile.buyer?.name}` : "Inbound call - unrecognized caller", status: "Completed", details: `${pupLift ? "Line: Pup-Lift Support\n" : "Line: SWVAOS Main\n"}${profile.recognized ? "Caller matched to family account." : "Caller was not matched to a family account."}` });
+        console.info("[voice/incoming] Caller CRM event stored", { eventId: event?.id, callSid: form.CallSid, recognized: profile.recognized, line: pupLift ? "pup-lift" : "main" });
+      } catch (eventError) {
+        console.error("[voice/incoming] Caller CRM event failed", { callSid: form.CallSid, recognized: profile.recognized, error: eventError instanceof Error ? eventError.message : String(eventError) });
+      }
     }
     return voiceXml(incomingVoiceResponse(profile, calledNumber));
   } catch {

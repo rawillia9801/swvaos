@@ -168,6 +168,13 @@ export async function getKennelDataFromSupabase() {
   };
 }
 
+export async function getCallerActivityFromSupabase() {
+  const events = await selectSafeAll<Record<string, unknown>>("events");
+  return events
+    .filter((event) => ["Call", "Portal Request", "Transportation"].includes(textValue(event, "event_type")))
+    .sort((left, right) => `${textValue(right, "event_date")}${textValue(right, "event_time")}${textValue(right, "created_at")}`.localeCompare(`${textValue(left, "event_date")}${textValue(left, "event_time")}${textValue(left, "created_at")}`));
+}
+
 function rowFor(resource: ResourceName, data: ResourceInput) {
   const now = new Date().toISOString();
   switch (resource) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChartNoAxesCombined,
@@ -24,6 +24,7 @@ import {
   PhoneOutgoing,
   Plus,
   ReceiptText,
+  RefreshCw,
   Route,
   Search as SearchIcon,
   ShieldCheck,
@@ -95,6 +96,9 @@ const paidStatuses = new Set(["Paid", "Complete"]);
 
 const money = (cents: number | null | undefined) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents ?? 0) / 100);
 const normalizePhone = (value: string | null | undefined) => String(value ?? "").replace(/\D/g, "").slice(-10);
+const latestCallEvent = (events: KennelEvent[]) => events
+  .filter((event) => event.event_type === "Call")
+  .sort((left, right) => `${right.created_at}${right.id}`.localeCompare(`${left.created_at}${left.id}`))[0] ?? null;
 const shortDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "Not set";
 const today = () => new Date().toISOString().slice(0, 10);
 const addDays = (days: number) => {
@@ -367,7 +371,7 @@ function CommunicationsView({ data, openCreate, openEdit }: ViewProps) {
   </div>;
 }
 
-function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps) {
+function CallerCrmView({ data, openCreate, openEdit, openContracts, refreshActivity, activityRefreshing, activitySyncedAt, activityError, newCallId }: ViewProps & { refreshActivity: () => Promise<void>; activityRefreshing: boolean; activitySyncedAt: Date | null; activityError: string; newCallId: number | null }) {
   const callers = useMemo(() => data.buyers.filter((buyer) => buyer.phone).sort((left, right) => fullName(left).localeCompare(fullName(right))), [data.buyers]);
   const [selectedBuyerId, setSelectedBuyerId] = useState<number | null>(callers[0]?.id ?? null);
   const [callerSearch, setCallerSearch] = useState("");
@@ -446,6 +450,12 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
   const newMessages = interactions.filter((event) => /message/i.test(event.title) && ["New", "Unheard"].includes(event.status));
   const callbacks = interactions.filter((event) => event.event_type === "Call" && ["Scheduled", "Callback", "Follow-up"].includes(event.status));
 
+  useEffect(() => {
+    if (!newCallId) return;
+    setInboxFilter("All");
+    setSelectedInteractionId(newCallId);
+  }, [newCallId]);
+
   async function startOutboundCall() {
     if (!canDial || dialing) return;
     setDialing(true);
@@ -517,7 +527,7 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
       <button><span>Recognized families</span><b>{callers.length}</b><small>{data.puppies.filter((puppy) => puppy.buyer_id).length} assigned puppies</small></button>
     </div>
 
-    <section className="crm-routing panel-wide"><div className={routingReady ? "online" : routingReady === false ? "attention" : "checking"}><PhoneIncoming size={19} /><span><b>{routingReady ? "Phone routing online" : routingReady === false ? "Phone routing needs setup" : "Checking phone routing"}</b><small>{routingReady ? "Caller recognition, account menus, and message recording are ready." : "The CRM remains available while phone routing is checked."}</small></span></div><div><button onClick={() => openCreate("events", callPreset)}><PhoneOutgoing size={15} /> Log call</button><button onClick={() => openCreate("events", callbackPreset)}><ClipboardCheck size={15} /> Schedule callback</button></div></section>
+    <section className="crm-routing panel-wide"><div className={routingReady ? "online" : routingReady === false ? "attention" : "checking"}><PhoneIncoming size={19} /><span><b>{routingReady ? "Phone routing online" : routingReady === false ? "Phone routing needs setup" : "Checking phone routing"}</b><small>{routingReady ? "Caller recognition, account menus, and message recording are ready." : "The CRM remains available while phone routing is checked."}</small></span></div><div><span className={`crm-live-sync ${activityError ? "error" : ""}`}><i /><span><b>{activityError ? "Sync interrupted" : "Live call feed"}</b><small>{activityError || (activitySyncedAt ? `Updated ${activitySyncedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : "Connecting...")}</small></span></span><button type="button" onClick={() => void refreshActivity()} disabled={activityRefreshing}><RefreshCw className={activityRefreshing ? "spinning" : ""} size={15} /> {activityRefreshing ? "Refreshing" : "Refresh calls"}</button><button onClick={() => openCreate("events", callPreset)}><PhoneOutgoing size={15} /> Log call</button><button onClick={() => openCreate("events", callbackPreset)}><ClipboardCheck size={15} /> Schedule callback</button></div></section>
 
     <section className="crm-lines panel-wide">
       <header><div><span>VOICE LINE DIRECTORY</span><h2>Two numbers, two call experiences</h2><p>Each Twilio number enters the Voice CRM but receives its own greeting, keypad menu, and activity label.</p></div><button type="button" onClick={syncVoiceLines} disabled={syncingLines}><ShieldCheck size={16} /> {syncingLines ? "Syncing..." : "Sync Twilio lines"}</button></header>
@@ -567,7 +577,7 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
       {filteredInteractions.length ? <div className="crm-inbox-list">{filteredInteractions.slice(0, 24).map((event) => {
         const buyer = event.related_type === "buyers" ? data.buyers.find((candidate) => candidate.id === event.related_id) : null;
         const Icon = event.event_type === "Transportation" ? Route : event.event_type === "Portal Request" ? MessageSquareText : /message/i.test(event.title) ? Voicemail : event.status === "Missed" ? PhoneMissed : PhoneIncoming;
-        return <button key={event.id} className={selectedInteraction?.id === event.id ? "active" : ""} onClick={() => setSelectedInteractionId(event.id)}><span><Icon size={16} /></span><span><b>{event.title}</b><small>{buyer ? fullName(buyer) : event.related_type === "caller" ? "Unrecognized caller" : "General record"} / {shortDate(event.event_date)}{event.event_time ? ` at ${event.event_time}` : ""}</small></span><Status tone={["New", "Scheduled", "Follow-up", "Callback"].includes(event.status) ? "warn" : event.status === "Failed" ? "bad" : "good"}>{event.status}</Status></button>;
+        return <button key={event.id} className={`${selectedInteraction?.id === event.id ? "active" : ""}${newCallId === event.id ? " new-call" : ""}`} onClick={() => setSelectedInteractionId(event.id)}><span><Icon size={16} /></span><span><b>{event.title}</b><small>{buyer ? fullName(buyer) : event.related_type === "caller" ? "Unrecognized caller" : "General record"} / {shortDate(event.event_date)}{event.event_time ? ` at ${event.event_time}` : ""}</small></span><Status tone={["New", "Scheduled", "Follow-up", "Callback"].includes(event.status) ? "warn" : event.status === "Failed" ? "bad" : "good"}>{event.status}</Status></button>;
       })}</div> : <div className="crm-empty-line">No records match this inbox view.</div>}
     </Section>
 
@@ -871,6 +881,12 @@ export default function Home() {
   const [contractError, setContractError] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
+  const [activityRefreshing, setActivityRefreshing] = useState(false);
+  const [activitySyncedAt, setActivitySyncedAt] = useState<Date | null>(null);
+  const [activityError, setActivityError] = useState("");
+  const [newCallId, setNewCallId] = useState<number | null>(null);
+  const dataRef = useRef<DataSet>(emptyData);
+  const activityRequestInFlight = useRef(false);
   const analytics = useAnalytics(data);
 
   const loadData = useCallback(async () => {
@@ -879,7 +895,9 @@ export default function Home() {
       const [dataResponse, templateResponse] = await Promise.all([fetch("/api/data", { cache: "no-store" }), fetch("/api/templates/config", { cache: "no-store" })]);
       const payload = await dataResponse.json() as DataSet & { error?: string };
       if (!dataResponse.ok) throw new Error(payload.error || "Unable to load records.");
-      setData({ ...emptyData, ...payload });
+      const nextData = { ...emptyData, ...payload };
+      dataRef.current = nextData;
+      setData(nextData);
       if (templateResponse.ok) setTemplates(await templateResponse.json() as TemplatesConfig);
     } catch (loadError) {
       setError(friendlyError(loadError, "Unable to load records."));
@@ -888,10 +906,54 @@ export default function Home() {
     }
   }, []);
 
+  const refreshActivity = useCallback(async () => {
+    if (activityRequestInFlight.current) return;
+    activityRequestInFlight.current = true;
+    setActivityRefreshing(true);
+    try {
+      const response = await fetch("/api/voice/activity", { cache: "no-store" });
+      const payload = await response.json() as { events?: KennelEvent[]; synced_at?: string; error?: string };
+      if (response.status === 401) {
+        window.location.assign(`/login?next=${encodeURIComponent("/")}`);
+        return;
+      }
+      if (!response.ok || !Array.isArray(payload.events)) throw new Error(payload.error || "Unable to refresh call activity.");
+      const previousCall = latestCallEvent(dataRef.current.events);
+      const nextCall = latestCallEvent(payload.events);
+      const nextData = { ...dataRef.current, events: payload.events };
+      dataRef.current = nextData;
+      setData(nextData);
+      setActivitySyncedAt(payload.synced_at ? new Date(payload.synced_at) : new Date());
+      setActivityError("");
+      if (previousCall && nextCall && nextCall.id !== previousCall.id && nextCall.created_at > previousCall.created_at) {
+        setNewCallId(nextCall.id);
+        setToast(nextCall.related_type === "buyers" ? "Incoming call matched to a family" : "New incoming call received");
+      }
+    } catch (refreshError) {
+      setActivityError(friendlyError(refreshError, "Live call refresh failed."));
+    } finally {
+      activityRequestInFlight.current = false;
+      setActivityRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => void loadData(), 0);
     return () => window.clearTimeout(timer);
   }, [loadData]);
+  useEffect(() => {
+    if (view !== "CRM") return;
+    void refreshActivity();
+    const interval = window.setInterval(() => void refreshActivity(), 5000);
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") void refreshActivity(); };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refreshActivity, view]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2400); return () => window.clearTimeout(timer); }, [toast]);
 
   const openCreate = (resource: Resource, preset: Record<string, unknown> = {}) => setModal({ resource, preset });
@@ -1051,7 +1113,7 @@ export default function Home() {
       <div className="os-desktop"><section className="workspace-window"><header className="window-bar"><div className="window-lights" aria-hidden="true"><i /><i /><i /></div><div className="window-identity"><span><ActiveViewIcon size={16} /></span><b>{viewCopy[view].title}</b><small>SWVAOS / {view}</small></div><div className="window-state"><span>ACTIVE WORKSPACE</span><i /></div></header><div className="content">
         <div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div>
         {error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}
-        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Portal" && <PortalPreviewView data={data} />}{view === "CRM" && <CallerCrmView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
+        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Portal" && <PortalPreviewView data={data} />}{view === "CRM" && <CallerCrmView {...activeViewProps} refreshActivity={refreshActivity} activityRefreshing={activityRefreshing} activitySyncedAt={activitySyncedAt} activityError={activityError} newCallId={newCallId} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
       </div></section></div>
       <footer className="os-statusbar"><span><i className={error ? "offline" : ""} /> {error ? "DEGRADED" : "ALL SYSTEMS NOMINAL"}</span><div><button onClick={() => setView("Command")} className={view === "Command" ? "active" : ""}><LayoutDashboard size={14} /> Command</button>{view !== "Command" && <button className="active"><ActiveViewIcon size={14} /> {view}</button>}</div><span>{data.dogs.length + data.litters.length + data.buyers.length + data.puppies.length} CORE RECORDS</span></footer>
     </main>

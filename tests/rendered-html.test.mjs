@@ -143,13 +143,15 @@ test("includes buyer schema repair for existing projects", async () => {
 });
 
 test("ships the caller CRM and complete line-aware voice menus", async () => {
-  const [page, callerCrm, callerVoice, lookupRoute, webhook, voiceConfig, env] = await Promise.all([
+  const [page, callerCrm, callerVoice, lookupRoute, webhook, voiceConfig, activityRoute, incomingRoute, env] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("db/caller-crm.ts", root), "utf8"),
     readFile(new URL("lib/caller-voice.ts", root), "utf8"),
     readFile(new URL("app/api/caller-crm/lookup/route.ts", root), "utf8"),
     readFile(new URL("lib/voice-webhook.ts", root), "utf8"),
     readFile(new URL("app/api/voice/configure/route.ts", root), "utf8"),
+    readFile(new URL("app/api/voice/activity/route.ts", root), "utf8"),
+    readFile(new URL("app/api/voice/incoming/route.ts", root), "utf8"),
     readFile(new URL(".env.example", root), "utf8"),
   ]);
 
@@ -161,6 +163,9 @@ test("ships the caller CRM and complete line-aware voice menus", async () => {
   assert.match(page, /\+1 \(715\) 888-9526/);
   assert.match(page, /Assigned Records/);
   assert.match(page, /Conversations and messages/);
+  assert.match(page, /Live call feed/);
+  assert.match(page, /setInterval\(\(\) => void refreshActivity\(\), 5000\)/);
+  assert.match(page, /New incoming call received/);
   assert.doesNotMatch(page, /localStorage|sessionStorage/);
   assert.match(callerCrm, /toStudioCallerLookup/);
   assert.match(callerCrm, /assigned_puppy_information/);
@@ -177,6 +182,12 @@ test("ships the caller CRM and complete line-aware voice menus", async () => {
   assert.match(callerVoice, /repeat tiny amounts every 3 to 5 minutes/i);
   assert.match(voiceConfig, /incomingPhoneNumbers/);
   assert.match(voiceConfig, /Pup-Lift Support/);
+  assert.match(activityRoute, /requireAdminSession/);
+  assert.match(activityRoute, /getCallerActivityFromSupabase/);
+  assert.match(activityRoute, /no-store/);
+  assert.match(incomingRoute, /Caller CRM event stored/);
+  assert.match(incomingRoute, /Caller CRM event failed/);
+  assert.doesNotMatch(incomingRoute, /catch\(\(\) => null\)/);
   assert.match(env, /TWILIO_AUTH_TOKEN/);
   assert.match(env, /SWVAOS_CRM_API_KEY/);
   assert.match(env, /SWVAOS_PUP_LIFT_NUMBER/);
