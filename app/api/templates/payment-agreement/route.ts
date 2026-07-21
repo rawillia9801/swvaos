@@ -1,6 +1,8 @@
 import { renderPaymentAgreementPdf } from "../../../../lib/payment-agreement";
+import { getTemplatesConfig } from "../../../../lib/templates-config";
 
 export async function GET() {
+  const config = await getTemplatesConfig();
   const pdf = await renderPaymentAgreementPdf({
     buyerName: "____________________________________________",
     planType: "Pre-transfer purchase plan",
@@ -25,6 +27,7 @@ export async function GET() {
     returnedPaymentFeeCents: 0,
     onTimeCreditCents: 0,
     autopayRequired: false,
+    standardTerms: config.documents.payment_agreement.content,
   });
   return new Response(new Blob([pdf as BlobPart], { type: "application/pdf" }), {
     headers: {
