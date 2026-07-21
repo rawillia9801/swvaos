@@ -296,15 +296,23 @@ export async function reconcileContractDeposits(buyerIdValue: number) {
   return missingDeposit;
 }
 
-export async function getPuppyPortal(token: string) {
-  const claims = await verifyPortalToken(token);
-  if (!claims) return null;
-  const buyer = await first<Row>("buyers", `select=*&id=eq.${claims.buyerId}`);
+export async function findPortalBuyerByEmail(value: string) {
+  const email = value.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  const buyer = await first<Row>("buyers", `select=id,first_name,last_name,email&email=ilike.${encodeURIComponent(email)}`);
+  if (!buyer || text(buyer, "email").toLowerCase() !== email) return null;
+  return { id: Number(buyer.id), firstName: text(buyer, "first_name"), name: fullName(buyer), email: text(buyer, "email") };
+}
+
+export async function getPuppyPortalForBuyer(buyerIdValue: number) {
+  const buyerId = positiveId(buyerIdValue);
+  if (!buyerId) return null;
+  const buyer = await first<Row>("buyers", `select=*&id=eq.${buyerId}`);
   if (!buyer) return null;
   const [puppies, transactions, documents] = await Promise.all([
-    select<Row>("puppies", `select=*&buyer_id=eq.${claims.buyerId}&order=created_at.desc`),
-    select<Row>("transactions", `select=*&buyer_id=eq.${claims.buyerId}&order=created_at.desc`),
-    select<DocumentRow>("buyer_documents", `select=*&buyer_id=eq.${claims.buyerId}&order=created_at.desc`),
+    select<Row>("puppies", `select=*&buyer_id=eq.${buyerId}&order=created_at.desc`),
+    select<Row>("transactions", `select=*&buyer_id=eq.${buyerId}&order=created_at.desc`),
+    select<DocumentRow>("buyer_documents", `select=*&buyer_id=eq.${buyerId}&order=created_at.desc`),
   ]);
   const puppyIds = puppies.map((puppy) => Number(puppy.id));
   const litterIds = [...new Set(puppies.map((puppy) => positiveId(puppy.litter_id)).filter((id): id is number => Boolean(id)))];
@@ -313,7 +321,7 @@ export async function getPuppyPortal(token: string) {
     puppyIds.length ? select<Row>("puppy_updates", `select=*&published=eq.true&puppy_id=in.(${puppyIds.join(",")})&order=created_at.desc`) : Promise.resolve([]),
     documents.length ? select<Row>("buyer_document_puppies", `select=*&document_id=in.(${documents.map((document) => document.id).join(",")})`) : Promise.resolve([]),
     litterIds.length ? select<Row>("litters", `select=*&id=in.(${litterIds.join(",")})`) : Promise.resolve([]),
-    select<Row>("events", `select=*&related_type=eq.buyers&related_id=eq.${claims.buyerId}&order=event_date.desc,event_time.desc&limit=100`),
+    select<Row>("events", `select=*&related_type=eq.buyers&related_id=eq.${buyerId}&order=event_date.desc,event_time.desc&limit=100`),
     puppyIds.length ? select<Row>("events", `select=*&related_type=eq.puppies&related_id=in.(${puppyIds.join(",")})&event_date=gte.${today}&status=neq.Completed&order=event_date.asc,event_time.asc`) : Promise.resolve([]),
   ]);
   const parentIds = [...new Set(litters.flatMap((litter) => [positiveId(litter.dam_id), positiveId(litter.sire_id)]).filter((id): id is number => Boolean(id)))];
@@ -376,6 +384,12 @@ export async function getPuppyPortal(token: string) {
       items: portalPayments.slice(0, 20).map((payment) => ({ id: Number(payment.id), description: text(payment, "description"), category: text(payment, "category"), method: text(payment, "method"), amountCents: number(payment, "amount_cents"), status: text(payment, "status"), dueDate: text(payment, "due_date"), paidDate: text(payment, "paid_date") })),
     },
   };
+}
+
+export async function getPuppyPortal(token: string) {
+  const claims = await verifyPortalToken(token);
+  if (!claims) return null;
+  return getPuppyPortalForBuyer(claims.buyerId);
 }
 
 export async function createPortalRequest(token: string, input: PortalRequestInput) {

@@ -19,6 +19,7 @@ export async function POST(request: Request) {
         amount: "$500.00",
         due_date: "August 1, 2026",
         portal_url: new URL(request.url).origin,
+        access_link: `${new URL(request.url).origin}/portal/login`,
         update_title: "A test puppy update",
       },
     });

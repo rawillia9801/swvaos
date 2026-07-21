@@ -1,7 +1,7 @@
 import { billOfSaleTerms, healthGuaranteeTerms } from "./contract-templates";
 
 export type DocumentTemplateKey = "bill_of_sale" | "health_guarantee" | "payment_agreement" | "puppy_application";
-export type EmailTemplateKey = "application_received" | "application_approved" | "payment_receipt" | "payment_reminder" | "puppy_update" | "contract_ready" | "contract_signed";
+export type EmailTemplateKey = "application_received" | "application_approved" | "payment_receipt" | "payment_reminder" | "puppy_update" | "contract_ready" | "contract_signed" | "portal_sign_in";
 
 export type DocumentTemplate = {
   name: string;
@@ -34,6 +34,7 @@ export const templateVariables = [
   "{{amount}}",
   "{{due_date}}",
   "{{portal_url}}",
+  "{{access_link}}",
   "{{update_title}}",
   "{{business_name}}",
   "{{support_email}}",
@@ -119,6 +120,13 @@ export const defaultTemplatesConfig: TemplatesConfig = {
       trigger: "Sent after a customer signs a contract in the puppy portal.",
       subject: "Signed contract received",
       body: "Hi {{first_name}},\n\nWe received your signed contract. A retained copy remains available in your private puppy portal:\n\n{{portal_url}}\n\nThank you,\n{{business_name}}",
+      enabled: true,
+    },
+    portal_sign_in: {
+      name: "Puppy Portal sign-in",
+      trigger: "Sent when a customer requests secure access to their Puppy Portal.",
+      subject: "Your secure Puppy Portal sign-in link",
+      body: "Hi {{first_name}},\n\nUse the secure link below to sign in to your Puppy Portal. This link expires shortly and should not be forwarded.\n\n{{access_link}}\n\nIf you did not request this link, you can ignore this email.\n\nQuestions? Reply to this email or call {{support_phone}}.\n\n{{business_name}}",
       enabled: true,
     },
   },

@@ -14,6 +14,7 @@ import {
   Headphones,
   LayoutDashboard,
   MessagesSquare,
+  MonitorSmartphone,
   PackageSearch,
   ClipboardCheck,
   MessageSquareText,
@@ -25,12 +26,14 @@ import {
   ReceiptText,
   Route,
   Search as SearchIcon,
+  ShieldCheck,
   Trash2,
   Upload,
   UserRound,
   UsersRound,
   Voicemail,
   WalletCards,
+  Wifi,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -59,7 +62,7 @@ type ModalState = { resource: Resource; record?: Record<string, unknown>; preset
 type DocumentKind = "dog" | "buyer";
 type DocumentModalState = { kind: DocumentKind; ownerId?: number } | null;
 type ContractModalState = { buyerId: number; portalUrl?: string } | null;
-type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "CRM" | "Calendar" | "Vault" | "Templates" | "Reports";
+type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "Portal" | "CRM" | "Calendar" | "Vault" | "Templates" | "Reports";
 
 const emptyData: DataSet = { dogs: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], buyer_documents: [] };
 const views: { id: View; label: string; icon: LucideIcon }[] = [
@@ -70,6 +73,7 @@ const views: { id: View; label: string; icon: LucideIcon }[] = [
   { id: "Finance", label: "Finance", icon: WalletCards },
   { id: "Inventory", label: "Inventory", icon: PackageSearch },
   { id: "Comms", label: "Comms", icon: MessagesSquare },
+  { id: "Portal", label: "Puppy Portal", icon: MonitorSmartphone },
   { id: "CRM", label: "Caller CRM", icon: Headphones },
   { id: "Calendar", label: "Calendar", icon: CalendarDays },
   { id: "Vault", label: "Vault", icon: FolderOpen },
@@ -262,6 +266,43 @@ function FamiliesView({ data, openCreate, openEdit, openDocumentUpload, openCont
   </div>;
 }
 
+function PortalPreviewView({ data }: { data: DataSet }) {
+  const [buyerId, setBuyerId] = useState<number | null>(data.buyers[0]?.id ?? null);
+  const [portalUrl, setPortalUrl] = useState("");
+  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const buyer = data.buyers.find((item) => item.id === buyerId) ?? null;
+  const assigned = buyer ? data.puppies.filter((puppy) => puppy.buyer_id === buyer.id) : [];
+
+  async function loadPreview() {
+    if (!buyerId) return;
+    setBusy(true); setError(""); setPortalUrl("");
+    try {
+      const response = await fetch("/api/contracts/portal-link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ buyer_id: buyerId }) });
+      const payload = await response.json() as { portalUrl?: string; error?: string };
+      if (!response.ok || !payload.portalUrl) throw new Error(payload.error || "Unable to prepare this portal preview.");
+      setPortalUrl(payload.portalUrl);
+    } catch (failure) { setError(friendlyError(failure, "Unable to prepare this portal preview.")); }
+    finally { setBusy(false); }
+  }
+
+  return <div className="portal-preview-workspace">
+    <section className="portal-preview-console">
+      <header><span>CLIENT EXPERIENCE</span><h2>Puppy Portal simulator</h2><p>Select a family, then inspect the exact customer-facing account without leaving SWVAOS.</p></header>
+      <label><span>Family account</span><select value={buyerId ?? ""} onChange={(event) => { setBuyerId(Number(event.target.value) || null); setPortalUrl(""); }}><option value="">Choose a family</option>{data.buyers.map((item) => <option value={item.id} key={item.id}>{fullName(item)}{item.email ? ` — ${item.email}` : ""}</option>)}</select></label>
+      <div className="portal-preview-account"><span><small>Selected family</small><b>{buyer ? fullName(buyer) : "None selected"}</b></span><span><small>Assigned puppies</small><b>{assigned.length ? assigned.map((puppy) => puppy.name).join(", ") : "None"}</b></span><span><small>Portal access</small><b>{buyer?.email ? "Email sign-in ready" : "Email required"}</b></span></div>
+      <button className="portal-preview-launch" disabled={!buyerId || busy} onClick={() => void loadPreview()}><MonitorSmartphone size={17} /> {busy ? "Opening simulator…" : "Load customer view"}</button>
+      {error && <p className="portal-preview-error">{error}</p>}
+      <div className="portal-preview-auth"><ShieldCheck size={18} /><span><b>Customer authentication</b><small>Customers sign in with the email on their family account. SWVAOS sends a short-lived secure link—there is no shared password.</small></span><a href="/portal/login" target="_blank" rel="noreferrer">Open customer sign-in <ExternalLink size={14} /></a></div>
+    </section>
+    <section className="portal-preview-stage">
+      <header><div><i /><i /><i /><span>{portalUrl ? `${buyer ? fullName(buyer) : "Family"} / live portal` : "Customer portal / waiting"}</span></div><nav><button className={device === "desktop" ? "active" : ""} onClick={() => setDevice("desktop")}>Desktop</button><button className={device === "mobile" ? "active" : ""} onClick={() => setDevice("mobile")}>Mobile</button>{portalUrl && <a href={portalUrl} target="_blank" rel="noreferrer">Open full screen <ExternalLink size={14} /></a>}</nav></header>
+      <div className={`portal-device ${device}`}>{portalUrl ? <iframe src={portalUrl} title={`Puppy Portal preview for ${buyer ? fullName(buyer) : "selected family"}`} /> : <div className="portal-preview-placeholder"><MonitorSmartphone size={38} /><b>No customer view loaded</b><p>Choose a family and load the simulator to inspect updates, contracts, payments, documents, schedule, and support.</p></div>}</div>
+    </section>
+  </div>;
+}
+
 function CareView({ data, openCreate, openEdit }: ViewProps) {
   const a = useAnalytics(data);
   const careRecords = [...data.dog_medical_records].sort((left, right) => String(left.next_due_date ?? "9999").localeCompare(String(right.next_due_date ?? "9999")));
@@ -337,6 +378,8 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
   const [dialOperator, setDialOperator] = useState<"cristy" | "robert">("cristy");
   const [dialing, setDialing] = useState(false);
   const [dialMessage, setDialMessage] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
+  const [syncingLines, setSyncingLines] = useState(false);
+  const [lineMessage, setLineMessage] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
   const selectedBuyer = data.buyers.find((buyer) => buyer.id === selectedBuyerId) ?? callers[0] ?? null;
   const dialTarget = dialNumber.replace(/[^\d+]/g, "");
   const canDial = dialTarget.replace(/\D/g, "").length >= 7;
@@ -374,6 +417,15 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
     ["6", "Chihuahua HQ", "Current community information"],
     ["7", "Speak with someone", "Connects the caller to the team"],
     ["9", "Repeat menu", "Returns to the beginning of the public menu"],
+  ];
+  const pupLiftMenu = [
+    ["1", "Immediate support", "Warmth, tiny amounts on the gums, feeding, and veterinary escalation"],
+    ["2", "Warning signs", "Weakness, wobbling, trembling, collapse, seizures, and urgent red flags"],
+    ["3", "How to use Pup-Lift", "Safe placement, timing, and what not to do"],
+    ["4", "Prevention and aftercare", "Feeding rhythm, warmth, monitoring, and veterinarian follow-up"],
+    ["5", "Leave a message", "Records the caller's name, phone number, and question"],
+    ["6", "Speak with someone", "Rings Cristy and Robert through the team route"],
+    ["9", "Repeat menu", "Returns to the beginning of the Pup-Lift menu"],
   ];
   const callPreset = selectedBuyer ? { event_type: "Call", related_type: "buyers", related_id: selectedBuyer.id, title: `Call with ${fullName(selectedBuyer)}`, event_date: today(), location: "Phone", status: "Completed" } : {};
   const callbackPreset = selectedBuyer ? { event_type: "Call", related_type: "buyers", related_id: selectedBuyer.id, title: `Callback - ${fullName(selectedBuyer)}`, event_date: addDays(1), location: "Phone", status: "Scheduled" } : { event_type: "Call", event_date: addDays(1), location: "Phone", status: "Scheduled" };
@@ -418,6 +470,29 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
     }
   }
 
+  async function syncVoiceLines() {
+    if (syncingLines) return;
+    setSyncingLines(true);
+    setLineMessage(null);
+    try {
+      const response = await fetch("/api/voice/configure", { method: "POST" });
+      const result = await response.json() as { configured?: boolean; error?: string; lines?: { configured?: boolean }[] };
+      if (response.status === 401) {
+        window.location.assign(`/login?next=${encodeURIComponent("/")}`);
+        return;
+      }
+      if (!response.ok && response.status !== 207) throw new Error(result.error || "Unable to sync the Twilio lines.");
+      const configuredCount = result.lines?.filter((line) => line.configured).length ?? 0;
+      if (!result.configured) throw new Error(`${configuredCount} of 2 phone lines were configured. Confirm both numbers belong to this Twilio account.`);
+      setRoutingReady(true);
+      setLineMessage({ tone: "good", text: "Both Twilio numbers now route into their correct SWVAOS call flows." });
+    } catch (error) {
+      setLineMessage({ tone: "bad", text: error instanceof Error ? error.message : "Unable to sync the Twilio lines." });
+    } finally {
+      setSyncingLines(false);
+    }
+  }
+
   useEffect(() => {
     let active = true;
     fetch("/api/voice/status", { cache: "no-store" })
@@ -443,6 +518,15 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
     </div>
 
     <section className="crm-routing panel-wide"><div className={routingReady ? "online" : routingReady === false ? "attention" : "checking"}><PhoneIncoming size={19} /><span><b>{routingReady ? "Phone routing online" : routingReady === false ? "Phone routing needs setup" : "Checking phone routing"}</b><small>{routingReady ? "Caller recognition, account menus, and message recording are ready." : "The CRM remains available while phone routing is checked."}</small></span></div><div><button onClick={() => openCreate("events", callPreset)}><PhoneOutgoing size={15} /> Log call</button><button onClick={() => openCreate("events", callbackPreset)}><ClipboardCheck size={15} /> Schedule callback</button></div></section>
+
+    <section className="crm-lines panel-wide">
+      <header><div><span>VOICE LINE DIRECTORY</span><h2>Two numbers, two call experiences</h2><p>Each Twilio number enters the Voice CRM but receives its own greeting, keypad menu, and activity label.</p></div><button type="button" onClick={syncVoiceLines} disabled={syncingLines}><ShieldCheck size={16} /> {syncingLines ? "Syncing..." : "Sync Twilio lines"}</button></header>
+      <div className="crm-line-cards">
+        <article><span className="crm-line-icon"><PhoneIncoming size={20} /></span><div><small>SWVAOS MAIN LINE</small><h3>+1 (855) 506-5425</h3><p>Families, applications, puppies, pickup, delivery, balances, messages, and staff transfer.</p></div><Status tone={routingReady ? "good" : "warn"}>{routingReady ? "Receiving" : "Check route"}</Status></article>
+        <article className="pup-lift"><span className="crm-line-icon"><HeartPulse size={20} /></span><div><small>PUP-LIFT SUPPORT</small><h3>+1 (715) 888-9526</h3><p>Dedicated hypoglycemia support guidance, urgent warning signs, voicemail, and staff transfer.</p></div><Status tone={routingReady ? "good" : "warn"}>{routingReady ? "Receiving" : "Check route"}</Status></article>
+      </div>
+      {lineMessage && <p className={`crm-line-message ${lineMessage.tone}`}>{lineMessage.text}</p>}
+    </section>
 
     <section className="crm-dialer panel-wide">
       <header><div><span>OUTBOUND PHONE</span><h2>Dial a customer or call request</h2><p>Enter any number or load a family. Twilio rings the selected operator first, then connects the destination through the SWVAOS line.</p></div><Status tone={routingReady ? "good" : "warn"}>{routingReady ? "Ready" : "Check setup"}</Status></header>
@@ -509,7 +593,7 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts }: ViewProps)
       {calls.length ? <div className="crm-history">{calls.slice(0, 8).map((call) => <button key={call.id} onClick={() => openEdit("events", call as unknown as Record<string, unknown>)}><span><b>{call.title}</b><small>{shortDate(call.event_date)}{call.event_time ? ` / ${call.event_time}` : ""}</small></span><Status tone={call.status === "Completed" ? "good" : "neutral"}>{call.status}</Status><p>{call.notes || "No notes recorded"}</p></button>)}</div> : <div className="crm-empty-line">No calls or recorded messages are connected to this account yet.</div>}
     </Section>
 
-    <section className="crm-menu-console panel-wide"><header><div><span>CALLER MENUS</span><h2>Account-aware phone routing</h2><p>Recognized callers receive their own account information. New callers receive public options without exposing private records.</p></div><Status tone={routingReady ? "good" : "warn"}>{routingReady ? "Online" : "Review setup"}</Status></header><div><section><h3>Recognized caller flow</h3><div className="crm-menu-list">{knownMenu.map(([key, label, description]) => <span key={key}><b>{key}</b><small><strong>{label}</strong>{description}</small></span>)}</div></section><section><h3>Public caller flow</h3><div className="crm-menu-list public">{publicMenu.map(([key, label, description]) => <span key={key}><b>{key}</b><small><strong>{label}</strong>{description}</small></span>)}</div></section></div></section>
+    <section className="crm-menu-console panel-wide"><header><div><span>CALLER MENUS</span><h2>Line-aware phone routing</h2><p>Family callers receive account-aware choices, public callers receive general choices, and the Pup-Lift number always opens its dedicated support flow.</p></div><Status tone={routingReady ? "good" : "warn"}>{routingReady ? "Online" : "Review setup"}</Status></header><div><section><h3>Recognized family flow</h3><div className="crm-menu-list">{knownMenu.map(([key, label, description]) => <span key={key}><b>{key}</b><small><strong>{label}</strong>{description}</small></span>)}</div></section><section><h3>Public SWVAOS flow</h3><div className="crm-menu-list public">{publicMenu.map(([key, label, description]) => <span key={key}><b>{key}</b><small><strong>{label}</strong>{description}</small></span>)}</div></section><section className="pup-lift-menu"><h3>Pup-Lift support flow</h3><div className="crm-menu-list">{pupLiftMenu.map(([key, label, description]) => <span key={key}><b>{key}</b><small><strong>{label}</strong>{description}</small></span>)}</div></section></div></section>
   </div>;
 }
 
@@ -934,7 +1018,7 @@ export default function Home() {
   }, [data, search]);
 
   const activeViewProps = { data, openCreate, openEdit, openDocumentUpload, remove, removeDocument, openContracts };
-  const quickResource = view === "Calendar" || view === "Care" || view === "CRM" ? "events" : view === "Families" || view === "Comms" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
+  const quickResource = view === "Calendar" || view === "Care" || view === "CRM" ? "events" : view === "Families" || view === "Comms" || view === "Portal" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
   const viewCopy: Record<View, { title: string; text: string }> = {
     Command: { title: "Operating command", text: "Control surface for every record in the program." },
     Breeding: { title: "Breeding control", text: "Manage dogs, litters, registrations, health context, and pairings." },
@@ -943,28 +1027,33 @@ export default function Home() {
     Finance: { title: "Finance ledger", text: "Track payments, costs, balances, payment plans, and profitability." },
     Inventory: { title: "Inventory control", text: "Control supply spend, restock watchlists, and cost category burn." },
     Comms: { title: "Communications hub", text: "Manage family pipeline, puppy updates, and quick outreach." },
+    Portal: { title: "Puppy Portal simulator", text: "See exactly what each customer sees and manage secure family access." },
     CRM: { title: "Caller CRM", text: "Identify callers and surface their account, assigned puppy, payment, update, and conversation records." },
     Calendar: { title: "Mission calendar", text: "Schedule care, breeding, pickup, buyer, and reminder events." },
     Vault: { title: "Document vault", text: "Access buyer files, dog files, certificates, agreements, and reports." },
     Templates: { title: "Templates and automation", text: "Edit signed documents and the automatic emails sent throughout each customer journey." },
     Reports: { title: "Reports and intelligence", text: "Review performance, compliance, profitability, and export an operating snapshot." },
   };
+  const ActiveViewIcon = views.find((item) => item.id === view)?.icon ?? LayoutDashboard;
   return <div className="app-shell">
     <aside className="sidebar">
       <button className="brand" onClick={() => setView("Command")}><span><CircleGauge size={22} /></span><b>SWVAOS</b><small>Operating system</small></button>
+      <span className="dock-caption">Applications</span>
       <nav aria-label="SWVAOS sections">{views.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><Icon size={18} /><span>{item.label}</span></button>; })}</nav>
       <div className="system-card"><span className={error ? "offline" : ""} /><b>{error ? "Action needed" : "System online"}</b><small>{analytics.readiness}% readiness / {analytics.docs} vault files</small></div>
     </aside>
-    <main>
+    <main className="os-workspace">
       <header className="topbar">
+        <div className="os-menu-brand"><span><CircleGauge size={17} /></span><b>SWVAOS</b><small>KENNEL OPERATIONS</small></div>
         <div className="search"><SearchIcon size={18} /><input aria-label="Search SWVAOS" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search dogs, families, payments, care, files..." />{searchResults.length > 0 && <div className="search-menu">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => { setView(item.view); setSearch(""); }}><b>{item.label}</b><small>{item.detail}</small></button>)}</div>}</div>
-        <div className="top-actions"><span suppressHydrationWarning>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span><button onClick={() => openDocumentUpload(view === "Families" ? "buyer" : "dog")}><Upload size={16} /> Upload</button><button onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={16} /> Payment</button><button className="primary-action" onClick={() => openCreate(quickResource)}><Plus size={16} /> Add</button></div>
+        <div className="top-actions"><span className="network-state"><Wifi size={14} /> LIVE</span><span suppressHydrationWarning>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span><button onClick={() => openDocumentUpload(view === "Families" ? "buyer" : "dog")}><Upload size={16} /> Upload</button><button onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={16} /> Payment</button><button className="primary-action" onClick={() => openCreate(quickResource)}><Plus size={16} /> Add</button></div>
       </header>
-      <div className="content">
+      <div className="os-desktop"><section className="workspace-window"><header className="window-bar"><div className="window-lights" aria-hidden="true"><i /><i /><i /></div><div className="window-identity"><span><ActiveViewIcon size={16} /></span><b>{viewCopy[view].title}</b><small>SWVAOS / {view}</small></div><div className="window-state"><span>ACTIVE WORKSPACE</span><i /></div></header><div className="content">
         <div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div>
         {error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}
-        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "CRM" && <CallerCrmView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
-      </div>
+        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Portal" && <PortalPreviewView data={data} />}{view === "CRM" && <CallerCrmView {...activeViewProps} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
+      </div></section></div>
+      <footer className="os-statusbar"><span><i className={error ? "offline" : ""} /> {error ? "DEGRADED" : "ALL SYSTEMS NOMINAL"}</span><div><button onClick={() => setView("Command")} className={view === "Command" ? "active" : ""}><LayoutDashboard size={14} /> Command</button>{view !== "Command" && <button className="active"><ActiveViewIcon size={14} /> {view}</button>}</div><span>{data.dogs.length + data.litters.length + data.buyers.length + data.puppies.length} CORE RECORDS</span></footer>
     </main>
     {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}
     {documentModal && <DocumentUploadModal modal={documentModal} data={data} saving={saving} error={uploadError} onClose={() => setDocumentModal(null)} onKindChange={(kind) => setDocumentModal({ kind })} onSubmit={submitDocument} />}

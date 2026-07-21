@@ -93,8 +93,7 @@ function PortalRequestForm({ token, kind, onCreated }: { token: string; kind: "s
   </form>;
 }
 
-export default function PuppyPortal({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
+export function PuppyPortalExperience({ token, accountMode = false }: { token: string; accountMode?: boolean }) {
   const [data, setData] = useState<PortalData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -139,9 +138,9 @@ export default function PuppyPortal({ params }: { params: Promise<{ token: strin
 
   return <main className="puppy-portal">
     <header className="portal-topbar">
-      <Link href={`/portal/${token}`}><span><Dog size={21} /></span><b>SWVA Chihuahua</b><small>Puppy portal</small></Link>
+      <Link href={accountMode ? "/portal/account" : `/portal/${token}`}><span><Dog size={21} /></span><b>SWVA Chihuahua</b><small>Puppy portal</small></Link>
       <nav aria-label="Puppy portal sections"><a href="#puppy">My puppy</a><a href="#documents">Documents</a><a href="#payments">Payments</a><a href="#schedule">Schedule</a><a href="#support">Support</a></nav>
-      <div><ShieldCheck size={16} /> Private family access</div>
+      <div className="portal-security"><ShieldCheck size={16} /> Private family access{accountMode && <form action="/api/portal/auth/logout" method="post"><button type="submit">Sign out</button></form>}</div>
     </header>
     <div className="portal-content">
       <section className="portal-journey-hero">
@@ -185,4 +184,9 @@ export default function PuppyPortal({ params }: { params: Promise<{ token: strin
       </div>
     </div>
   </main>;
+}
+
+export default function PuppyPortal({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = use(params);
+  return <PuppyPortalExperience token={token} />;
 }

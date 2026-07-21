@@ -3,27 +3,55 @@ import { shortenSpeech, twilio } from "./voice-webhook";
 
 const voice = { voice: "Polly.Joanna" as const, language: "en-US" as const };
 const incomingPath = "/api/voice/incoming?repeat=1";
+export const DEFAULT_PUP_LIFT_NUMBER = "+17158889526";
+
+function normalizePhone(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (raw.startsWith("+") && digits.length >= 8 && digits.length <= 15) return `+${digits}`;
+  return "";
+}
+
+export function isPupLiftLine(calledNumber: string | null | undefined) {
+  return normalizePhone(calledNumber) === normalizePhone(process.env.SWVAOS_PUP_LIFT_NUMBER || DEFAULT_PUP_LIFT_NUMBER);
+}
+
+function routeWithLine(path: string, calledNumber: string | null | undefined) {
+  const line = normalizePhone(calledNumber);
+  if (!line) return path;
+  const url = new URL(path, "https://voice.swvaos.local");
+  url.searchParams.set("line", line);
+  return `${url.pathname}${url.search}`;
+}
 
 const dollars = (cents: number) => `${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100)} dollars`;
 const spokenDate = (value: string) => value ? new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "not scheduled";
 
-function gatherKnown(response: InstanceType<typeof twilio.twiml.VoiceResponse>, profile: CallerCrmProfile) {
+function gatherKnown(response: InstanceType<typeof twilio.twiml.VoiceResponse>, profile: CallerCrmProfile, calledNumber: string | null | undefined) {
   const firstName = profile.buyer?.first_name || profile.buyer?.name || "caller";
-  const gather = response.gather({ action: "/api/voice/menu", method: "POST", input: ["dtmf"], numDigits: 1, timeout: 7, actionOnEmptyResult: true });
+  const gather = response.gather({ action: routeWithLine("/api/voice/menu", calledNumber), method: "POST", input: ["dtmf"], numDigits: 1, timeout: 7, actionOnEmptyResult: true });
   gather.say(voice, `Hello ${firstName}. We found your records. How can we help you today? Press 1 for balance, payments, or puppy payment plan options. Press 2 for pickup or delivery, including scheduling. Press 3 for puppy reservation details and next steps. Press 4 for application or approval status. Press 5 to leave a message for our team. Press 6 to speak with someone. Press 9 to repeat this menu.`);
 }
 
-function gatherUnknown(response: InstanceType<typeof twilio.twiml.VoiceResponse>) {
-  const gather = response.gather({ action: "/api/voice/menu", method: "POST", input: ["dtmf"], numDigits: 1, timeout: 7, actionOnEmptyResult: true });
+function gatherUnknown(response: InstanceType<typeof twilio.twiml.VoiceResponse>, calledNumber: string | null | undefined) {
+  const gather = response.gather({ action: routeWithLine("/api/voice/menu", calledNumber), method: "POST", input: ["dtmf"], numDigits: 1, timeout: 7, actionOnEmptyResult: true });
   gather.say(voice, "Thank you for calling Southwest Virginia Chihuahua. We could not match this phone number to a family account. Press 1 for available puppies. Press 2 if you have already submitted an application. Press 3 if you have a puppy reserved. Press 4 for pickup or delivery questions. Press 5 to learn about Pup-Lift. Press 6 to learn about Chihuahua HQ. Press 7 to speak with someone. Press 9 to repeat this menu.");
 }
 
-export function incomingVoiceResponse(profile: CallerCrmProfile) {
+function gatherPupLift(response: InstanceType<typeof twilio.twiml.VoiceResponse>, calledNumber: string | null | undefined) {
+  const gather = response.gather({ action: routeWithLine("/api/voice/menu", calledNumber), method: "POST", input: ["dtmf"], numDigits: 1, timeout: 7, actionOnEmptyResult: true });
+  gather.say(voice, "Thank you for calling Pup-Lift, emergency support for tiny hearts. If a puppy is unresponsive, having a seizure, unable to swallow, or has blue or very pale gums, seek emergency veterinary care now. Press 1 for immediate hypoglycemia support steps. Press 2 for warning signs. Press 3 for how to use Pup-Lift. Press 4 for prevention and aftercare. Press 5 to leave a message. Press 6 to speak with someone. Press 9 to repeat this menu.");
+}
+
+export function incomingVoiceResponse(profile: CallerCrmProfile, calledNumber?: string | null) {
   const response = new twilio.twiml.VoiceResponse();
-  if (profile.recognized) gatherKnown(response, profile);
-  else gatherUnknown(response);
+  if (isPupLiftLine(calledNumber)) gatherPupLift(response, calledNumber);
+  else if (profile.recognized) gatherKnown(response, profile, calledNumber);
+  else gatherUnknown(response, calledNumber);
   response.say(voice, "We did not receive a selection.");
-  response.redirect(incomingPath);
+  response.redirect(routeWithLine(incomingPath, calledNumber));
   return response;
 }
 
@@ -86,13 +114,33 @@ export function unavailableVoiceResponse() {
   return response;
 }
 
-export function menuVoiceResponse(profile: CallerCrmProfile, digit: string) {
+function pupLiftMenuVoiceResponse(digit: string, calledNumber: string | null | undefined) {
+  if (digit === "5") return messageVoiceResponse(false);
+  if (digit === "6") return connectToTeamVoiceResponse();
+
+  const response = new twilio.twiml.VoiceResponse();
+  if (digit === "9" || !digit) {
+    response.redirect(routeWithLine(incomingPath, calledNumber));
+    return response;
+  }
+  if (digit === "1") response.say(voice, "Warm the puppy gently but quickly. Place a small amount of Pup-Lift on the gums or under the tongue. Do not pour liquid into the mouth or force swallowing. Repeat tiny amounts every 3 to 5 minutes as needed. Once the puppy is alert and able to swallow, offer food. Pup-Lift is emergency support and is not a substitute for veterinary care.");
+  else if (digit === "2") response.say(voice, "Possible hypoglycemia warning signs include weakness, unusual sleepiness, wobbling, trembling, glassy eyes, confusion, poor appetite, collapse, or seizures. Seek immediate veterinary care for seizures, collapse, blue or very pale gums, inability to swallow, unresponsiveness, repeated episodes, or no quick improvement.");
+  else if (digit === "3") response.say(voice, "Shake gently. Place only a small amount on the gums or under the tongue, where it can absorb without forcing the puppy to swallow. Repeat tiny amounts every 3 to 5 minutes as needed. Never flood the mouth. Scan the bottle label or visit pup dash lift dot com for the emergency guide.");
+  else if (digit === "4") response.say(voice, "After the puppy is alert and can swallow, offer food and keep the puppy warm. Feed tiny puppies on a consistent schedule, monitor appetite and energy, and contact your veterinarian about any episode. Repeated episodes need veterinary evaluation.");
+  else response.say(voice, "That selection is not available.");
+  response.pause({ length: 1 });
+  response.redirect(routeWithLine(incomingPath, calledNumber));
+  return response;
+}
+
+export function menuVoiceResponse(profile: CallerCrmProfile, digit: string, calledNumber?: string | null) {
+  if (isPupLiftLine(calledNumber)) return pupLiftMenuVoiceResponse(digit, calledNumber);
   if (profile.recognized && digit === "5") return messageVoiceResponse(true);
   if ((profile.recognized && digit === "6") || (!profile.recognized && digit === "7")) return connectToTeamVoiceResponse();
 
   const response = new twilio.twiml.VoiceResponse();
   if (digit === "9" || !digit) {
-    response.redirect(incomingPath);
+    response.redirect(routeWithLine(incomingPath, calledNumber));
     return response;
   }
 
@@ -112,6 +160,6 @@ export function menuVoiceResponse(profile: CallerCrmProfile, digit: string) {
     else response.say(voice, "That selection is not available.");
   }
   response.pause({ length: 1 });
-  response.redirect(incomingPath);
+  response.redirect(routeWithLine(incomingPath, calledNumber));
   return response;
 }

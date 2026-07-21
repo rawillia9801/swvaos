@@ -11,7 +11,8 @@ export async function POST(request: Request) {
 
   try {
     const profile = await getCallerCrmProfile(form.From || form.Caller || "");
-    return voiceXml(menuVoiceResponse(profile, form.Digits || ""));
+    const calledNumber = form.To || form.Called || new URL(request.url).searchParams.get("line") || "";
+    return voiceXml(menuVoiceResponse(profile, form.Digits || "", calledNumber));
   } catch {
     return voiceXml(unavailableVoiceResponse());
   }

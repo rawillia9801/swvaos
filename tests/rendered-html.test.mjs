@@ -142,20 +142,23 @@ test("includes buyer schema repair for existing projects", async () => {
   assert.doesNotMatch(kennel, /order=last_name/);
 });
 
-test("ships the caller CRM and complete recognized and public voice menus", async () => {
-  const [page, callerCrm, callerVoice, lookupRoute, webhook, env] = await Promise.all([
+test("ships the caller CRM and complete line-aware voice menus", async () => {
+  const [page, callerCrm, callerVoice, lookupRoute, webhook, voiceConfig, env] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("db/caller-crm.ts", root), "utf8"),
     readFile(new URL("lib/caller-voice.ts", root), "utf8"),
     readFile(new URL("app/api/caller-crm/lookup/route.ts", root), "utf8"),
     readFile(new URL("lib/voice-webhook.ts", root), "utf8"),
+    readFile(new URL("app/api/voice/configure/route.ts", root), "utf8"),
     readFile(new URL(".env.example", root), "utf8"),
   ]);
 
   assert.match(page, /Caller CRM/);
   assert.match(page, /suppressHydrationWarning/);
-  assert.match(page, /Recognized caller flow/);
-  assert.match(page, /Public caller flow/);
+  assert.match(page, /Recognized family flow/);
+  assert.match(page, /Public SWVAOS flow/);
+  assert.match(page, /Pup-Lift support flow/);
+  assert.match(page, /\+1 \(715\) 888-9526/);
   assert.match(page, /Assigned Records/);
   assert.match(page, /Conversations and messages/);
   assert.doesNotMatch(page, /localStorage|sessionStorage/);
@@ -170,8 +173,13 @@ test("ships the caller CRM and complete recognized and public voice menus", asyn
   assert.match(callerVoice, /Press 7 to speak with someone/);
   assert.match(callerVoice, /Press 6 to speak with someone/);
   assert.match(callerVoice, /Polly\.Joanna/);
+  assert.match(callerVoice, /DEFAULT_PUP_LIFT_NUMBER/);
+  assert.match(callerVoice, /repeat tiny amounts every 3 to 5 minutes/i);
+  assert.match(voiceConfig, /incomingPhoneNumbers/);
+  assert.match(voiceConfig, /Pup-Lift Support/);
   assert.match(env, /TWILIO_AUTH_TOKEN/);
   assert.match(env, /SWVAOS_CRM_API_KEY/);
+  assert.match(env, /SWVAOS_PUP_LIFT_NUMBER/);
 });
 
 test("generates e-signature contracts and retains them in the puppy portal", async () => {
@@ -223,8 +231,10 @@ test("unifies phone operations and family requests inside SWVAOS", async () => {
   assert.match(page, /Interaction Inbox/);
   assert.match(page, /Calls, messages, and requests/);
   assert.match(page, /Schedule callback/);
-  assert.match(page, /Account-aware phone routing/);
+  assert.match(page, /Line-aware phone routing/);
   assert.match(page, /Phone routing online/);
+  assert.match(page, /\+1 \(715\) 888-9526/);
+  assert.match(page, /Pup-Lift support flow/);
   assert.match(portal, /YOUR PUPPY JOURNEY/);
   assert.match(portal, /Pickup and transportation/);
   assert.match(portal, /Messages and requests/);
@@ -236,4 +246,28 @@ test("unifies phone operations and family requests inside SWVAOS", async () => {
   assert.match(css, /family-journey\.png/);
   assert.match(css, /\.crm-inbox-list/);
   assert.doesNotMatch(`${page}${portal}`, /localStorage|sessionStorage/);
+});
+
+test("ships an operating-system workspace with portal preview and customer sign-in", async () => {
+  const [page, family, portalLogin, portalAccount, portalRequest, templates, css] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/families/[id]/page.tsx", root), "utf8"),
+    readFile(new URL("app/portal/login/page.tsx", root), "utf8"),
+    readFile(new URL("app/portal/account/page.tsx", root), "utf8"),
+    readFile(new URL("app/api/portal/auth/request/route.ts", root), "utf8"),
+    readFile(new URL("lib/template-defaults.ts", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+
+  assert.match(page, /Puppy Portal simulator/);
+  assert.match(page, /workspace-window/);
+  assert.match(page, /os-statusbar/);
+  assert.match(family, /Portal Preview/);
+  assert.match(family, /SWVAOS PORTAL SIMULATOR/);
+  assert.match(portalLogin, /Email my sign-in link/);
+  assert.match(portalAccount, /PORTAL_SESSION_COOKIE/);
+  assert.match(portalRequest, /portal-access-/);
+  assert.match(templates, /portal_sign_in/);
+  assert.match(css, /SWVAOS desktop operating environment/);
+  assert.match(css, /portal-login-page/);
 });

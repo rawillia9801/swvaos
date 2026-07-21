@@ -1,5 +1,5 @@
 import { getCallerCrmProfile, logCallerEvent } from "../../../../db/caller-crm";
-import { incomingVoiceResponse, unavailableVoiceResponse } from "../../../../lib/caller-voice";
+import { incomingVoiceResponse, isPupLiftLine, unavailableVoiceResponse } from "../../../../lib/caller-voice";
 import { readVoiceForm, validateVoiceRequest, voiceError, voiceXml } from "../../../../lib/voice-webhook";
 
 export const runtime = "nodejs";
@@ -11,11 +11,13 @@ export async function POST(request: Request) {
 
   try {
     const phone = form.From || form.Caller || "";
+    const calledNumber = form.To || form.Called || new URL(request.url).searchParams.get("line") || "";
     const profile = await getCallerCrmProfile(phone);
     if (new URL(request.url).searchParams.get("repeat") !== "1") {
-      await logCallerEvent({ phone, callSid: form.CallSid, buyerId: profile.buyer?.id, title: profile.recognized ? `Inbound call - ${profile.buyer?.name}` : "Inbound call - unrecognized caller", status: "Completed", details: profile.recognized ? "Caller matched to family account." : "Caller was not matched to a family account." }).catch(() => null);
+      const pupLift = isPupLiftLine(calledNumber);
+      await logCallerEvent({ phone, callSid: form.CallSid, buyerId: profile.buyer?.id, title: pupLift ? `Pup-Lift inbound call${profile.recognized ? ` - ${profile.buyer?.name}` : ""}` : profile.recognized ? `Inbound call - ${profile.buyer?.name}` : "Inbound call - unrecognized caller", status: "Completed", details: `${pupLift ? "Line: Pup-Lift Support\n" : "Line: SWVAOS Main\n"}${profile.recognized ? "Caller matched to family account." : "Caller was not matched to a family account."}` }).catch(() => null);
     }
-    return voiceXml(incomingVoiceResponse(profile));
+    return voiceXml(incomingVoiceResponse(profile, calledNumber));
   } catch {
     return voiceXml(unavailableVoiceResponse());
   }
