@@ -18,6 +18,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { uploadDocumentDirect } from "../../../lib/direct-document-upload";
 
 type BaseRecord = { id: number; created_at: string; updated_at: string };
 type Dog = BaseRecord & {
@@ -175,9 +176,7 @@ export default function DogProfilePage({ params }: { params: Promise<{ id: strin
     setSaving(true);
     setModalError("");
     try {
-      const response = await fetch("/api/dog-documents", { method: "POST", body: new FormData(event.currentTarget) });
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Unable to upload this document.");
+      await uploadDocumentDirect(new FormData(event.currentTarget), "dog");
       setModal(null);
       setToast("Document uploaded");
       await loadData();

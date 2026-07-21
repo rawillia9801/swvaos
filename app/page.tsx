@@ -35,6 +35,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { billOfSaleTerms, healthGuaranteeTerms } from "../lib/contract-templates";
+import { uploadDocumentDirect } from "../lib/direct-document-upload";
 
 type Resource = "dogs" | "litters" | "buyers" | "puppies" | "payment_plans" | "transactions" | "events" | "updates" | "dog_medical_records" | "dog_registrations";
 type BaseRecord = { id: number; created_at: string; updated_at: string };
@@ -853,10 +854,7 @@ export default function Home() {
     setSaving(true);
     setUploadError("");
     try {
-      const endpoint = documentModal.kind === "dog" ? "/api/dog-documents" : "/api/documents";
-      const response = await fetch(endpoint, { method: "POST", body: new FormData(event.currentTarget) });
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Unable to upload the document.");
+      await uploadDocumentDirect(new FormData(event.currentTarget), documentModal.kind);
       setDocumentModal(null);
       setToast("Document uploaded");
       await loadData();
