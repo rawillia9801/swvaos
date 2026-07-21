@@ -166,6 +166,7 @@ test("ships the caller CRM and complete line-aware voice menus", async () => {
   assert.match(page, /Live call feed/);
   assert.match(page, /setInterval\(\(\) => void refreshActivity\(\), 5000\)/);
   assert.match(page, /New incoming call received/);
+  assert.match(page, /nonActivityEvents/);
   assert.doesNotMatch(page, /localStorage|sessionStorage/);
   assert.match(callerCrm, /toStudioCallerLookup/);
   assert.match(callerCrm, /assigned_puppy_information/);

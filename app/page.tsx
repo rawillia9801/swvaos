@@ -920,7 +920,8 @@ export default function Home() {
       if (!response.ok || !Array.isArray(payload.events)) throw new Error(payload.error || "Unable to refresh call activity.");
       const previousCall = latestCallEvent(dataRef.current.events);
       const nextCall = latestCallEvent(payload.events);
-      const nextData = { ...dataRef.current, events: payload.events };
+      const nonActivityEvents = dataRef.current.events.filter((event) => !["Call", "Portal Request", "Transportation"].includes(event.event_type));
+      const nextData = { ...dataRef.current, events: [...nonActivityEvents, ...payload.events] };
       dataRef.current = nextData;
       setData(nextData);
       setActivitySyncedAt(payload.synced_at ? new Date(payload.synced_at) : new Date());
