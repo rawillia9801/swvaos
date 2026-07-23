@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Download, FileSignature, Mail, RefreshCw, Save, Send, ShieldCheck } from "lucide-react";
-import { defaultTemplatesConfig, templateVariables, type DocumentTemplateKey, type EmailTemplateKey, type TemplatesConfig } from "../lib/template-defaults";
+import { templateVariables, type DocumentTemplateKey, type EmailTemplateKey, type TemplatesConfig } from "../lib/template-defaults";
 
 type EmailStatus = { configured: boolean; host: string; port: number; secure: boolean; fromEmail: string; fromName: string };
 
@@ -55,10 +55,11 @@ export function TemplatesCenter({ initialConfig, onSaved }: { initialConfig: Tem
 
   return <div className="templates-center">
     <section className="template-overview panel-wide">
-      <div><span className="eyebrow">CUSTOMER DOCUMENTS & AUTOMATIONS</span><h2>One place for every customer-facing template</h2><p>Edit the standard language used in contracts, applications, payment agreements, receipts, reminders, and puppy updates.</p></div>
+      <div><span className="eyebrow">AUTOMATED COMMUNICATIONS & DOCUMENTS</span><h2>Control the language families actually receive</h2><p>These saved business templates are used at real application, approval, payment, contract, update, and portal milestones. Nothing here should be replaced with generic copy.</p></div>
       <div className={`smtp-card ${status?.configured ? "ready" : "needs-setup"}`}><span>{status?.configured ? <CheckCircle2 size={20} /> : <ShieldCheck size={20} />}</span><div><b>{status?.configured ? "Hostinger email connected" : "Hostinger email needs its server secret"}</b><small>{status ? `${status.fromName} <${status.fromEmail}> · ${status.host}:${status.port} ${status.secure ? "SSL/TLS" : "STARTTLS"}` : "Checking email connection…"}</small></div></div>
     </section>
 
+    <section className="automation-journey panel-wide" aria-label="Automated family journey"><span>APPLICATION RECEIVED</span><i /><span>APPROVAL</span><i /><span>PAYMENT & RECEIPT</span><i /><span>CONTRACTS</span><i /><span>PUPPY UPDATES</span><i /><span>PORTAL ACCESS</span></section>
     <div className="template-mode-tabs" role="tablist"><button className={section === "documents" ? "active" : ""} onClick={() => setSection("documents")}><FileSignature size={17} /> Contract & document templates</button><button className={section === "emails" ? "active" : ""} onClick={() => setSection("emails")}><Mail size={17} /> Automatic email templates</button></div>
     {error && <div className="inline-error">{error}</div>}{message && <div className="template-success"><CheckCircle2 size={17} /> {message}</div>}
 
@@ -75,6 +76,6 @@ export function TemplatesCenter({ initialConfig, onSaved }: { initialConfig: Tem
         <div className="template-fields"><label><span>Template name</span><input value={email.name} onChange={(event) => updateEmail({ name: event.target.value })} /></label><label className="template-switch"><input type="checkbox" checked={email.enabled} onChange={(event) => updateEmail({ enabled: event.target.checked })} /><span>Send this email automatically</span></label><label><span>Subject</span><input value={email.subject} onChange={(event) => updateEmail({ subject: event.target.value })} /></label><label><span>Message</span><textarea rows={18} value={email.body} onChange={(event) => updateEmail({ body: event.target.value })} /></label><div className="template-variables"><b>Available fields</b><span>{templateVariables.map((item) => <code key={item}>{item}</code>)}</span></div><div className="template-test"><label><span>Send a test to</span><input type="email" value={testTo} onChange={(event) => setTestTo(event.target.value)} placeholder="your@email.com" /></label><button disabled={saving || !testTo} onClick={() => void sendTest()}><Send size={16} /> Send test</button></div></div>
       </section>
     </div>}
-    <footer className="template-save-bar"><span>{changed ? "You have unsaved template changes." : config.updatedAt ? `Last saved ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(config.updatedAt))}` : "Using standard SWVAOS templates."}</span><button type="button" disabled={!changed || saving} onClick={() => void save()}><Save size={16} /> {saving ? "Saving…" : "Save all templates"}</button><button type="button" disabled={saving} onClick={() => { setConfig(defaultTemplatesConfig); setMessage(""); setError(""); }} title="Restore the standard set in the editor"><RefreshCw size={16} /> Restore defaults</button></footer>
+    <footer className="template-save-bar"><span>{changed ? "You have unsaved template changes." : config.updatedAt ? `Last saved ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(config.updatedAt))}` : "Using the saved business template set."}</span><button type="button" disabled={!changed || saving} onClick={() => void save()}><Save size={16} /> {saving ? "Saving…" : "Save all templates"}</button><button type="button" disabled={!changed || saving} onClick={() => { setConfig(initialConfig); setMessage(""); setError(""); }} title="Discard edits made since the templates were loaded"><RefreshCw size={16} /> Discard edits</button></footer>
   </div>;
 }
