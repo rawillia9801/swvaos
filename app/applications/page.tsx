@@ -36,7 +36,7 @@ export default function ApplicationsPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2800); return () => window.clearTimeout(timer); }, [toast]);
 
   const buyers = useMemo(() => {

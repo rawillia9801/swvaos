@@ -53,7 +53,7 @@ export default function FamilyProfilePage({ params }: { params: Promise<{ id: st
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2800); return () => window.clearTimeout(timer); }, [toast]);
   const family = data?.buyers.find((buyer) => buyer.id === familyId) ?? null;
   useEffect(() => { if (family) document.title = `${fullName(family)} | SWVAOS`; }, [family]);

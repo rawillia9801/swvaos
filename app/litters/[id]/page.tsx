@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, Dog, ExternalLink, HeartPulse, ReceiptText, UserRound, WalletCards } from "lucide-react";
+import { ArrowLeft, CalendarDays, Dog, ExternalLink, HeartPulse, ReceiptText, UserRound } from "lucide-react";
 
 type BaseRecord = { id: number; created_at: string; updated_at: string };
 type DogRecord = BaseRecord & { name: string; registered_name: string | null; sex: string; role: string; color: string | null; status: string };
@@ -46,7 +46,7 @@ export default function LitterProfilePage({ params }: { params: Promise<{ id: st
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
   const litter = data?.litters.find((candidate) => candidate.id === litterId) ?? null;
   useEffect(() => { if (litter) document.title = `${litter.name} | SWVAOS`; }, [litter]);
 

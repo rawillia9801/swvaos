@@ -1,5 +1,5 @@
 import { supabaseRequest } from "./supabase";
-import type { ResourceInput, ResourceName } from "./resources";
+import { ResourceValidationError, type ResourceInput, type ResourceName } from "./resources";
 
 type TableName =
   | "dogs"
@@ -201,8 +201,42 @@ function rowFor(resource: ResourceName, data: ResourceInput) {
   }
 }
 
+async function linkedBuyerId(table: "payment_plans" | "puppies", recordId: number | null) {
+  if (!recordId) return null;
+  const rows = await selectAll<Record<string, unknown>>(table, `select=buyer_id&id=eq.${recordId}&limit=1`);
+  return id(rows[0] ?? {}, "buyer_id");
+}
+
+async function transactionRowFor(data: ResourceInput) {
+  const row = rowFor("transactions", data);
+  const transactionType = str(data, "type");
+  if (!row || !["Payment", "Deposit"].includes(transactionType)) return row;
+
+  const specifiedBuyerId = id(data, "buyer_id");
+  const [planBuyerId, puppyBuyerId] = await Promise.all([
+    linkedBuyerId("payment_plans", id(data, "payment_plan_id")),
+    linkedBuyerId("puppies", id(data, "puppy_id")),
+  ]);
+  const linkedBuyerIds = [...new Set([planBuyerId, puppyBuyerId].filter((value): value is number => Boolean(value)))];
+
+  if (linkedBuyerIds.length > 1 || (specifiedBuyerId && linkedBuyerIds.some((buyerId) => buyerId !== specifiedBuyerId))) {
+    throw new ResourceValidationError("The selected puppy or payment plan belongs to a different family. Choose records assigned to the same buyer.");
+  }
+
+  const buyerId = specifiedBuyerId ?? linkedBuyerIds[0] ?? null;
+  if (!buyerId) {
+    throw new ResourceValidationError("Choose a buyer / family before saving a payment or deposit.");
+  }
+
+  return { ...row, buyer_id: buyerId };
+}
+
+async function preparedRowFor(resource: ResourceName, data: ResourceInput) {
+  return resource === "transactions" ? transactionRowFor(data) : rowFor(resource, data);
+}
+
 export async function createSupabaseResource(resource: ResourceName, data: ResourceInput) {
-  const row = { ...rowFor(resource, data), created_at: new Date().toISOString() };
+  const row = { ...await preparedRowFor(resource, data), created_at: new Date().toISOString() };
   const created = await insertRow<Record<string, unknown>>(tableFor(resource), row);
   if (resource === "payment_plans") {
     const puppyIds = ids(data, "puppy_ids");
@@ -213,7 +247,7 @@ export async function createSupabaseResource(resource: ResourceName, data: Resou
 }
 
 export async function updateSupabaseResource(resource: ResourceName, recordId: number, data: ResourceInput) {
-  const updated = await updateRow<Record<string, unknown>>(tableFor(resource), recordId, rowFor(resource, data));
+  const updated = await updateRow<Record<string, unknown>>(tableFor(resource), recordId, await preparedRowFor(resource, data));
   if (resource === "payment_plans") {
     const puppyIds = ids(data, "puppy_ids");
     await replacePlanPuppies(recordId, puppyIds);

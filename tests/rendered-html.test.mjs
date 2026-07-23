@@ -106,6 +106,45 @@ test("provides guided transaction entry, documented fees, and readable puppy pla
   assert.match(css, /\.puppy-placement-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
 });
 
+test("credits every received payment to a visible buyer account", async () => {
+  const [page, kennel, route, css] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("db/supabase-kennel.ts", root), "utf8"),
+    readFile(new URL("app/api/data/route.ts", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+
+  assert.match(page, /Credit to buyer \/ family/);
+  assert.match(page, /required=\{type !== "Cost"\}/);
+  assert.match(page, /will receive this payment/);
+  assert.match(page, /BUYER ACCOUNTS/);
+  assert.match(page, /Unassigned buyer/);
+  assert.match(kennel, /transactionRowFor/);
+  assert.match(kennel, /Choose a buyer \/ family before saving a payment or deposit/);
+  assert.match(kennel, /selected puppy or payment plan belongs to a different family/);
+  assert.match(route, /ResourceValidationError \? 400 : 500/);
+  assert.match(css, /\.finance-workbench/);
+  assert.match(css, /\.payment-credit-preview\.assigned/);
+});
+
+test("ships an interactive desktop shell rather than a color-only reskin", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+
+  assert.match(page, /COMMAND CENTER/);
+  assert.match(page, /CONTROL CENTER/);
+  assert.match(page, /app-launcher/);
+  assert.match(page, /windowMinimized/);
+  assert.match(page, /focusMode/);
+  assert.match(page, /Ctrl\/⌘ K/);
+  assert.match(css, /\.launcher-backdrop/);
+  assert.match(css, /\.os-taskbar/);
+  assert.match(css, /\.desktop-home/);
+  assert.match(css, /\.app-shell\.focus-mode/);
+});
+
 test("deploys the app directly without redirects", async () => {
   const [configuration, packageManifest, supabaseSchema, dataRoute] = await Promise.all([
     readFile(new URL("vercel.json", root), "utf8"),
@@ -282,4 +321,20 @@ test("ships an operating-system workspace with portal preview and customer sign-
   assert.match(templates, /portal_sign_in/);
   assert.match(css, /SWVAOS desktop operating environment/);
   assert.match(css, /portal-login-page/);
+});
+
+test("provides dedicated Litters and Puppies operating tabs", async () => {
+  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+
+  assert.match(page, /id: "Litters", label: "Litters"/);
+  assert.match(page, /id: "Puppies", label: "Puppies"/);
+  assert.match(page, /const taskbarViews: View\[\] = \["Command", "Litters", "Puppies"/);
+  assert.match(page, /function LittersView/);
+  assert.match(page, /function PuppiesView/);
+  assert.match(page, /view === "Litters" && <LittersView/);
+  assert.match(page, /view === "Puppies" && <PuppiesView/);
+  assert.match(page, /Litter schedule/);
+  assert.match(page, /Puppies needing a family/);
+  assert.match(page, /view: "Litters" as View/);
+  assert.match(page, /view: "Puppies" as View/);
 });
