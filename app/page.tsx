@@ -2,20 +2,33 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AppWindow,
+  Bell,
   CalendarDays,
   ChartNoAxesCombined,
+  ChevronRight,
   CircleGauge,
+  Command as CommandIcon,
   Dog as DogIcon,
+  Expand,
   ExternalLink,
   FileText,
   FileSignature,
   FolderOpen,
   HeartPulse,
   Headphones,
+  Grid2X2,
+  Keyboard,
+  Layers3,
   LayoutDashboard,
+  ListTree,
   MessagesSquare,
   MonitorSmartphone,
+  Minimize2,
   PackageSearch,
+  PawPrint,
+  PanelLeftClose,
+  PanelLeftOpen,
   ClipboardCheck,
   MessageSquareText,
   PhoneCall,
@@ -27,7 +40,9 @@ import {
   RefreshCw,
   Route,
   Search as SearchIcon,
+  Settings2,
   ShieldCheck,
+  Sparkles,
   Trash2,
   Upload,
   UserRound,
@@ -63,24 +78,30 @@ type ModalState = { resource: Resource; record?: Record<string, unknown>; preset
 type DocumentKind = "dog" | "buyer";
 type DocumentModalState = { kind: DocumentKind; ownerId?: number } | null;
 type ContractModalState = { buyerId: number; portalUrl?: string } | null;
-type View = "Command" | "Breeding" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "Portal" | "CRM" | "Calendar" | "Vault" | "Templates" | "Reports";
+type View = "Command" | "Breeding" | "Litters" | "Puppies" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "Portal" | "CRM" | "Calendar" | "Vault" | "Templates" | "Reports";
+type ViewGroup = "Operate" | "Connect" | "System";
+type ViewDefinition = { id: View; label: string; icon: LucideIcon; group: ViewGroup; shortcut: string };
 
 const emptyData: DataSet = { dogs: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], buyer_documents: [] };
-const views: { id: View; label: string; icon: LucideIcon }[] = [
-  { id: "Command", label: "Command", icon: LayoutDashboard },
-  { id: "Breeding", label: "Breeding", icon: DogIcon },
-  { id: "Families", label: "Families", icon: UsersRound },
-  { id: "Care", label: "Care", icon: HeartPulse },
-  { id: "Finance", label: "Finance", icon: WalletCards },
-  { id: "Inventory", label: "Inventory", icon: PackageSearch },
-  { id: "Comms", label: "Comms", icon: MessagesSquare },
-  { id: "Portal", label: "Puppy Portal", icon: MonitorSmartphone },
-  { id: "CRM", label: "Caller CRM", icon: Headphones },
-  { id: "Calendar", label: "Calendar", icon: CalendarDays },
-  { id: "Vault", label: "Vault", icon: FolderOpen },
-  { id: "Templates", label: "Templates", icon: FileText },
-  { id: "Reports", label: "Reports", icon: ChartNoAxesCombined },
+const views: ViewDefinition[] = [
+  { id: "Command", label: "Command", icon: LayoutDashboard, group: "Operate", shortcut: "1" },
+  { id: "Breeding", label: "Breeding", icon: DogIcon, group: "Operate", shortcut: "2" },
+  { id: "Litters", label: "Litters", icon: ListTree, group: "Operate", shortcut: "L" },
+  { id: "Puppies", label: "Puppies", icon: PawPrint, group: "Operate", shortcut: "P" },
+  { id: "Families", label: "Families", icon: UsersRound, group: "Operate", shortcut: "3" },
+  { id: "Care", label: "Care", icon: HeartPulse, group: "Operate", shortcut: "4" },
+  { id: "Finance", label: "Finance", icon: WalletCards, group: "Operate", shortcut: "5" },
+  { id: "Inventory", label: "Inventory", icon: PackageSearch, group: "Operate", shortcut: "6" },
+  { id: "Comms", label: "Comms", icon: MessagesSquare, group: "Connect", shortcut: "7" },
+  { id: "Portal", label: "Puppy Portal", icon: MonitorSmartphone, group: "Connect", shortcut: "8" },
+  { id: "CRM", label: "Caller CRM", icon: Headphones, group: "Connect", shortcut: "9" },
+  { id: "Calendar", label: "Calendar", icon: CalendarDays, group: "System", shortcut: "C" },
+  { id: "Vault", label: "Vault", icon: FolderOpen, group: "System", shortcut: "V" },
+  { id: "Templates", label: "Templates", icon: FileText, group: "System", shortcut: "T" },
+  { id: "Reports", label: "Reports", icon: ChartNoAxesCombined, group: "System", shortcut: "R" },
 ];
+const viewGroups: ViewGroup[] = ["Operate", "Connect", "System"];
+const taskbarViews: View[] = ["Command", "Litters", "Puppies", "Families", "Finance", "CRM", "Calendar"];
 
 const dogDocumentTypes = ["Registration Certificate", "Pedigree", "Embark Results", "OFA Test Results", "Genetic Test Results", "Health Test Results", "Health Certificate", "Medical Documentation", "Other"];
 const buyerDocumentTypes = ["Bill of Sale", "Health Guarantee", "Payment Plan Agreement", "Other"];
@@ -209,7 +230,7 @@ function CommandView({ data, openCreate, setView }: { data: DataSet; openCreate:
   const alerts = [
     ...a.overdue.map((item) => ({ title: item.description, detail: `${money(item.amount_cents)} overdue`, view: "Finance" as View, tone: "bad" as const })),
     ...a.dueHealth.map((item) => ({ title: item.title, detail: `${item.record_type} due for dog #${item.dog_id}`, view: "Breeding" as View, tone: "warn" as const })),
-    ...a.unmatched.slice(0, 4).map((item) => ({ title: item.name, detail: "Puppy is not assigned to a buyer", view: "Families" as View, tone: "warn" as const })),
+    ...a.unmatched.slice(0, 4).map((item) => ({ title: item.name, detail: "Puppy is not assigned to a buyer", view: "Puppies" as View, tone: "warn" as const })),
   ];
   return <div className="grid command-grid">
     <section className="hero panel-wide">
@@ -217,8 +238,8 @@ function CommandView({ data, openCreate, setView }: { data: DataSet; openCreate:
       <div className="readiness" style={{ "--score": `${a.readiness}%` } as React.CSSProperties}><span>Readiness</span><b>{a.readiness}</b><small>{alerts.length ? `${alerts.length} attention signals` : "All core signals nominal"}</small><i /></div>
     </section>
     <div className="metric-row panel-wide">
-      <button onClick={() => setView("Breeding")}><span>Active litters</span><b>{a.activeLitters.length}</b><small>{data.puppies.length} puppies recorded</small></button>
-      <button onClick={() => setView("Families")}><span>Placement rate</span><b>{pct(a.placed.length, data.puppies.length)}%</b><small>{a.unmatched.length} unmatched puppies</small></button>
+      <button onClick={() => setView("Litters")}><span>Active litters</span><b>{a.activeLitters.length}</b><small>{data.puppies.length} puppies recorded</small></button>
+      <button onClick={() => setView("Puppies")}><span>Placement rate</span><b>{pct(a.placed.length, data.puppies.length)}%</b><small>{a.unmatched.length} unmatched puppies</small></button>
       <button onClick={() => setView("Finance")}><span>Net recorded</span><b>{money(a.paid - a.costs)}</b><small>{money(a.outstanding)} outstanding</small></button>
       <button onClick={() => setView("Vault")}><span>Vault files</span><b>{a.docs}</b><small>{a.registryCoverage}% registry coverage</small></button>
     </div>
@@ -252,6 +273,75 @@ function BreedingView({ data, openCreate, openEdit, openDocumentUpload, remove }
     </Section>
     <Section eyebrow="Litter Control" title="Litters" action={<button className="ghost" onClick={() => openCreate("litters")}>Create litter</button>}>
       {data.litters.length ? <div className="table-list">{data.litters.map((litter) => <button key={litter.id} onClick={() => openEdit("litters", litter as unknown as Record<string, unknown>)}><span><b>{litter.name}</b><small>{shortDate(litter.birth_date || litter.due_date)} / {data.puppies.filter((puppy) => puppy.litter_id === litter.id).length} puppies</small></span><Status tone={litter.status === "Active" ? "good" : "neutral"}>{litter.status}</Status></button>)}</div> : <Empty title="No litters" text="Create planned and active litters with due dates, birth dates, and pairings." action="Create litter" onAction={() => openCreate("litters")} />}
+    </Section>
+  </div>;
+}
+
+function LittersView({ data, openCreate, openEdit, remove }: ViewProps) {
+  const activeLitters = data.litters.filter((litter) => !["Completed", "Archived"].includes(litter.status));
+  const dueSoon = data.litters
+    .filter((litter) => {
+      const days = daysUntil(litter.due_date);
+      return days !== null && days >= 0 && days <= 30;
+    })
+    .sort((left, right) => String(left.due_date).localeCompare(String(right.due_date)));
+  const expectedPuppies = activeLitters.reduce((sum, litter) => sum + (litter.expected_count ?? 0), 0);
+  const dogName = (dogId: number | null) => data.dogs.find((dog) => dog.id === dogId)?.name ?? "Not selected";
+  const litterPuppies = (litterId: number) => data.puppies.filter((puppy) => puppy.litter_id === litterId);
+
+  return <div className="grid command-grid">
+    <div className="metric-row panel-wide">
+      <button type="button"><span>Total litters</span><b>{data.litters.length}</b><small>Complete litter registry</small></button>
+      <button type="button"><span>Active program</span><b>{activeLitters.length}</b><small>{dueSoon.length} due within 30 days</small></button>
+      <button type="button"><span>Puppies recorded</span><b>{data.puppies.length}</b><small>Across every litter</small></button>
+      <button type="button"><span>Expected puppies</span><b>{expectedPuppies}</b><small>From active litter plans</small></button>
+    </div>
+    <Section eyebrow="Litter Registry" title="Litters" action={<button className="primary-action" onClick={() => openCreate("litters")}><Plus size={15} /> Create litter</button>}>
+      {data.litters.length ? <div className="card-grid">{data.litters.map((litter) => {
+        const puppies = litterPuppies(litter.id);
+        return <article key={litter.id} className="record-card"><a className="record-card-profile" href={`/litters/${litter.id}`}><span className="avatar"><ListTree size={18} /></span><div><h3>{litter.name}</h3><p>{dogName(litter.dam_id)} × {dogName(litter.sire_id)}</p><small>{litter.birth_date ? `Born ${shortDate(litter.birth_date)}` : litter.due_date ? `Due ${shortDate(litter.due_date)}` : "Dates not scheduled"} · {puppies.length} {puppies.length === 1 ? "puppy" : "puppies"}</small></div><Status tone={litter.status === "Active" ? "good" : litter.status === "Planned" ? "warn" : "neutral"}>{litter.status}</Status></a><footer><a href={`/litters/${litter.id}`}><ExternalLink size={14} /> Open</a><button onClick={() => openEdit("litters", litter as unknown as Record<string, unknown>)}>Edit</button><button onClick={() => remove("litters", litter.id, litter.name)}>Delete</button></footer></article>;
+      })}</div> : <Empty title="No litters" text="Create planned and active litters with pairings, due dates, birth dates, and expected counts." action="Create litter" onAction={() => openCreate("litters")} />}
+    </Section>
+    <Section eyebrow="Next Milestones" title="Litter schedule" action={<button className="ghost" onClick={() => openCreate("events", { event_type: "Breeding" })}>Schedule event</button>}>
+      {dueSoon.length ? <div className="event-stack">{dueSoon.map((litter) => <button key={litter.id} onClick={() => openEdit("litters", litter as unknown as Record<string, unknown>)}><span><b>{new Date(`${litter.due_date}T12:00:00`).getDate()}</b><small>{new Date(`${litter.due_date}T12:00:00`).toLocaleString("en-US", { month: "short" })}</small></span><p><b>{litter.name}</b><small>{dogName(litter.dam_id)} × {dogName(litter.sire_id)} · {litter.expected_count ?? "?"} expected</small></p><Status tone="warn">{`${daysUntil(litter.due_date)}d`}</Status></button>)}</div> : <Empty title="No litter due dates in the next 30 days" text="Add a due date to a planned litter and it will appear in this schedule." action="Create litter" onAction={() => openCreate("litters")} />}
+    </Section>
+    <Section eyebrow="Roster Health" title="Puppies by litter">
+      {data.litters.length ? <div className="table-list">{data.litters.map((litter) => {
+        const puppies = litterPuppies(litter.id);
+        const assigned = puppies.filter((puppy) => puppy.buyer_id).length;
+        return <a href={`/litters/${litter.id}`} key={litter.id}><span><b>{litter.name}</b><small>{puppies.length ? puppies.map((puppy) => puppy.name).join(", ") : "No puppies recorded"}</small></span><strong>{assigned}/{puppies.length} assigned</strong></a>;
+      })}</div> : <Empty title="No litter rosters" text="Create a litter, then add its puppies to build the roster." action="Create litter" onAction={() => openCreate("litters")} />}
+    </Section>
+  </div>;
+}
+
+function PuppiesView({ data, openCreate, openEdit, remove }: ViewProps) {
+  const available = data.puppies.filter((puppy) => puppy.status === "Available");
+  const assigned = data.puppies.filter((puppy) => puppy.buyer_id);
+  const unassigned = data.puppies.filter((puppy) => !puppy.buyer_id);
+  const placementRate = pct(assigned.length, data.puppies.length);
+  const litterName = (litterId: number) => data.litters.find((litter) => litter.id === litterId)?.name ?? "Unknown litter";
+  const buyerName = (buyerId: number | null) => {
+    if (!buyerId) return "Unassigned";
+    const buyer = data.buyers.find((candidate) => candidate.id === buyerId);
+    return buyer ? fullName(buyer) : `Buyer #${buyerId}`;
+  };
+
+  return <div className="grid command-grid">
+    <div className="metric-row panel-wide">
+      <button type="button"><span>Total puppies</span><b>{data.puppies.length}</b><small>Complete puppy registry</small></button>
+      <button type="button"><span>Available</span><b>{available.length}</b><small>Ready for placement</small></button>
+      <button type="button"><span>Assigned</span><b>{assigned.length}</b><small>{placementRate}% placement rate</small></button>
+      <button type="button"><span>Unassigned</span><b>{unassigned.length}</b><small>{unassigned.length ? "Placement attention needed" : "Every puppy has a family"}</small></button>
+    </div>
+    <Section eyebrow="Puppy Registry" title="Puppies" action={<button className="primary-action" onClick={() => openCreate("puppies")}><Plus size={15} /> Add puppy</button>}>
+      {data.puppies.length ? <div className="card-grid">{data.puppies.map((puppy) => <article key={puppy.id} className="record-card"><a className="record-card-profile" href={`/puppies/${puppy.id}`}><span className="avatar"><PawPrint size={18} /></span><div><h3>{puppy.name}</h3><p>{[puppy.sex, puppy.color, litterName(puppy.litter_id)].filter(Boolean).join(" · ")}</p><small>{puppy.buyer_id ? `Family: ${buyerName(puppy.buyer_id)}` : "No family assigned"} · {money(puppy.price_cents)}</small></div><Status tone={puppy.buyer_id ? "good" : puppy.status === "Available" ? "warn" : "neutral"}>{puppy.status}</Status></a><footer><a href={`/puppies/${puppy.id}`}><ExternalLink size={14} /> Open</a><button onClick={() => openEdit("puppies", puppy as unknown as Record<string, unknown>)}>Edit</button><button onClick={() => openCreate("updates", { puppy_id: puppy.id })}>Update</button><button onClick={() => remove("puppies", puppy.id, puppy.name)}>Delete</button></footer></article>)}</div> : <Empty title="No puppies" text="Add puppy records and connect them to litters and families." action="Add puppy" onAction={() => openCreate("puppies")} />}
+    </Section>
+    <Section eyebrow="Placement Queue" title="Puppies needing a family" action={<button className="ghost" onClick={() => openCreate("buyers")}>Add family</button>}>
+      {unassigned.length ? <div className="table-list">{unassigned.map((puppy) => <button key={puppy.id} onClick={() => openEdit("puppies", puppy as unknown as Record<string, unknown>)}><span><b>{puppy.name}</b><small>{litterName(puppy.litter_id)} · {[puppy.sex, puppy.color].filter(Boolean).join(" · ") || "Details not recorded"}</small></span><Status tone="warn">{puppy.status}</Status></button>)}</div> : <Empty title="Every puppy is assigned" text="There are no puppies waiting for a family." action="Add puppy" onAction={() => openCreate("puppies")} />}
+    </Section>
+    <Section eyebrow="Family Connections" title="Assigned puppies">
+      {assigned.length ? <div className="table-list">{assigned.map((puppy) => <a href={`/families/${puppy.buyer_id}`} key={puppy.id}><span><b>{puppy.name}</b><small>{buyerName(puppy.buyer_id)} · {litterName(puppy.litter_id)}</small></span><strong>{money(puppy.price_cents)}</strong></a>)}</div> : <Empty title="No family assignments" text="Assign a buyer from a puppy record to connect the placement." action="Add family" onAction={() => openCreate("buyers")} />}
     </Section>
   </div>;
 }
@@ -452,8 +542,11 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts, refreshActiv
 
   useEffect(() => {
     if (!newCallId) return;
-    setInboxFilter("All");
-    setSelectedInteractionId(newCallId);
+    const timer = window.setTimeout(() => {
+      setInboxFilter("All");
+      setSelectedInteractionId(newCallId);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [newCallId]);
 
   async function startOutboundCall() {
@@ -609,13 +702,43 @@ function CallerCrmView({ data, openCreate, openEdit, openContracts, refreshActiv
 
 function FinanceView({ data, openCreate, openEdit }: ViewProps) {
   const a = useAnalytics(data);
-  return <div className="grid">
-    <div className="metric-row panel-wide"><button><span>Payments received</span><b>{money(a.paid)}</b><small>{money(a.fees)} in documented fees</small></button><button><span>Recorded costs</span><b>{money(a.costs)}</b><small>Program expenses</small></button><button><span>Outstanding</span><b>{money(a.outstanding)}</b><small>{a.overdue.length} overdue items</small></button><button><span>Active plan value</span><b>{money(a.activePlanValue)}</b><small>Payment plans</small></button></div>
-    <Section eyebrow="Ledger" title="Transactions" action={<button className="ghost" onClick={() => openCreate("transactions", { type: "Payment" })}>Log transaction</button>}>
-      {data.transactions.length ? <div className="table-list">{data.transactions.map((item) => { const fee = transactionFeeCents(item); return <button key={item.id} onClick={() => openEdit("transactions", item as unknown as Record<string, unknown>)}><span><b>{item.description}</b><small>{[item.type, item.category, item.method, item.status, fee ? `Fee ${money(fee)}` : null, item.due_date ? `Due ${shortDate(item.due_date)}` : null].filter(Boolean).join(" / ")}</small></span><strong>{money(item.amount_cents)}</strong></button>; })}</div> : <Empty title="No ledger entries" text="Log deposits, balances, refunds, veterinary costs, supplies, and other financial events." action="Log transaction" onAction={() => openCreate("transactions", { type: "Payment" })} />}
-    </Section>
-    <Section eyebrow="Payment Plans" title="Installments" action={<button className="ghost" onClick={() => openCreate("payment_plans")}>New plan</button>}>
-      {data.payment_plans.length ? <div className="card-grid compact">{data.payment_plans.map((plan) => <article key={plan.id} className="record-card"><div><h3>{plan.name}</h3><p>{money(plan.payment_amount_cents)} {plan.frequency.toLowerCase()} / {plan.term_count} terms</p></div><b>{money(plan.total_amount_cents)}</b><Status tone={plan.status === "Active" ? "good" : "neutral"}>{plan.status}</Status><footer><button onClick={() => openEdit("payment_plans", plan as unknown as Record<string, unknown>)}>Edit</button></footer></article>)}</div> : <Empty title="No payment plans" text="Create installment schedules and connect them to buyers and puppies." action="New plan" onAction={() => openCreate("payment_plans")} />}
+  const [selectedBuyerId, setSelectedBuyerId] = useState<number | null>(null);
+  const [accountQuery, setAccountQuery] = useState("");
+  const paymentTransactions = data.transactions.filter(isPaymentTransaction);
+  const unassignedPayments = paymentTransactions.filter((item) => !item.buyer_id);
+  const accounts = data.buyers.map((buyer) => {
+    const transactions = paymentTransactions.filter((item) => item.buyer_id === buyer.id);
+    const plans = data.payment_plans.filter((plan) => plan.buyer_id === buyer.id);
+    const paid = sumBy(transactions.filter(isPaidTransaction), (item) => item.amount_cents);
+    const outstanding = sumBy(transactions.filter((item) => !paidStatuses.has(item.status)), (item) => item.amount_cents);
+    return { buyer, transactions, plans, paid, outstanding };
+  }).filter((account) => `${fullName(account.buyer)} ${account.buyer.email} ${account.buyer.phone ?? ""}`.toLowerCase().includes(accountQuery.trim().toLowerCase()))
+    .sort((left, right) => right.outstanding - left.outstanding || fullName(left.buyer).localeCompare(fullName(right.buyer)));
+  const selectedAccount = accounts.find((account) => account.buyer.id === selectedBuyerId) ?? null;
+  const visibleTransactions = selectedAccount ? selectedAccount.transactions : data.transactions;
+
+  return <div className="grid finance-grid">
+    <div className="metric-row panel-wide"><button><span>Payments received</span><b>{money(a.paid)}</b><small>{money(a.fees)} in documented fees</small></button><button><span>Recorded costs</span><b>{money(a.costs)}</b><small>Program expenses</small></button><button><span>Outstanding</span><b>{money(a.outstanding)}</b><small>{a.overdue.length} overdue items</small></button><button><span>Buyer accounts</span><b>{data.buyers.length}</b><small>{unassignedPayments.length ? `${unassignedPayments.length} payments need a family` : "Every payment is assigned"}</small></button></div>
+    <section className="finance-workbench panel-wide">
+      <aside className="finance-accounts">
+        <header><span>BUYER ACCOUNTS</span><h2>Receivables</h2><p>Choose a family to inspect every payment credited to their account.</p></header>
+        <label className="finance-account-search"><SearchIcon size={15} /><input value={accountQuery} onChange={(event) => setAccountQuery(event.target.value)} placeholder="Find a buyer..." /></label>
+        <button className={!selectedAccount ? "finance-account active" : "finance-account"} onClick={() => setSelectedBuyerId(null)}><span><b>All ledger activity</b><small>{data.transactions.length} total entries</small></span><strong>{money(a.paid)}</strong></button>
+        <div className="finance-account-list">{accounts.map((account) => <button className={selectedAccount?.buyer.id === account.buyer.id ? "finance-account active" : "finance-account"} key={account.buyer.id} onClick={() => setSelectedBuyerId(account.buyer.id)}><span className="finance-account-avatar">{initials(fullName(account.buyer))}</span><span><b>{fullName(account.buyer)}</b><small>{money(account.paid)} received · {money(account.outstanding)} due</small></span><strong>{account.transactions.length}</strong></button>)}</div>
+      </aside>
+      <div className="finance-ledger-window">
+        <header><div><span>{selectedAccount ? "FAMILY ACCOUNT" : "MASTER LEDGER"}</span><h2>{selectedAccount ? fullName(selectedAccount.buyer) : "All transactions"}</h2><p>{selectedAccount ? `${selectedAccount.transactions.length} credited transactions and ${selectedAccount.plans.length} payment plans` : "Payments, deposits, costs, refunds, and fees across the entire program."}</p></div><div className="finance-ledger-actions">{selectedAccount && <a href={`/families/${selectedAccount.buyer.id}`}>Open family <ExternalLink size={14} /></a>}<button onClick={() => openCreate("transactions", { type: "Payment", buyer_id: selectedAccount?.buyer.id ?? "" })}><Plus size={15} /> Credit payment</button></div></header>
+        {selectedAccount && <div className="finance-account-summary"><span><small>Received</small><b>{money(selectedAccount.paid)}</b></span><span><small>Outstanding</small><b>{money(selectedAccount.outstanding)}</b></span><span><small>Active plans</small><b>{selectedAccount.plans.filter((plan) => plan.status === "Active").length}</b></span><span><small>Account status</small><Status tone={selectedAccount.outstanding > 0 ? "warn" : "good"}>{selectedAccount.outstanding > 0 ? "Open" : "Current"}</Status></span></div>}
+        {visibleTransactions.length ? <div className="finance-ledger-list">{visibleTransactions.map((item) => {
+          const fee = transactionFeeCents(item);
+          const buyer = item.buyer_id ? data.buyers.find((candidate) => candidate.id === item.buyer_id) : null;
+          return <button key={item.id} onClick={() => openEdit("transactions", item as unknown as Record<string, unknown>)}><span className={`ledger-type ${item.type.toLowerCase()}`}>{item.type === "Cost" ? "−" : "+"}</span><span><b>{item.description}</b><small>{[buyer ? fullName(buyer) : isPaymentTransaction(item) ? "Unassigned buyer" : null, item.category, item.method, item.paid_date ? shortDate(item.paid_date) : item.due_date ? `Due ${shortDate(item.due_date)}` : null, fee ? `Fee ${money(fee)}` : null].filter(Boolean).join(" · ")}</small></span><Status tone={paidStatuses.has(item.status) ? "good" : item.status === "Overdue" ? "bad" : "neutral"}>{item.status}</Status><strong>{item.type === "Cost" ? "−" : "+"}{money(item.amount_cents)}</strong></button>;
+        })}</div> : <Empty title="No account activity" text={selectedAccount ? "Credit the first payment to this buyer and it will appear here and in their family profile." : "Payments, deposits, costs, and refunds will appear here as they are recorded."} action="Credit payment" onAction={() => openCreate("transactions", { type: "Payment", buyer_id: selectedAccount?.buyer.id ?? "" })} />}
+      </div>
+    </section>
+    {unassignedPayments.length > 0 && <section className="finance-integrity-alert panel-wide"><ShieldCheck size={20} /><span><b>{unassignedPayments.length} existing {unassignedPayments.length === 1 ? "payment is" : "payments are"} not assigned to a buyer</b><small>Open each item below and choose the family that should receive credit. New payments now require a buyer.</small></span><button onClick={() => openEdit("transactions", unassignedPayments[0] as unknown as Record<string, unknown>)}>Review first item</button></section>}
+    <Section eyebrow="Payment Plans" title="Installment schedules" action={<button className="ghost" onClick={() => openCreate("payment_plans")}>New plan</button>}>
+      {data.payment_plans.length ? <div className="card-grid compact">{data.payment_plans.map((plan) => { const buyer = data.buyers.find((item) => item.id === plan.buyer_id); return <article key={plan.id} className="record-card"><div><h3>{plan.name}</h3><p>{buyer ? fullName(buyer) : "Buyer not found"} · {money(plan.payment_amount_cents)} {plan.frequency.toLowerCase()} · {plan.term_count} terms</p></div><b>{money(plan.total_amount_cents)}</b><Status tone={plan.status === "Active" ? "good" : "neutral"}>{plan.status}</Status><footer><button onClick={() => openCreate("transactions", { type: "Payment", buyer_id: plan.buyer_id, payment_plan_id: plan.id, category: "Installment", description: "Installment payment" })}>Record payment</button><button onClick={() => openEdit("payment_plans", plan as unknown as Record<string, unknown>)}>Edit</button></footer></article>; })}</div> : <Empty title="No payment plans" text="Create installment schedules and connect them to buyers and puppies." action="New plan" onAction={() => openCreate("payment_plans")} />}
     </Section>
   </div>;
 }
@@ -723,6 +846,9 @@ function TransactionFields({ data, record, preset }: { data: DataSet; record?: R
   const initialValue = valueOf(record, "type", valueOf(preset, "type", "Payment"));
   const initialType = initialValue === "Cost" ? "Cost" : initialValue === "Deposit" ? "Deposit" : "Payment";
   const [type, setType] = useState<"Payment" | "Deposit" | "Cost">(initialType);
+  const [buyerId, setBuyerId] = useState(valueOf(record, "buyer_id", valueOf(preset, "buyer_id")));
+  const [puppyId, setPuppyId] = useState(valueOf(record, "puppy_id", valueOf(preset, "puppy_id")));
+  const [planId, setPlanId] = useState(valueOf(record, "payment_plan_id", valueOf(preset, "payment_plan_id")));
   const descriptions = type === "Cost" ? costDescriptions : paymentDescriptions;
   const currentCategory = valueOf(record, "category", valueOf(preset, "category"));
   const currentMethod = valueOf(record, "method", valueOf(preset, "method"));
@@ -731,8 +857,32 @@ function TransactionFields({ data, record, preset }: { data: DataSet; record?: R
   const dogOptions = data.dogs.map((dog) => ({ value: dog.id, label: dog.name }));
   const buyerOptions = data.buyers.map((buyer) => ({ value: buyer.id, label: fullName(buyer) }));
   const litterOptions = data.litters.map((litter) => ({ value: litter.id, label: litter.name }));
-  const puppyOptions = data.puppies.map((puppy) => ({ value: puppy.id, label: puppy.name }));
-  const planOptions = data.payment_plans.map((plan) => ({ value: plan.id, label: plan.name }));
+  const selectedBuyer = data.buyers.find((buyer) => buyer.id === Number(buyerId)) ?? null;
+  const buyerLabel = (candidateId: number) => {
+    const buyer = data.buyers.find((item) => item.id === candidateId);
+    return buyer ? fullName(buyer) : `Buyer #${candidateId}`;
+  };
+
+  function chooseBuyer(nextBuyerId: string) {
+    setBuyerId(nextBuyerId);
+    const currentPuppy = data.puppies.find((puppy) => puppy.id === Number(puppyId));
+    const currentPlan = data.payment_plans.find((plan) => plan.id === Number(planId));
+    if (nextBuyerId && currentPuppy?.buyer_id && currentPuppy.buyer_id !== Number(nextBuyerId)) setPuppyId("");
+    if (nextBuyerId && currentPlan?.buyer_id && currentPlan.buyer_id !== Number(nextBuyerId)) setPlanId("");
+  }
+
+  function choosePuppy(nextPuppyId: string) {
+    setPuppyId(nextPuppyId);
+    const puppy = data.puppies.find((item) => item.id === Number(nextPuppyId));
+    if (puppy?.buyer_id) setBuyerId(String(puppy.buyer_id));
+  }
+
+  function choosePlan(nextPlanId: string) {
+    setPlanId(nextPlanId);
+    const plan = data.payment_plans.find((item) => item.id === Number(nextPlanId));
+    if (plan?.buyer_id) setBuyerId(String(plan.buyer_id));
+    if (plan?.puppy_ids.length === 1) setPuppyId(String(plan.puppy_ids[0]));
+  }
 
   return <>
     <label><span>Transaction type</span><select name="type" value={type} onChange={(event) => setType(event.target.value as "Payment" | "Deposit" | "Cost")} required><option value="Payment">Payment received</option><option value="Deposit">Deposit received</option><option value="Cost">Cost or expense</option></select></label>
@@ -740,11 +890,12 @@ function TransactionFields({ data, record, preset }: { data: DataSet; record?: R
     <label className="wide"><span>What was this for?</span><input name="description" list="transaction-description-options" defaultValue={valueOf(record, "description", valueOf(preset, "description"))} placeholder={type === "Cost" ? "Example: Veterinary care" : "Example: Puppy deposit"} required /><datalist id="transaction-description-options">{descriptions.map((description) => <option key={description} value={description} />)}</datalist><small className="field-hint">Choose a suggestion or enter a specific description.</small></label>
     <label><span>Transaction amount</span><input name="amount" type="number" min="0" step="0.01" inputMode="decimal" defaultValue={dollarDefault(record, "amount", "amount_cents", preset)} required /></label>
     <label><span>Fee charged</span><input name="fee_amount" type="number" min="0" step="0.01" inputMode="decimal" defaultValue={transactionFeeDefault(record, preset)} placeholder="0.00" /><small className="field-hint">Processing, card, transfer, or other fee.</small></label>
-    <SelectField label="Buyer / family" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="No family" />
-    <SelectField label="Puppy" name="puppy_id" options={puppyOptions} record={record} preset={preset} empty="No puppy" />
+    <label className={type === "Cost" ? "" : "payment-buyer-field"}><span>{type === "Cost" ? "Buyer / family (optional)" : "Credit to buyer / family"}</span><select name="buyer_id" value={buyerId} onChange={(event) => chooseBuyer(event.target.value)} required={type !== "Cost"}><option value="">{type === "Cost" ? "No family" : "Choose the family receiving credit"}</option>{buyerOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{type !== "Cost" && <small className="field-hint">Required. This payment will appear in the selected family&apos;s profile, balance, portal, and receipts.</small>}</label>
+    <label><span>Puppy</span><select name="puppy_id" value={puppyId} onChange={(event) => choosePuppy(event.target.value)}><option value="">No puppy</option>{data.puppies.map((puppy) => <option key={puppy.id} value={puppy.id}>{puppy.name}{puppy.buyer_id ? ` / ${buyerLabel(puppy.buyer_id)}` : " / Unassigned"}</option>)}</select></label>
     <SelectField label="Dog" name="dog_id" options={dogOptions} record={record} preset={preset} empty="No breeding dog" />
     <SelectField label="Litter" name="litter_id" options={litterOptions} record={record} preset={preset} empty="No litter" />
-    <SelectField label="Payment plan" name="payment_plan_id" options={planOptions} record={record} preset={preset} empty="No payment plan" />
+    <label><span>Payment plan</span><select name="payment_plan_id" value={planId} onChange={(event) => choosePlan(event.target.value)}><option value="">No payment plan</option>{data.payment_plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} / {buyerLabel(plan.buyer_id)}</option>)}</select></label>
+    {type !== "Cost" && <div className={selectedBuyer ? "payment-credit-preview wide assigned" : "payment-credit-preview wide"}><span><ShieldCheck size={20} /></span><div><b>{selectedBuyer ? `${fullName(selectedBuyer)} will receive this payment` : "A buyer must receive this payment"}</b><small>{selectedBuyer ? "Saving updates this family’s ledger and enables the correct receipt and account history." : "Choose a family directly, or select an assigned puppy or payment plan to fill it automatically."}</small></div></div>}
     <label><span>Payment method</span><select name="method" defaultValue={currentMethod}><option value="">Choose a method</option>{currentMethod && !transactionMethods.includes(currentMethod) && <option value={currentMethod}>{currentMethod}</option>}{transactionMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label>
     <label><span>Status</span><select name="status" defaultValue={currentStatus}>{currentStatus && !transactionStatuses.includes(currentStatus) && <option value={currentStatus}>{currentStatus}</option>}{transactionStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
     <Field label="Due date" name="due_date" type="date" record={record} preset={preset} />
@@ -885,9 +1036,24 @@ export default function Home() {
   const [activitySyncedAt, setActivitySyncedAt] = useState<Date | null>(null);
   const [activityError, setActivityError] = useState("");
   const [newCallId, setNewCallId] = useState<number | null>(null);
+  const [launcherOpen, setLauncherOpen] = useState(false);
+  const [controlCenterOpen, setControlCenterOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [windowMinimized, setWindowMinimized] = useState(false);
+  const [now, setNow] = useState<Date | null>(null);
   const dataRef = useRef<DataSet>(emptyData);
   const activityRequestInFlight = useRef(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const analytics = useAnalytics(data);
+
+  const navigateTo = useCallback((nextView: View) => {
+    setView(nextView);
+    setWindowMinimized(false);
+    setLauncherOpen(false);
+    setCommandOpen(false);
+    setSearch("");
+  }, []);
 
   const loadData = useCallback(async () => {
     setError("");
@@ -956,6 +1122,40 @@ export default function Home() {
     };
   }, [refreshActivity, view]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2400); return () => window.clearTimeout(timer); }, [toast]);
+  useEffect(() => {
+    const initial = window.setTimeout(() => setNow(new Date()), 0);
+    const interval = window.setInterval(() => setNow(new Date()), 30000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, []);
+  useEffect(() => {
+    const handleKeyboard = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen(true);
+        window.setTimeout(() => searchInputRef.current?.focus(), 0);
+        return;
+      }
+      if (event.key === "Escape") {
+        setLauncherOpen(false);
+        setControlCenterOpen(false);
+        setCommandOpen(false);
+        setSearch("");
+        return;
+      }
+      if (event.altKey && /^[1-9a-z]$/i.test(event.key)) {
+        const target = views.find((item) => item.shortcut === event.key.toUpperCase());
+        if (target) {
+          event.preventDefault();
+          navigateTo(target.id);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyboard);
+    return () => window.removeEventListener("keydown", handleKeyboard);
+  }, [navigateTo]);
 
   const openCreate = (resource: Resource, preset: Record<string, unknown> = {}) => setModal({ resource, preset });
   const openEdit = (resource: Resource, record: Record<string, unknown>) => setModal({ resource, record });
@@ -1070,9 +1270,9 @@ export default function Home() {
     if (query.length < 2) return [];
     return [
       ...data.dogs.map((item) => ({ label: item.name, detail: `${item.role} / ${item.status}`, view: "Breeding" as View })),
-      ...data.litters.map((item) => ({ label: item.name, detail: `Litter / ${item.status}`, view: "Breeding" as View })),
+      ...data.litters.map((item) => ({ label: item.name, detail: `Litter / ${item.status}`, view: "Litters" as View })),
       ...data.buyers.map((item) => ({ label: fullName(item), detail: [item.phone, item.email].filter(Boolean).join(" / "), view: item.phone ? "CRM" as View : "Families" as View })),
-      ...data.puppies.map((item) => ({ label: item.name, detail: `Puppy / ${item.status}`, view: "Families" as View })),
+      ...data.puppies.map((item) => ({ label: item.name, detail: `Puppy / ${item.status}`, view: "Puppies" as View })),
       ...data.transactions.map((item) => ({ label: item.description, detail: `${item.type} / ${money(item.amount_cents)}`, view: "Finance" as View })),
       ...data.events.map((item) => ({ label: item.title, detail: shortDate(item.event_date), view: "Calendar" as View })),
       ...data.dog_medical_records.map((item) => ({ label: item.title, detail: `${item.record_type} / ${shortDate(item.next_due_date)}`, view: "Care" as View })),
@@ -1081,10 +1281,12 @@ export default function Home() {
   }, [data, search]);
 
   const activeViewProps = { data, openCreate, openEdit, openDocumentUpload, remove, removeDocument, openContracts };
-  const quickResource = view === "Calendar" || view === "Care" || view === "CRM" ? "events" : view === "Families" || view === "Comms" || view === "Portal" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
+  const quickResource = view === "Litters" ? "litters" : view === "Puppies" ? "puppies" : view === "Calendar" || view === "Care" || view === "CRM" ? "events" : view === "Families" || view === "Comms" || view === "Portal" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
   const viewCopy: Record<View, { title: string; text: string }> = {
     Command: { title: "Operating command", text: "Control surface for every record in the program." },
     Breeding: { title: "Breeding control", text: "Manage dogs, litters, registrations, health context, and pairings." },
+    Litters: { title: "Litter operations", text: "Manage litter plans, pairings, due dates, birth records, and puppy rosters." },
+    Puppies: { title: "Puppy operations", text: "Manage every puppy, family assignment, placement status, price, and update." },
     Families: { title: "Families and placement", text: "Manage buyer pipeline, puppy assignments, and family-facing updates." },
     Care: { title: "Care operations", text: "Run medical schedules, open tasks, heat watch, and appointment control." },
     Finance: { title: "Finance ledger", text: "Track payments, costs, balances, payment plans, and profitability." },
@@ -1098,26 +1300,42 @@ export default function Home() {
     Reports: { title: "Reports and intelligence", text: "Review performance, compliance, profitability, and export an operating snapshot." },
   };
   const ActiveViewIcon = views.find((item) => item.id === view)?.icon ?? LayoutDashboard;
-  return <div className="app-shell">
+  const activeViewDefinition = views.find((item) => item.id === view) ?? views[0];
+  const coreRecordCount = data.dogs.length + data.litters.length + data.buyers.length + data.puppies.length;
+  const viewBadges: Partial<Record<View, number>> = {
+    Breeding: analytics.activeLitters.length,
+    Litters: analytics.activeLitters.length,
+    Puppies: analytics.unmatched.length,
+    Families: analytics.pendingBuyers.length,
+    Care: analytics.upcomingCare.length,
+    Finance: analytics.overdue.length,
+    Comms: analytics.draftUpdates.length,
+    CRM: data.events.filter((item) => item.event_type === "Call" && item.status !== "Completed").length,
+    Calendar: analytics.openTasks.length,
+    Vault: analytics.docs,
+  };
+
+  return <div className={`app-shell ${focusMode ? "focus-mode" : ""}`}>
     <aside className="sidebar">
-      <button className="brand" onClick={() => setView("Command")}><span><CircleGauge size={22} /></span><b>SWVAOS</b><small>Operating system</small></button>
-      <span className="dock-caption">Applications</span>
-      <nav aria-label="SWVAOS sections">{views.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><Icon size={18} /><span>{item.label}</span></button>; })}</nav>
-      <div className="system-card"><span className={error ? "offline" : ""} /><b>{error ? "Action needed" : "System online"}</b><small>{analytics.readiness}% readiness / {analytics.docs} vault files</small></div>
+      <button className="brand" onClick={() => setLauncherOpen(true)} aria-expanded={launcherOpen}><span><Grid2X2 size={21} /></span><b>SWVAOS</b><small>App launcher</small></button>
+      <div className="dock-groups">{viewGroups.map((group) => <section key={group}><span className="dock-caption">{group}</span><nav aria-label={`${group} applications`}>{views.filter((item) => item.group === group).map((item) => { const Icon = item.icon; const badge = viewBadges[item.id]; return <button key={item.id} className={view === item.id && !windowMinimized ? "active" : ""} onClick={() => navigateTo(item.id)} title={`${item.label} · Alt+${item.shortcut}`}><span className="dock-app-icon"><Icon size={19} />{Boolean(badge) && <em>{Number(badge) > 99 ? "99+" : badge}</em>}</span><span className="dock-app-label">{item.label}</span></button>; })}</nav></section>)}</div>
+      <button className="system-card" onClick={() => setControlCenterOpen((current) => !current)} aria-expanded={controlCenterOpen}><span className={error ? "offline" : ""} /><b>{error ? "Action needed" : "System online"}</b><small>{analytics.readiness}% readiness · {analytics.docs} files</small><Settings2 size={14} /></button>
     </aside>
     <main className="os-workspace">
       <header className="topbar">
-        <div className="os-menu-brand"><span><CircleGauge size={17} /></span><b>SWVAOS</b><small>KENNEL OPERATIONS</small></div>
-        <div className="search"><SearchIcon size={18} /><input aria-label="Search SWVAOS" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search dogs, families, payments, care, files..." />{searchResults.length > 0 && <div className="search-menu">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => { setView(item.view); setSearch(""); }}><b>{item.label}</b><small>{item.detail}</small></button>)}</div>}</div>
-        <div className="top-actions"><span className="network-state"><Wifi size={14} /> LIVE</span><span suppressHydrationWarning>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}</span><button onClick={() => openDocumentUpload(view === "Families" ? "buyer" : "dog")}><Upload size={16} /> Upload</button><button onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={16} /> Payment</button><button className="primary-action" onClick={() => openCreate(quickResource)}><Plus size={16} /> Add</button></div>
+        <div className="os-menu-cluster"><button className="os-menu-brand" onClick={() => setLauncherOpen(true)}><span><CircleGauge size={17} /></span><b>SWVAOS</b><small>KENNEL OPERATIONS</small></button><nav className="desktop-menus" aria-label="System menu"><button onClick={() => setLauncherOpen(true)}>Apps</button><button onClick={() => setCommandOpen(true)}>Go</button><button onClick={() => setFocusMode((current) => !current)}>Window</button></nav></div>
+        <div className="search command-search"><SearchIcon size={18} /><input ref={searchInputRef} aria-label="Search or open a command" value={search} onFocus={() => setCommandOpen(true)} onChange={(event) => { setSearch(event.target.value); setCommandOpen(true); }} placeholder="Search everything or run a command..." /><kbd><CommandIcon size={11} />K</kbd>{commandOpen && <div className="search-menu command-palette"><header><span>COMMAND CENTER</span><button onClick={() => { setCommandOpen(false); setSearch(""); }} aria-label="Close command center"><X size={14} /></button></header>{search.trim() ? searchResults.length ? <div className="command-results">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => navigateTo(item.view)}><span><b>{item.label}</b><small>{item.detail}</small></span><ChevronRight size={15} /></button>)}</div> : <div className="command-empty"><SearchIcon size={19} /><b>No matching records</b><small>Try a family name, puppy, transaction, event, or document area.</small></div> : <><span className="command-section-label">Quick launch</span><div className="command-apps">{views.slice(0, 8).map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => navigateTo(item.id)}><Icon size={17} /><span>{item.label}</span><kbd>⌥{item.shortcut}</kbd></button>; })}</div><span className="command-section-label">Quick actions</span><div className="command-actions"><button onClick={() => { setCommandOpen(false); openCreate("transactions", { type: "Payment" }); }}><ReceiptText size={16} /><span><b>Credit a payment</b><small>Assign income to a buyer account</small></span></button><button onClick={() => { setCommandOpen(false); openCreate("buyers"); }}><UserRound size={16} /><span><b>Add a family</b><small>Create a buyer profile</small></span></button><button onClick={() => { setCommandOpen(false); openDocumentUpload("dog"); }}><Upload size={16} /><span><b>Store a document</b><small>Open the secure vault uploader</small></span></button></div></>}</div>}</div>
+        <div className="top-actions"><button className="network-state" onClick={() => setControlCenterOpen((current) => !current)}><Wifi size={14} /> LIVE</button><span className="menu-clock" suppressHydrationWarning>{now ? new Intl.DateTimeFormat("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }).format(now) : "Syncing..."}</span><button className="icon-action" onClick={() => setControlCenterOpen((current) => !current)} aria-label="Open notifications and controls"><Bell size={16} />{(analytics.overdue.length + analytics.dueHealth.length) > 0 && <i />}</button><button className="upload-quick" onClick={() => openDocumentUpload(view === "Families" ? "buyer" : "dog")}><Upload size={16} /> Upload</button><button className="payment-quick" onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={16} /> Payment</button><button className="primary-action" onClick={() => openCreate(quickResource)}><Plus size={16} /> Add</button></div>
       </header>
-      <div className="os-desktop"><section className="workspace-window"><header className="window-bar"><div className="window-lights" aria-hidden="true"><i /><i /><i /></div><div className="window-identity"><span><ActiveViewIcon size={16} /></span><b>{viewCopy[view].title}</b><small>SWVAOS / {view}</small></div><div className="window-state"><span>ACTIVE WORKSPACE</span><i /></div></header><div className="content">
-        <div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div>
+      {controlCenterOpen && <aside className="control-center"><header><div><span>CONTROL CENTER</span><h2>System overview</h2></div><button onClick={() => setControlCenterOpen(false)} aria-label="Close control center"><X size={15} /></button></header><div className="control-toggles"><button className="active"><Wifi size={18} /><span><b>Live data</b><small>Connected</small></span></button><button className={focusMode ? "active" : ""} onClick={() => setFocusMode((current) => !current)}>{focusMode ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}<span><b>Focus mode</b><small>{focusMode ? "Dock hidden" : "Dock visible"}</small></span></button><button onClick={() => setCommandOpen(true)}><Keyboard size={18} /><span><b>Command</b><small>Ctrl/⌘ K</small></span></button><button onClick={() => navigateTo("Vault")}><ShieldCheck size={18} /><span><b>Vault</b><small>{analytics.docs} files</small></span></button></div><div className="control-meters"><span><small>Operational readiness</small><b>{analytics.readiness}%</b><i style={{ "--meter": `${analytics.readiness}%` } as React.CSSProperties} /></span><span><small>Registry coverage</small><b>{analytics.registryCoverage}%</b><i style={{ "--meter": `${analytics.registryCoverage}%` } as React.CSSProperties} /></span></div><div className="control-alerts"><span><Bell size={16} /><b>Attention center</b></span>{analytics.overdue.length + analytics.dueHealth.length ? <p>{analytics.overdue.length} overdue finance items and {analytics.dueHealth.length} care deadlines need review.</p> : <p>No urgent finance or care alerts. Core systems are nominal.</p>}</div></aside>}
+      <div className="os-desktop">{windowMinimized ? <section className="desktop-home"><div className="desktop-shortcuts">{taskbarViews.map((itemId) => { const item = views.find((candidate) => candidate.id === itemId)!; const Icon = item.icon; return <button key={item.id} onClick={() => navigateTo(item.id)}><span><Icon size={28} /></span><b>{item.label}</b></button>; })}</div><div className="desktop-widget"><span><Sparkles size={18} /> TODAY IN SWVAOS</span><b>{analytics.readiness}% ready</b><p>{coreRecordCount} core records · {analytics.upcoming.length} upcoming events · {money(analytics.outstanding)} outstanding</p><button onClick={() => setWindowMinimized(false)}><AppWindow size={16} /> Restore {activeViewDefinition.label}</button></div></section> : <section className="workspace-window"><header className="window-bar"><div className="window-lights"><button onClick={() => navigateTo("Command")} aria-label="Close current app and return to Command" title="Return to Command" /><button onClick={() => setWindowMinimized(true)} aria-label="Minimize workspace" title="Minimize" /><button onClick={() => setFocusMode((current) => !current)} aria-label="Toggle maximized focus mode" title="Maximize" /></div><div className="window-identity"><span><ActiveViewIcon size={16} /></span><b>{viewCopy[view].title}</b><small>SWVAOS / {activeViewDefinition.group} / {view}</small></div><div className="window-state"><span>{focusMode ? "FOCUS MODE" : "ACTIVE WORKSPACE"}</span><i /></div></header><div className="window-toolbar"><div><button onClick={() => setLauncherOpen(true)}><Layers3 size={14} /> Applications</button><ChevronRight size={13} /><span>{activeViewDefinition.group}</span><ChevronRight size={13} /><b>{activeViewDefinition.label}</b></div><div><span><i /> Live records</span><span>{coreRecordCount} core objects</span><button onClick={() => setFocusMode((current) => !current)}>{focusMode ? <Minimize2 size={14} /> : <Expand size={14} />}{focusMode ? "Exit focus" : "Focus"}</button></div></div><div className="content">
+        <div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p><div className="view-title-meta"><span><i /> Live workspace</span><span>{now ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(now) : "Today"}</span></div></div>
         {error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}
-        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={setView} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Portal" && <PortalPreviewView data={data} />}{view === "CRM" && <CallerCrmView {...activeViewProps} refreshActivity={refreshActivity} activityRefreshing={activityRefreshing} activitySyncedAt={activitySyncedAt} activityError={activityError} newCallId={newCallId} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
-      </div></section></div>
-      <footer className="os-statusbar"><span><i className={error ? "offline" : ""} /> {error ? "DEGRADED" : "ALL SYSTEMS NOMINAL"}</span><div><button onClick={() => setView("Command")} className={view === "Command" ? "active" : ""}><LayoutDashboard size={14} /> Command</button>{view !== "Command" && <button className="active"><ActiveViewIcon size={14} /> {view}</button>}</div><span>{data.dogs.length + data.litters.length + data.buyers.length + data.puppies.length} CORE RECORDS</span></footer>
+        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={navigateTo} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Litters" && <LittersView {...activeViewProps} />}{view === "Puppies" && <PuppiesView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Portal" && <PortalPreviewView data={data} />}{view === "CRM" && <CallerCrmView {...activeViewProps} refreshActivity={refreshActivity} activityRefreshing={activityRefreshing} activitySyncedAt={activitySyncedAt} activityError={activityError} newCallId={newCallId} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
+      </div></section>}</div>
+      <footer className="os-statusbar os-taskbar"><button className={launcherOpen ? "taskbar-start active" : "taskbar-start"} onClick={() => setLauncherOpen((current) => !current)} aria-label="Open app launcher"><Grid2X2 size={15} /></button><nav aria-label="Pinned applications">{taskbarViews.map((itemId) => { const item = views.find((candidate) => candidate.id === itemId)!; const Icon = item.icon; return <button key={item.id} onClick={() => view === item.id && windowMinimized ? setWindowMinimized(false) : navigateTo(item.id)} className={view === item.id && !windowMinimized ? "active" : ""} title={item.label}><Icon size={15} /><span>{item.label}</span></button>; })}</nav><div className="taskbar-system"><span><i className={error ? "offline" : ""} /> {error ? "Attention" : "Online"}</span><button onClick={() => setControlCenterOpen((current) => !current)}><Wifi size={13} /><span>{analytics.readiness}%</span></button><time>{now ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(now) : "--:--"}</time></div></footer>
     </main>
+    {launcherOpen && <div className="launcher-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLauncherOpen(false); }}><section className="app-launcher" role="dialog" aria-modal="true" aria-labelledby="app-launcher-title"><header><div><span><Grid2X2 size={18} /></span><div><small>SWVAOS DESKTOP</small><h2 id="app-launcher-title">Applications</h2></div></div><button onClick={() => setLauncherOpen(false)} aria-label="Close app launcher"><X size={17} /></button></header><button className="launcher-search" onClick={() => { setLauncherOpen(false); setCommandOpen(true); window.setTimeout(() => searchInputRef.current?.focus(), 0); }}><SearchIcon size={17} /><span>Search records, apps, and commands</span><kbd><CommandIcon size={11} />K</kbd></button><div className="launcher-grid">{views.map((item) => { const Icon = item.icon; const badge = viewBadges[item.id]; return <button key={item.id} onClick={() => navigateTo(item.id)}><span><Icon size={23} />{Boolean(badge) && <em>{badge}</em>}</span><b>{item.label}</b><small>{item.group}</small></button>; })}</div><footer><div><span><i className={error ? "offline" : ""} /> {error ? "Connection needs attention" : "All systems nominal"}</span><small>{coreRecordCount} core records synced</small></div><button onClick={() => { setLauncherOpen(false); setControlCenterOpen(true); }}><Settings2 size={15} /> Controls</button></footer></section></div>}
     {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}
     {documentModal && <DocumentUploadModal modal={documentModal} data={data} saving={saving} error={uploadError} onClose={() => setDocumentModal(null)} onKindChange={(kind) => setDocumentModal({ kind })} onSubmit={submitDocument} />}
     {contractModal && <ContractModal modal={contractModal} data={data} templates={templates} saving={saving} error={contractError} onClose={() => setContractModal(null)} onSubmit={submitContracts} onOpenPortal={() => void openExistingPortal()} />}

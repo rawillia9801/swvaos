@@ -1,7 +1,14 @@
-import { isResource, type ResourceInput } from "../../../db/resources";
+import { isResource, ResourceValidationError, type ResourceInput } from "../../../db/resources";
 import { createSupabaseResource, deleteSupabaseResource, getKennelDataFromSupabase, updateSupabaseResource } from "../../../db/supabase-kennel";
 import { requireAdminSession } from "../../../lib/admin-session";
 import { sendBuyerAutomation, sendPublishedUpdate, sendTransactionReceipt } from "../../../lib/automation-email";
+
+function writeError(error: unknown, fallback: string) {
+  return Response.json(
+    { error: error instanceof Error ? error.message : fallback },
+    { status: error instanceof ResourceValidationError ? 400 : 500 },
+  );
+}
 
 export async function GET(request: Request) {
   const unauthorized = requireAdminSession(request);
@@ -29,7 +36,7 @@ export async function POST(request: Request) {
     }
     return Response.json(created, { status: 201 });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Unable to save the record." }, { status: 500 });
+    return writeError(error, "Unable to save the record.");
   }
 }
 
@@ -49,7 +56,7 @@ export async function PUT(request: Request) {
     }
     return Response.json(updated);
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Unable to update the record." }, { status: 500 });
+    return writeError(error, "Unable to update the record.");
   }
 }
 

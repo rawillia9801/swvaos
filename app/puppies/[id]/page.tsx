@@ -47,7 +47,7 @@ export default function PuppyProfilePage({ params }: { params: Promise<{ id: str
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
   const puppy = data?.puppies.find((candidate) => candidate.id === puppyId) ?? null;
   useEffect(() => { if (puppy) document.title = `${puppy.name} | SWVAOS`; }, [puppy]);
 
