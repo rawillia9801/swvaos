@@ -221,56 +221,62 @@ function CommandView({ data, openCreate, setView }: { data: DataSet; openCreate:
   const contractedBuyers = new Set(data.buyer_documents.filter((item) => /bill of sale|health guarantee|agreement/i.test(item.document_type)).map((item) => item.buyer_id));
   const deliveryEvents = data.events.filter((item) => /pickup|delivery|transport/i.test(`${item.event_type} ${item.title}`) && item.status !== "Completed");
   const lifecycle = [
-    { label: "Applications", count: a.pendingBuyers.length, view: "Applications" as View, note: "awaiting review" },
-    { label: "Approved", count: a.approvedBuyers.length, view: "Families" as View, note: "on the waitlist" },
+    { label: "Applications", count: a.pendingBuyers.length, view: "Applications" as View, note: "waiting for review" },
+    { label: "Approved", count: a.approvedBuyers.length, view: "Families" as View, note: "ready to match" },
     { label: "Matched", count: a.placed.length, view: "Placement" as View, note: "puppies assigned" },
-    { label: "Paid", count: paidBuyers.size, view: "Finance" as View, note: "buyer accounts" },
-    { label: "Contracted", count: contractedBuyers.size, view: "Templates" as View, note: "documented homes" },
-    { label: "Go-home", count: deliveryEvents.length, view: "Delivery" as View, note: "scheduled next" },
+    { label: "Paid", count: paidBuyers.size, view: "Finance" as View, note: "buyer accounts credited" },
+    { label: "Contracted", count: contractedBuyers.size, view: "Templates" as View, note: "documents prepared" },
+    { label: "Go-home", count: deliveryEvents.length, view: "Delivery" as View, note: "handoffs scheduled" },
   ];
   const attention = [
-    ...a.overdue.map((item) => ({ title: item.description, detail: `${money(item.amount_cents)} overdue`, view: "Finance" as View, tone: "bad" as const })),
-    ...a.dueHealth.map((item) => ({ title: item.title, detail: `${item.record_type} due for ${dogName(item.dog_id)}`, view: "Care" as View, tone: "warn" as const })),
-    ...a.unmatched.map((item) => ({ title: `${item.name} needs a family`, detail: "Available puppy is not matched to a buyer", view: "Placement" as View, tone: "warn" as const })),
-    ...a.pendingBuyers.map((item) => ({ title: `${fullName(item)} needs review`, detail: "Application is still in the screening queue", view: "Applications" as View, tone: "neutral" as const })),
-  ].slice(0, 8);
+    ...a.overdue.map((item) => ({ area: "MONEY", title: item.description, detail: `${money(item.amount_cents)} overdue`, view: "Finance" as View, urgency: "urgent" })),
+    ...a.dueHealth.map((item) => ({ area: "CARE", title: item.title, detail: `${item.record_type} due for ${dogName(item.dog_id)}`, view: "Care" as View, urgency: "urgent" })),
+    ...a.unmatched.map((item) => ({ area: "PLACEMENT", title: `${item.name} needs a family`, detail: "Available puppy is not matched to an approved buyer", view: "Placement" as View, urgency: "next" })),
+    ...a.pendingBuyers.map((item) => ({ area: "APPLICATION", title: `${fullName(item)} needs review`, detail: "Screening decision has not been recorded", view: "Applications" as View, urgency: "review" })),
+  ].slice(0, 10);
+  const upcoming = a.upcoming.slice(0, 7);
 
-  return <div className="breeder-dashboard">
-    <section className="breeder-desk-head">
-      <div><span>BREEDER DESK</span><h1>What needs your attention today?</h1><p>Move every dog, litter, puppy, and family forward without losing the next care, placement, payment, or go-home step.</p></div>
-      <div className="breeder-quick-actions"><button onClick={() => openCreate("events")}><CalendarDays size={17} /> Add task</button><button onClick={() => openCreate("puppies")}><PawPrint size={17} /> Add puppy</button><button onClick={() => openCreate("buyers")}><UserRound size={17} /> Add application</button><button className="primary-action" onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={17} /> Record payment</button></div>
+  return <div className="bos-today">
+    <section className="bos-run-header">
+      <div><span>DAILY RUN SHEET</span><h1>Run the breeding program.</h1><p>One working surface for the dogs, litters, puppies, families, money, and handoffs that need movement today.</p></div>
+      <div className="bos-run-actions"><button onClick={() => openCreate("events", { event_type: "Task", status: "Scheduled" })}><CalendarDays size={17} /> Add work</button><button onClick={() => openCreate("buyers", { application_status: "New" })}><ClipboardCheck size={17} /> Application</button><button onClick={() => openCreate("puppies")}><PawPrint size={17} /> Puppy</button><button className="primary-action" onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={17} /> Payment</button></div>
     </section>
 
-    <section className="breeder-lifecycle" aria-label="Placement lifecycle">
-      <header><div><span>PLACEMENT JOURNEY</span><h2>From application to go-home</h2></div><button onClick={() => setView("Placement")}>Open placement board <ChevronRight size={15} /></button></header>
-      <div>{lifecycle.map((stage, index) => <button key={stage.label} onClick={() => setView(stage.view)}><i>{index + 1}</i><span><b>{stage.label}</b><small>{stage.note}</small></span><strong>{stage.count}</strong></button>)}</div>
+    <section className="bos-priority">
+      <header><div><span>01 / PRIORITY QUEUE</span><h2>Work that is waiting on you</h2></div><strong>{attention.length}</strong></header>
+      {attention.length ? <div className="bos-priority-list">{attention.map((item, index) => <button key={`${item.area}-${item.title}-${index}`} onClick={() => setView(item.view)}><i>{String(index + 1).padStart(2, "0")}</i><em className={item.urgency}>{item.area}</em><span><b>{item.title}</b><small>{item.detail}</small></span><ChevronRight size={16} /></button>)}</div> : <div className="bos-clear-state"><ShieldCheck size={24} /><span><b>No records are blocked.</b><small>There are no overdue balances, care deadlines, unmatched puppies, or unreviewed applications.</small></span></div>}
     </section>
 
-    <div className="breeder-work-grid">
-      <Section eyebrow="Breeding program" title="Active litter work" action={<button className="ghost" onClick={() => setView("Litters")}>All litters</button>}>
-        {a.activeLitters.length ? <div className="breeder-litter-list">{a.activeLitters.slice(0, 5).map((litter) => {
+    <div className="bos-day-grid">
+      <section className="bos-program-board">
+        <header><div><span>02 / BREEDING PROGRAM</span><h2>Litters moving through the program</h2></div><button onClick={() => setView("Litters")}>Open litter workspace <ChevronRight size={15} /></button></header>
+        {a.activeLitters.length ? <div className="bos-program-list">{a.activeLitters.slice(0, 6).map((litter) => {
           const puppies = data.puppies.filter((puppy) => puppy.litter_id === litter.id);
           const assigned = puppies.filter((puppy) => puppy.buyer_id).length;
-          const date = litter.birth_date || litter.due_date;
-          return <button key={litter.id} onClick={() => setView("Litters")}><span className="litter-stage-icon"><ListTree size={18} /></span><span><b>{litter.name}</b><small>{dogName(litter.dam_id)} × {dogName(litter.sire_id)}</small></span><span><b>{date ? shortDate(date) : "Date needed"}</b><small>{litter.birth_date ? "Whelped" : "Expected"}</small></span><span><b>{puppies.length || litter.expected_count || 0}</b><small>{litter.birth_date ? `${assigned} matched` : "expected"}</small></span><Status tone={litter.status === "Active" ? "good" : "warn"}>{litter.status}</Status></button>;
-        })}</div> : <Empty title="No active litter work" text="Create a planned litter to begin tracking the pairing, due date, whelping, and puppy roster." action="Create litter" onAction={() => openCreate("litters")} />}
-      </Section>
+          const phase = litter.birth_date ? "RAISING" : litter.breeding_date ? "EXPECTING" : "PLANNING";
+          return <button key={litter.id} onClick={() => setView("Litters")}><span><em>{phase}</em><b>{litter.name}</b><small>{dogName(litter.dam_id)} × {dogName(litter.sire_id)}</small></span><span><small>{litter.birth_date ? "Whelped" : "Due"}</small><b>{shortDate(litter.birth_date || litter.due_date)}</b></span><span><small>Puppies</small><b>{puppies.length || litter.expected_count || 0}</b></span><span><small>Matched</small><b>{assigned}/{puppies.length || litter.expected_count || 0}</b></span><ChevronRight size={15} /></button>;
+        })}</div> : <Empty title="No active litter work" text="Create a litter plan to begin the breeding, whelping, puppy, and placement record." action="Create litter" onAction={() => openCreate("litters")} />}
+      </section>
 
-      <Section eyebrow="Daily work" title="Schedule and care" action={<button className="ghost" onClick={() => setView("Calendar")}>Full schedule</button>}>
-        {a.upcoming.length ? <div className="breeder-agenda">{a.upcoming.slice(0, 6).map((item) => <button key={item.id} onClick={() => setView(/pickup|delivery|transport/i.test(`${item.event_type} ${item.title}`) ? "Delivery" : "Calendar")}><time><b>{new Date(`${item.event_date}T12:00:00`).getDate()}</b><small>{new Date(`${item.event_date}T12:00:00`).toLocaleString("en-US", { month: "short" })}</small></time><span><b>{item.title}</b><small>{[item.event_time, item.location, item.event_type].filter(Boolean).join(" · ")}</small></span><Status tone={item.event_date === today() ? "warn" : "neutral"}>{item.status}</Status></button>)}</div> : <Empty title="Nothing scheduled" text="Add vaccinations, worming, vet checks, breedings, whelping dates, pickups, and follow-ups." action="Add task" onAction={() => openCreate("events")} />}
-      </Section>
-
-      <Section eyebrow="Action queue" title="Records that need a next step" action={<button className="ghost" onClick={() => setView("Applications")}>{attention.length} open</button>}>
-        {attention.length ? <div className="signal-list">{attention.map((item, index) => <button key={`${item.title}-${index}`} onClick={() => setView(item.view)}><Status tone={item.tone}>{item.tone === "bad" ? "DUE" : item.tone === "warn" ? "NEXT" : "REVIEW"}</Status><span><b>{item.title}</b><small>{item.detail}</small></span><ChevronRight size={15} /></button>)}</div> : <Empty title="Everything has a next step" text="There are no overdue balances, care deadlines, unmatched puppies, or pending applications." action="Open schedule" onAction={() => setView("Calendar")} />}
-      </Section>
-
-      <Section eyebrow="Business pulse" title="Sales, costs, and communication">
-        <div className="breeder-business-grid"><button onClick={() => setView("Finance")}><span><ReceiptText size={17} /> Sales received</span><b>{money(a.paid)}</b><small>{money(a.outstanding)} still outstanding</small></button><button onClick={() => setView("Inventory")}><span><PackageSearch size={17} /> Program costs</span><b>{money(a.costs)}</b><small>{money(a.paid - a.costs)} recorded net</small></button><button onClick={() => setView("Comms")}><span><MessagesSquare size={17} /> Family updates</span><b>{a.draftUpdates.length}</b><small>{a.publishedUpdates.length} already published</small></button><button onClick={() => setView("Templates")}><span><FileText size={17} /> Automations</span><b>{Object.values(data.buyers).length}</b><small>families in the communication journey</small></button></div>
-      </Section>
+      <section className="bos-daybook">
+        <header><div><span>03 / DAYBOOK</span><h2>What is scheduled next</h2></div><button onClick={() => setView("Calendar")}>Calendar</button></header>
+        {upcoming.length ? <div>{upcoming.map((event) => <button key={event.id} onClick={() => setView(/pickup|delivery|transport/i.test(`${event.event_type} ${event.title}`) ? "Delivery" : "Calendar")}><time><b>{new Date(`${event.event_date}T12:00:00`).getDate()}</b><small>{new Date(`${event.event_date}T12:00:00`).toLocaleString("en-US", { month: "short" })}</small></time><span><b>{event.title}</b><small>{[event.event_time, event.location, event.event_type].filter(Boolean).join(" · ")}</small></span><em>{event.status}</em></button>)}</div> : <Empty title="The daybook is clear" text="Add vet care, whelping prep, family calls, pickups, deliveries, and follow-ups." action="Schedule work" onAction={() => openCreate("events")} />}
+      </section>
     </div>
+
+    <section className="bos-family-journey">
+      <header><div><span>04 / FAMILY JOURNEY</span><h2>Application to go-home</h2></div><button onClick={() => setView("Placement")}>Work placements <ChevronRight size={15} /></button></header>
+      <div>{lifecycle.map((stage, index) => <button key={stage.label} onClick={() => setView(stage.view)}><i>{index + 1}</i><span><b>{stage.label}</b><small>{stage.note}</small></span><strong>{stage.count}</strong>{index < lifecycle.length - 1 && <ChevronRight size={15} />}</button>)}</div>
+    </section>
+
+    <section className="bos-business-line">
+      <button onClick={() => setView("Finance")}><span>SALES RECEIVED</span><b>{money(a.paid)}</b><small>{money(a.outstanding)} outstanding</small></button>
+      <button onClick={() => setView("Inventory")}><span>PROGRAM COSTS</span><b>{money(a.costs)}</b><small>{money(a.paid - a.costs)} recorded net</small></button>
+      <button onClick={() => setView("Comms")}><span>FAMILY UPDATES</span><b>{a.draftUpdates.length}</b><small>{a.publishedUpdates.length} published</small></button>
+      <button onClick={() => setView("Templates")}><span>COMMUNICATION JOURNEYS</span><b>{data.buyers.length}</b><small>family records connected</small></button>
+    </section>
   </div>;
 }
-
 function BreedingView({ data, openCreate, openEdit, openDocumentUpload, remove }: ViewProps) {
   const [selectedDogId, setSelectedDogId] = useState<number | null>(data.dogs[0]?.id ?? null);
   const selectedDog = data.dogs.find((dog) => dog.id === selectedDogId) ?? data.dogs[0] ?? null;
@@ -1115,7 +1121,6 @@ export default function Home() {
   const [activityError, setActivityError] = useState("");
   const [newCallId, setNewCallId] = useState<number | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
-  const [now, setNow] = useState<Date | null>(null);
   const dataRef = useRef<DataSet>(emptyData);
   const activityRequestInFlight = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -1194,14 +1199,6 @@ export default function Home() {
     };
   }, [refreshActivity, view]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2400); return () => window.clearTimeout(timer); }, [toast]);
-  useEffect(() => {
-    const initial = window.setTimeout(() => setNow(new Date()), 0);
-    const interval = window.setInterval(() => setNow(new Date()), 30000);
-    return () => {
-      window.clearTimeout(initial);
-      window.clearInterval(interval);
-    };
-  }, []);
   useEffect(() => {
     const handleKeyboard = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -1353,7 +1350,7 @@ export default function Home() {
   const activeViewProps = { data, openCreate, openEdit, openDocumentUpload, remove, removeDocument, openContracts };
   const quickResource = view === "Litters" ? "litters" : view === "Puppies" || view === "Placement" ? "puppies" : view === "Calendar" || view === "Care" || view === "CRM" || view === "Delivery" ? "events" : view === "Applications" || view === "Families" || view === "Comms" || view === "Portal" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
   const viewCopy: Record<View, { title: string; text: string }> = {
-    Command: { title: "Today’s breeder desk", text: "The next care, placement, payment, communication, and go-home work across the program." },
+    Command: { title: "Breeder daily run", text: "The next care, placement, payment, communication, and go-home work across the program." },
     Breeding: { title: "Dogs & breeding", text: "Manage breeding dogs, pairings, heat dates, registrations, and program records." },
     Litters: { title: "Litters", text: "Track every litter from planned pairing and due date through whelping and puppy roster." },
     Puppies: { title: "Puppies", text: "Keep identity, growth, care, availability, pricing, and family assignment on one record." },
@@ -1390,44 +1387,53 @@ export default function Home() {
     Calendar: analytics.openTasks.length,
     Vault: analytics.docs,
   };
+  const activeGroup = activeViewDefinition.group;
+  const groupLabels: Record<ViewGroup, string> = { "Daily work": "Today", "Breeding program": "Breeding", "Placement journey": "Families", Business: "Business", Tools: "Office" };
+  const groupDescriptions: Record<ViewGroup, string> = {
+    "Daily work": "Run sheet and schedule",
+    "Breeding program": "Dogs, litters, puppies, and care",
+    "Placement journey": "Application through go-home",
+    Business: "Money, communication, and reporting",
+    Tools: "Portal, phones, and documents",
+  };
 
-  return <div className="breeder-shell">
-    <aside className="breeder-sidebar">
-      <button className="breeder-brand" onClick={() => navigateTo("Command")}><span><DogIcon size={23} /></span><b>Southwest Virginia Chihuahua</b><small>Breeder operating system</small></button>
-      <button className="breeder-new-record" onClick={() => openCreate(quickResource)}><Plus size={17} /> Add to {activeViewDefinition.label}</button>
-      <div className="breeder-nav-groups">{viewGroups.map((group) => <section key={group}><span>{group}</span><nav aria-label={group}>{views.filter((item) => item.group === group).map((item) => { const Icon = item.icon; const badge = viewBadges[item.id]; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigateTo(item.id)} title={`Alt+${item.shortcut}`}><Icon size={18} /><b>{item.label}</b>{Boolean(badge) && <em>{Number(badge) > 99 ? "99+" : badge}</em>}</button>; })}</nav></section>)}</div>
-      <footer className="breeder-sidebar-footer"><span><i className={error ? "offline" : ""} />{error ? "Data needs attention" : "Records connected"}</span><small>{coreRecordCount} dogs, litters, puppies, and families · {analytics.docs} documents</small></footer>
-    </aside>
-    <main className="breeder-workspace">
-      <header className="breeder-topbar">
-        <div className="breeder-mobile-brand"><DogIcon size={18} /><b>SWVAOS</b></div>
-        <div className="breeder-global-search"><SearchIcon size={18} /><input ref={searchInputRef} aria-label="Search SWVAOS" value={search} onFocus={() => setCommandOpen(true)} onChange={(event) => { setSearch(event.target.value); setCommandOpen(true); }} placeholder="Search a dog, litter, puppy, family, payment, or task…" /><kbd><CommandIcon size={11} />K</kbd>{commandOpen && <div className="breeder-search-menu"><header><span>Search and quick actions</span><button onClick={() => { setCommandOpen(false); setSearch(""); }} aria-label="Close search"><X size={15} /></button></header>{search.trim() ? searchResults.length ? <div className="command-results">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => navigateTo(item.view)}><span><b>{item.label}</b><small>{item.detail}</small></span><ChevronRight size={15} /></button>)}</div> : <div className="command-empty"><SearchIcon size={19} /><b>No matching records</b><small>Try a family name, puppy, transaction, or event.</small></div> : <><span className="command-section-label">Go to workspace</span><div className="breeder-search-links">{views.slice(0, 12).map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => navigateTo(item.id)}><Icon size={16} /><span>{item.label}</span></button>; })}</div><span className="command-section-label">Create</span><div className="command-actions"><button onClick={() => { setCommandOpen(false); openCreate("transactions", { type: "Payment" }); }}><ReceiptText size={16} /><span><b>Record payment</b><small>Credit a buyer account</small></span></button><button onClick={() => { setCommandOpen(false); openCreate("buyers", { application_status: "New" }); }}><ClipboardCheck size={16} /><span><b>New application</b><small>Start family screening</small></span></button><button onClick={() => { setCommandOpen(false); openCreate("events", { event_type: "Pickup", status: "Scheduled" }); }}><Route size={16} /><span><b>Schedule go-home</b><small>Pickup or delivery</small></span></button></div></>}</div>}</div>
-        <div className="breeder-top-actions"><span suppressHydrationWarning>{now ? new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(now) : "Today"}</span><button onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={16} /> Record payment</button><button className="primary-action" onClick={() => openCreate(quickResource)}><Plus size={16} /> Add record</button></div>
-      </header>
-      <div className="breeder-content">
-        {view !== "Command" && <header className="breeder-page-head"><span className="breeder-page-icon"><ActiveViewIcon size={22} /></span><div><small>{activeViewDefinition.group}</small><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div><span className="breeder-page-date" suppressHydrationWarning>{now ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(now) : "Today"}</span></header>}
-        {error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}
-        {loading ? <div className="loading"><span />Loading records...</div> : <>
-          {view === "Command" && <CommandView data={data} openCreate={openCreate} setView={navigateTo} />}
-          {view === "Breeding" && <BreedingView {...activeViewProps} />}
-          {view === "Litters" && <LittersView {...activeViewProps} />}
-          {view === "Puppies" && <PuppiesView {...activeViewProps} />}
-          {view === "Care" && <CareView {...activeViewProps} />}
-          {view === "Applications" && <ApplicationsView {...activeViewProps} />}
-          {view === "Families" && <FamiliesView {...activeViewProps} />}
-          {view === "Placement" && <PlacementView {...activeViewProps} />}
-          {view === "Delivery" && <DeliveryView {...activeViewProps} />}
-          {view === "Finance" && <FinanceView {...activeViewProps} />}
-          {view === "Inventory" && <InventoryView {...activeViewProps} />}
-          {view === "Comms" && <CommunicationsView {...activeViewProps} />}
-          {view === "Portal" && <PortalPreviewView data={data} />}
-          {view === "CRM" && <CallerCrmView {...activeViewProps} refreshActivity={refreshActivity} activityRefreshing={activityRefreshing} activitySyncedAt={activitySyncedAt} activityError={activityError} newCallId={newCallId} />}
-          {view === "Calendar" && <CalendarView {...activeViewProps} />}
-          {view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}
-          {view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}
-          {view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}
-        </>}
-      </div>
+  return <div className="bos-shell">
+    <header className="bos-command-bar">
+      <button className="bos-brand" onClick={() => navigateTo("Command")}><span>SW</span><b>SWVAOS</b><small>BREEDER OS</small></button>
+      <nav className="bos-workspaces" aria-label="Operating workspaces">{viewGroups.map((group) => <button key={group} className={activeGroup === group ? "active" : ""} onClick={() => navigateTo(views.find((item) => item.group === group)?.id ?? "Command")}><b>{groupLabels[group]}</b><small>{groupDescriptions[group]}</small></button>)}</nav>
+      <div className="bos-search"><SearchIcon size={17} /><input ref={searchInputRef} aria-label="Search SWVAOS" value={search} onFocus={() => setCommandOpen(true)} onChange={(event) => { setSearch(event.target.value); setCommandOpen(true); }} placeholder="Find any dog, puppy, family, payment…" /><kbd><CommandIcon size={11} />K</kbd>{commandOpen && <div className="bos-search-menu"><header><span>Find or create</span><button onClick={() => { setCommandOpen(false); setSearch(""); }} aria-label="Close search"><X size={15} /></button></header>{search.trim() ? searchResults.length ? <div className="command-results">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => navigateTo(item.view)}><span><b>{item.label}</b><small>{item.detail}</small></span><ChevronRight size={15} /></button>)}</div> : <div className="command-empty"><SearchIcon size={19} /><b>No matching records</b><small>Try a family name, puppy, transaction, or event.</small></div> : <div className="bos-create-menu"><button onClick={() => { setCommandOpen(false); openCreate("buyers", { application_status: "New" }); }}><ClipboardCheck size={17} /><span><b>New application</b><small>Start family screening</small></span></button><button onClick={() => { setCommandOpen(false); openCreate("transactions", { type: "Payment" }); }}><ReceiptText size={17} /><span><b>Record payment</b><small>Credit a buyer account</small></span></button><button onClick={() => { setCommandOpen(false); openCreate("events", { event_type: "Pickup", status: "Scheduled" }); }}><Route size={17} /><span><b>Schedule go-home</b><small>Pickup or delivery</small></span></button></div>}</div>}</div>
+      <button className="bos-global-add" onClick={() => openCreate(quickResource)}><Plus size={17} /><span>Add record</span></button>
+    </header>
+
+    <section className="bos-context-bar">
+      <div><span><ActiveViewIcon size={18} /></span><p><b>{groupLabels[activeGroup]}</b><small>{groupDescriptions[activeGroup]}</small></p></div>
+      <nav aria-label={`${activeGroup} tools`}>{views.filter((item) => item.group === activeGroup).map((item) => { const Icon = item.icon; const badge = viewBadges[item.id]; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigateTo(item.id)}><Icon size={15} /><b>{item.label}</b>{Boolean(badge) && <em>{Number(badge) > 99 ? "99+" : badge}</em>}</button>; })}</nav>
+      <aside><i className={error ? "offline" : ""} /><span><b>{error ? "Attention" : "Connected"}</b><small>{coreRecordCount} core records · {analytics.docs} files</small></span></aside>
+    </section>
+
+    <main className="bos-main">
+      {view !== "Command" && <header className="bos-view-head"><div><small>{groupLabels[activeGroup]} / {activeViewDefinition.label}</small><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div><div><button onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={15} /> Payment</button><button className="primary-action" onClick={() => openCreate(quickResource)}><Plus size={15} /> Add to {activeViewDefinition.label}</button></div></header>}
+      {error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}
+      {loading ? <div className="loading"><span />Loading records...</div> : <>
+        {view === "Command" && <CommandView data={data} openCreate={openCreate} setView={navigateTo} />}
+        {view === "Breeding" && <BreedingView {...activeViewProps} />}
+        {view === "Litters" && <LittersView {...activeViewProps} />}
+        {view === "Puppies" && <PuppiesView {...activeViewProps} />}
+        {view === "Care" && <CareView {...activeViewProps} />}
+        {view === "Applications" && <ApplicationsView {...activeViewProps} />}
+        {view === "Families" && <FamiliesView {...activeViewProps} />}
+        {view === "Placement" && <PlacementView {...activeViewProps} />}
+        {view === "Delivery" && <DeliveryView {...activeViewProps} />}
+        {view === "Finance" && <FinanceView {...activeViewProps} />}
+        {view === "Inventory" && <InventoryView {...activeViewProps} />}
+        {view === "Comms" && <CommunicationsView {...activeViewProps} />}
+        {view === "Portal" && <PortalPreviewView data={data} />}
+        {view === "CRM" && <CallerCrmView {...activeViewProps} refreshActivity={refreshActivity} activityRefreshing={activityRefreshing} activitySyncedAt={activitySyncedAt} activityError={activityError} newCallId={newCallId} />}
+        {view === "Calendar" && <CalendarView {...activeViewProps} />}
+        {view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}
+        {view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}
+        {view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}
+      </>}
     </main>
     {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}
     {documentModal && <DocumentUploadModal modal={documentModal} data={data} saving={saving} error={uploadError} onClose={() => setDocumentModal(null)} onKindChange={(kind) => setDocumentModal({ kind })} onSubmit={submitDocument} />}
