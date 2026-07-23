@@ -8,13 +8,13 @@ test("ships the SWVAOS command surface", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
 
   assert.match(page, /SWVAOS/);
-  assert.match(page, /OPERATING SYSTEM/);
-  assert.match(page, /Readiness/);
-  assert.match(page, /Risk Radar/);
-  assert.match(page, /Document Vault/);
-  assert.match(page, /Care operations/);
-  assert.match(page, /Inventory control/);
-  assert.match(page, /Communications hub/);
+  assert.match(page, /Breeder operating system/i);
+  assert.match(page, /Action queue/);
+  assert.match(page, /Records that need a next step/);
+  assert.match(page, /Documents/);
+  assert.match(page, /Health & care/);
+  assert.match(page, /Costs & expenses/);
+  assert.match(page, /Family communications/);
   assert.match(page, /Reports and intelligence/);
   assert.match(page, /\/api\/dog-documents/);
 });
@@ -127,22 +127,22 @@ test("credits every received payment to a visible buyer account", async () => {
   assert.match(css, /\.payment-credit-preview\.assigned/);
 });
 
-test("ships an interactive desktop shell rather than a color-only reskin", async () => {
+test("ships a breeder workflow operating system rather than decorative desktop chrome", async () => {
   const [page, css] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
   ]);
 
-  assert.match(page, /COMMAND CENTER/);
-  assert.match(page, /CONTROL CENTER/);
-  assert.match(page, /app-launcher/);
-  assert.match(page, /windowMinimized/);
-  assert.match(page, /focusMode/);
-  assert.match(page, /Ctrl\/⌘ K/);
-  assert.match(css, /\.launcher-backdrop/);
-  assert.match(css, /\.os-taskbar/);
-  assert.match(css, /\.desktop-home/);
-  assert.match(css, /\.app-shell\.focus-mode/);
+  assert.match(page, /breeder-shell/);
+  assert.match(page, /breeder-nav-groups/);
+  assert.match(page, /From application to go-home/);
+  assert.match(page, /What needs your attention today/);
+  assert.match(page, /Search a dog, litter, puppy, family, payment, or task/);
+  assert.doesNotMatch(page, /workspace-window|os-taskbar|app-launcher|control-center|windowMinimized|focusMode/);
+  assert.match(css, /Breeder-first operating workspace/);
+  assert.match(css, /\.breeder-lifecycle/);
+  assert.match(css, /\.pipeline-board/);
+  assert.match(css, /\.delivery-board/);
 });
 
 test("deploys the app directly without redirects", async () => {
@@ -299,7 +299,7 @@ test("unifies phone operations and family requests inside SWVAOS", async () => {
   assert.doesNotMatch(`${page}${portal}`, /localStorage|sessionStorage/);
 });
 
-test("ships an operating-system workspace with portal preview and customer sign-in", async () => {
+test("ships a connected breeder workspace with portal preview and customer sign-in", async () => {
   const [page, family, portalLogin, portalAccount, portalRequest, templates, css] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/families/[id]/page.tsx", root), "utf8"),
@@ -311,15 +311,16 @@ test("ships an operating-system workspace with portal preview and customer sign-
   ]);
 
   assert.match(page, /Puppy Portal simulator/);
-  assert.match(page, /workspace-window/);
-  assert.match(page, /os-statusbar/);
+  assert.match(page, /Today’s breeder desk/);
+  assert.match(page, /Payments & sales/);
+  assert.match(page, /Pickup & delivery/);
   assert.match(family, /Portal Preview/);
   assert.match(family, /SWVAOS PORTAL SIMULATOR/);
   assert.match(portalLogin, /Email my sign-in link/);
   assert.match(portalAccount, /PORTAL_SESSION_COOKIE/);
   assert.match(portalRequest, /portal-access-/);
   assert.match(templates, /portal_sign_in/);
-  assert.match(css, /SWVAOS desktop operating environment/);
+  assert.match(css, /Breeder-first operating workspace/);
   assert.match(css, /portal-login-page/);
 });
 
@@ -328,7 +329,7 @@ test("provides dedicated Litters and Puppies operating tabs", async () => {
 
   assert.match(page, /id: "Litters", label: "Litters"/);
   assert.match(page, /id: "Puppies", label: "Puppies"/);
-  assert.match(page, /const taskbarViews: View\[\] = \["Command", "Litters", "Puppies"/);
+  assert.match(page, /group: "Breeding program"/);
   assert.match(page, /function LittersView/);
   assert.match(page, /function PuppiesView/);
   assert.match(page, /view === "Litters" && <LittersView/);
@@ -337,4 +338,26 @@ test("provides dedicated Litters and Puppies operating tabs", async () => {
   assert.match(page, /Puppies needing a family/);
   assert.match(page, /view: "Litters" as View/);
   assert.match(page, /view: "Puppies" as View/);
+});
+
+test("connects applications, placement, delivery, payments, and automated emails", async () => {
+  const [page, templatesCenter] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("components/templates-center.tsx", root), "utf8"),
+  ]);
+
+  assert.match(page, /id: "Applications", label: "Applications"/);
+  assert.match(page, /id: "Placement", label: "Puppy placement"/);
+  assert.match(page, /id: "Delivery", label: "Pickup & delivery"/);
+  assert.match(page, /id: "Templates", label: "Automations & templates"/);
+  assert.match(page, /function ApplicationsView/);
+  assert.match(page, /function PlacementView/);
+  assert.match(page, /function DeliveryView/);
+  assert.match(page, /Credit to buyer \/ family/);
+  assert.match(page, /Final balance/);
+  assert.match(page, /related_type/);
+  assert.match(templatesCenter, /Control the language families actually receive/);
+  assert.match(templatesCenter, /APPLICATION RECEIVED/);
+  assert.match(templatesCenter, /Discard edits/);
+  assert.doesNotMatch(templatesCenter, /Restore defaults/);
 });
