@@ -230,7 +230,16 @@ function CommandView({ data, openCreate, setView }: { data: DataSet; openCreate:
   ];
   const attention = [
     ...a.overdue.map((item) => ({ title: item.description, detail: `${money(item.amount_cents)} overdue`, view: "Finance" as View, tone: "bad" as const })),
-    ...a.dueHealth.map((item) => ({ title: item.title, detail: `${item.record_type} …31391 tokens truncated…ndow.setTimeout(() => void loadData(), 0);
+    ...a.dueHealth.map((item) => ({ title: item.title, detail: `${item.record_type} due for ${dogName(item.dog_id)}`, view: "Care" as View, tone: "warn" as const })),
+    ...a.unmatched.map((item) => ({ title: `${item.name} needs a family`, detail: "Available puppy is not matched to a buyer", …31080 tokens truncated…rror(refreshError, "Live call refresh failed."));
+    } finally {
+      activityRequestInFlight.current = false;
+      setActivityRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadData(), 0);
     return () => window.clearTimeout(timer);
   }, [loadData]);
   useEffect(() => {
