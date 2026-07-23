@@ -50,7 +50,9 @@ const snapshot: ContractSnapshot = {
 test("creates and verifies tamper-resistant puppy portal tokens", async () => {
   const token = await createPortalToken(7, 1);
   assert.equal((await verifyPortalToken(token))?.buyerId, 7);
-  assert.equal(await verifyPortalToken(`${token.slice(0, -1)}x`), null);
+  const [payload, signature] = token.split(".");
+  const tamperedSignature = `${signature[0] === "a" ? "b" : "a"}${signature.slice(1)}`;
+  assert.equal(await verifyPortalToken(`${payload}.${tamperedSignature}`), null);
 });
 
 test("freezes contract data in buyer document metadata", () => {

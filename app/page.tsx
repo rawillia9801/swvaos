@@ -2,33 +2,23 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AppWindow,
-  Bell,
   CalendarDays,
   ChartNoAxesCombined,
   ChevronRight,
-  CircleGauge,
   Command as CommandIcon,
   Dog as DogIcon,
-  Expand,
   ExternalLink,
   FileText,
   FileSignature,
   FolderOpen,
   HeartPulse,
   Headphones,
-  Grid2X2,
-  Keyboard,
-  Layers3,
   LayoutDashboard,
   ListTree,
   MessagesSquare,
   MonitorSmartphone,
-  Minimize2,
   PackageSearch,
   PawPrint,
-  PanelLeftClose,
-  PanelLeftOpen,
   ClipboardCheck,
   MessageSquareText,
   PhoneCall,
@@ -40,16 +30,13 @@ import {
   RefreshCw,
   Route,
   Search as SearchIcon,
-  Settings2,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Upload,
   UserRound,
   UsersRound,
   Voicemail,
   WalletCards,
-  Wifi,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -78,30 +65,32 @@ type ModalState = { resource: Resource; record?: Record<string, unknown>; preset
 type DocumentKind = "dog" | "buyer";
 type DocumentModalState = { kind: DocumentKind; ownerId?: number } | null;
 type ContractModalState = { buyerId: number; portalUrl?: string } | null;
-type View = "Command" | "Breeding" | "Litters" | "Puppies" | "Families" | "Care" | "Finance" | "Inventory" | "Comms" | "Portal" | "CRM" | "Calendar" | "Vault" | "Templates" | "Reports";
-type ViewGroup = "Operate" | "Connect" | "System";
+type View = "Command" | "Breeding" | "Litters" | "Puppies" | "Care" | "Applications" | "Families" | "Placement" | "Delivery" | "Finance" | "Inventory" | "Comms" | "Portal" | "CRM" | "Calendar" | "Vault" | "Templates" | "Reports";
+type ViewGroup = "Daily work" | "Breeding program" | "Placement journey" | "Business" | "Tools";
 type ViewDefinition = { id: View; label: string; icon: LucideIcon; group: ViewGroup; shortcut: string };
 
 const emptyData: DataSet = { dogs: [], litters: [], buyers: [], puppies: [], payment_plans: [], transactions: [], events: [], updates: [], dog_medical_records: [], dog_registrations: [], dog_documents: [], buyer_documents: [] };
 const views: ViewDefinition[] = [
-  { id: "Command", label: "Command", icon: LayoutDashboard, group: "Operate", shortcut: "1" },
-  { id: "Breeding", label: "Breeding", icon: DogIcon, group: "Operate", shortcut: "2" },
-  { id: "Litters", label: "Litters", icon: ListTree, group: "Operate", shortcut: "L" },
-  { id: "Puppies", label: "Puppies", icon: PawPrint, group: "Operate", shortcut: "P" },
-  { id: "Families", label: "Families", icon: UsersRound, group: "Operate", shortcut: "3" },
-  { id: "Care", label: "Care", icon: HeartPulse, group: "Operate", shortcut: "4" },
-  { id: "Finance", label: "Finance", icon: WalletCards, group: "Operate", shortcut: "5" },
-  { id: "Inventory", label: "Inventory", icon: PackageSearch, group: "Operate", shortcut: "6" },
-  { id: "Comms", label: "Comms", icon: MessagesSquare, group: "Connect", shortcut: "7" },
-  { id: "Portal", label: "Puppy Portal", icon: MonitorSmartphone, group: "Connect", shortcut: "8" },
-  { id: "CRM", label: "Caller CRM", icon: Headphones, group: "Connect", shortcut: "9" },
-  { id: "Calendar", label: "Calendar", icon: CalendarDays, group: "System", shortcut: "C" },
-  { id: "Vault", label: "Vault", icon: FolderOpen, group: "System", shortcut: "V" },
-  { id: "Templates", label: "Templates", icon: FileText, group: "System", shortcut: "T" },
-  { id: "Reports", label: "Reports", icon: ChartNoAxesCombined, group: "System", shortcut: "R" },
+  { id: "Command", label: "Today", icon: LayoutDashboard, group: "Daily work", shortcut: "1" },
+  { id: "Calendar", label: "Schedule", icon: CalendarDays, group: "Daily work", shortcut: "C" },
+  { id: "Breeding", label: "Dogs & breeding", icon: DogIcon, group: "Breeding program", shortcut: "2" },
+  { id: "Litters", label: "Litters", icon: ListTree, group: "Breeding program", shortcut: "L" },
+  { id: "Puppies", label: "Puppies", icon: PawPrint, group: "Breeding program", shortcut: "P" },
+  { id: "Care", label: "Health & care", icon: HeartPulse, group: "Breeding program", shortcut: "4" },
+  { id: "Applications", label: "Applications", icon: ClipboardCheck, group: "Placement journey", shortcut: "A" },
+  { id: "Families", label: "Buyers & waitlist", icon: UsersRound, group: "Placement journey", shortcut: "3" },
+  { id: "Placement", label: "Puppy placement", icon: UserRound, group: "Placement journey", shortcut: "M" },
+  { id: "Delivery", label: "Pickup & delivery", icon: Route, group: "Placement journey", shortcut: "D" },
+  { id: "Finance", label: "Payments & sales", icon: WalletCards, group: "Business", shortcut: "5" },
+  { id: "Inventory", label: "Costs", icon: PackageSearch, group: "Business", shortcut: "6" },
+  { id: "Comms", label: "Communications", icon: MessagesSquare, group: "Business", shortcut: "7" },
+  { id: "Templates", label: "Automations & templates", icon: MessageSquareText, group: "Business", shortcut: "T" },
+  { id: "Reports", label: "Reports", icon: ChartNoAxesCombined, group: "Business", shortcut: "R" },
+  { id: "Portal", label: "Family portal", icon: MonitorSmartphone, group: "Tools", shortcut: "8" },
+  { id: "CRM", label: "Phone center", icon: Headphones, group: "Tools", shortcut: "9" },
+  { id: "Vault", label: "Documents", icon: FolderOpen, group: "Tools", shortcut: "V" },
 ];
-const viewGroups: ViewGroup[] = ["Operate", "Connect", "System"];
-const taskbarViews: View[] = ["Command", "Litters", "Puppies", "Families", "Finance", "CRM", "Calendar"];
+const viewGroups: ViewGroup[] = ["Daily work", "Breeding program", "Placement journey", "Business", "Tools"];
 
 const dogDocumentTypes = ["Registration Certificate", "Pedigree", "Embark Results", "OFA Test Results", "Genetic Test Results", "Health Test Results", "Health Certificate", "Medical Documentation", "Other"];
 const buyerDocumentTypes = ["Bill of Sale", "Health Guarantee", "Payment Plan Agreement", "Other"];
@@ -227,37 +216,58 @@ function useAnalytics(data: DataSet) {
 
 function CommandView({ data, openCreate, setView }: { data: DataSet; openCreate: (resource: Resource, preset?: Record<string, unknown>) => void; setView: (view: View) => void }) {
   const a = useAnalytics(data);
-  const alerts = [
-    ...a.overdue.map((item) => ({ title: item.description, detail: `${money(item.amount_cents)} overdue`, view: "Finance" as View, tone: "bad" as const })),
-    ...a.dueHealth.map((item) => ({ title: item.title, detail: `${item.record_type} due for dog #${item.dog_id}`, view: "Breeding" as View, tone: "warn" as const })),
-    ...a.unmatched.slice(0, 4).map((item) => ({ title: item.name, detail: "Puppy is not assigned to a buyer", view: "Puppies" as View, tone: "warn" as const })),
+  const dogName = (dogId: number | null) => data.dogs.find((dog) => dog.id === dogId)?.name ?? "Pairing not complete";
+  const paidBuyers = new Set(data.transactions.filter((item) => paymentTypes.has(item.type) && paidStatuses.has(item.status) && item.buyer_id).map((item) => item.buyer_id));
+  const contractedBuyers = new Set(data.buyer_documents.filter((item) => /bill of sale|health guarantee|agreement/i.test(item.document_type)).map((item) => item.buyer_id));
+  const deliveryEvents = data.events.filter((item) => /pickup|delivery|transport/i.test(`${item.event_type} ${item.title}`) && item.status !== "Completed");
+  const lifecycle = [
+    { label: "Applications", count: a.pendingBuyers.length, view: "Applications" as View, note: "awaiting review" },
+    { label: "Approved", count: a.approvedBuyers.length, view: "Families" as View, note: "on the waitlist" },
+    { label: "Matched", count: a.placed.length, view: "Placement" as View, note: "puppies assigned" },
+    { label: "Paid", count: paidBuyers.size, view: "Finance" as View, note: "buyer accounts" },
+    { label: "Contracted", count: contractedBuyers.size, view: "Templates" as View, note: "documented homes" },
+    { label: "Go-home", count: deliveryEvents.length, view: "Delivery" as View, note: "scheduled next" },
   ];
-  return <div className="grid command-grid">
-    <section className="hero panel-wide">
-      <div><span className="eyebrow">OPERATING SYSTEM</span><h1>SWVAOS</h1><p>Breeding operations, buyer pipeline, payments, document storage, care schedules, family updates, and reporting in one place.</p><div className="hero-actions"><button onClick={() => openCreate("dogs")}>Add dog</button><button onClick={() => openCreate("litters")}>Create litter</button><button onClick={() => openCreate("buyers")}>Add buyer</button><button onClick={() => openCreate("transactions", { type: "Payment" })}>Log payment</button></div></div>
-      <div className="readiness" style={{ "--score": `${a.readiness}%` } as React.CSSProperties}><span>Readiness</span><b>{a.readiness}</b><small>{alerts.length ? `${alerts.length} attention signals` : "All core signals nominal"}</small><i /></div>
+  const attention = [
+    ...a.overdue.map((item) => ({ title: item.description, detail: `${money(item.amount_cents)} overdue`, view: "Finance" as View, tone: "bad" as const })),
+    ...a.dueHealth.map((item) => ({ title: item.title, detail: `${item.record_type} due for ${dogName(item.dog_id)}`, view: "Care" as View, tone: "warn" as const })),
+    ...a.unmatched.map((item) => ({ title: `${item.name} needs a family`, detail: "Available puppy is not matched to a buyer", view: "Placement" as View, tone: "warn" as const })),
+    ...a.pendingBuyers.map((item) => ({ title: `${fullName(item)} needs review`, detail: "Application is still in the screening queue", view: "Applications" as View, tone: "neutral" as const })),
+  ].slice(0, 8);
+
+  return <div className="breeder-dashboard">
+    <section className="breeder-desk-head">
+      <div><span>BREEDER DESK</span><h1>What needs your attention today?</h1><p>Move every dog, litter, puppy, and family forward without losing the next care, placement, payment, or go-home step.</p></div>
+      <div className="breeder-quick-actions"><button onClick={() => openCreate("events")}><CalendarDays size={17} /> Add task</button><button onClick={() => openCreate("puppies")}><PawPrint size={17} /> Add puppy</button><button onClick={() => openCreate("buyers")}><UserRound size={17} /> Add application</button><button className="primary-action" onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={17} /> Record payment</button></div>
     </section>
-    <div className="metric-row panel-wide">
-      <button onClick={() => setView("Litters")}><span>Active litters</span><b>{a.activeLitters.length}</b><small>{data.puppies.length} puppies recorded</small></button>
-      <button onClick={() => setView("Puppies")}><span>Placement rate</span><b>{pct(a.placed.length, data.puppies.length)}%</b><small>{a.unmatched.length} unmatched puppies</small></button>
-      <button onClick={() => setView("Finance")}><span>Net recorded</span><b>{money(a.paid - a.costs)}</b><small>{money(a.outstanding)} outstanding</small></button>
-      <button onClick={() => setView("Vault")}><span>Vault files</span><b>{a.docs}</b><small>{a.registryCoverage}% registry coverage</small></button>
+
+    <section className="breeder-lifecycle" aria-label="Placement lifecycle">
+      <header><div><span>PLACEMENT JOURNEY</span><h2>From application to go-home</h2></div><button onClick={() => setView("Placement")}>Open placement board <ChevronRight size={15} /></button></header>
+      <div>{lifecycle.map((stage, index) => <button key={stage.label} onClick={() => setView(stage.view)}><i>{index + 1}</i><span><b>{stage.label}</b><small>{stage.note}</small></span><strong>{stage.count}</strong></button>)}</div>
+    </section>
+
+    <div className="breeder-work-grid">
+      <Section eyebrow="Breeding program" title="Active litter work" action={<button className="ghost" onClick={() => setView("Litters")}>All litters</button>}>
+        {a.activeLitters.length ? <div className="breeder-litter-list">{a.activeLitters.slice(0, 5).map((litter) => {
+          const puppies = data.puppies.filter((puppy) => puppy.litter_id === litter.id);
+          const assigned = puppies.filter((puppy) => puppy.buyer_id).length;
+          const date = litter.birth_date || litter.due_date;
+          return <button key={litter.id} onClick={() => setView("Litters")}><span className="litter-stage-icon"><ListTree size={18} /></span><span><b>{litter.name}</b><small>{dogName(litter.dam_id)} × {dogName(litter.sire_id)}</small></span><span><b>{date ? shortDate(date) : "Date needed"}</b><small>{litter.birth_date ? "Whelped" : "Expected"}</small></span><span><b>{puppies.length || litter.expected_count || 0}</b><small>{litter.birth_date ? `${assigned} matched` : "expected"}</small></span><Status tone={litter.status === "Active" ? "good" : "warn"}>{litter.status}</Status></button>;
+        })}</div> : <Empty title="No active litter work" text="Create a planned litter to begin tracking the pairing, due date, whelping, and puppy roster." action="Create litter" onAction={() => openCreate("litters")} />}
+      </Section>
+
+      <Section eyebrow="Daily work" title="Schedule and care" action={<button className="ghost" onClick={() => setView("Calendar")}>Full schedule</button>}>
+        {a.upcoming.length ? <div className="breeder-agenda">{a.upcoming.slice(0, 6).map((item) => <button key={item.id} onClick={() => setView(/pickup|delivery|transport/i.test(`${item.event_type} ${item.title}`) ? "Delivery" : "Calendar")}><time><b>{new Date(`${item.event_date}T12:00:00`).getDate()}</b><small>{new Date(`${item.event_date}T12:00:00`).toLocaleString("en-US", { month: "short" })}</small></time><span><b>{item.title}</b><small>{[item.event_time, item.location, item.event_type].filter(Boolean).join(" · ")}</small></span><Status tone={item.event_date === today() ? "warn" : "neutral"}>{item.status}</Status></button>)}</div> : <Empty title="Nothing scheduled" text="Add vaccinations, worming, vet checks, breedings, whelping dates, pickups, and follow-ups." action="Add task" onAction={() => openCreate("events")} />}
+      </Section>
+
+      <Section eyebrow="Action queue" title="Records that need a next step" action={<button className="ghost" onClick={() => setView("Applications")}>{attention.length} open</button>}>
+        {attention.length ? <div className="signal-list">{attention.map((item, index) => <button key={`${item.title}-${index}`} onClick={() => setView(item.view)}><Status tone={item.tone}>{item.tone === "bad" ? "DUE" : item.tone === "warn" ? "NEXT" : "REVIEW"}</Status><span><b>{item.title}</b><small>{item.detail}</small></span><ChevronRight size={15} /></button>)}</div> : <Empty title="Everything has a next step" text="There are no overdue balances, care deadlines, unmatched puppies, or pending applications." action="Open schedule" onAction={() => setView("Calendar")} />}
+      </Section>
+
+      <Section eyebrow="Business pulse" title="Sales, costs, and communication">
+        <div className="breeder-business-grid"><button onClick={() => setView("Finance")}><span><ReceiptText size={17} /> Sales received</span><b>{money(a.paid)}</b><small>{money(a.outstanding)} still outstanding</small></button><button onClick={() => setView("Inventory")}><span><PackageSearch size={17} /> Program costs</span><b>{money(a.costs)}</b><small>{money(a.paid - a.costs)} recorded net</small></button><button onClick={() => setView("Comms")}><span><MessagesSquare size={17} /> Family updates</span><b>{a.draftUpdates.length}</b><small>{a.publishedUpdates.length} already published</small></button><button onClick={() => setView("Templates")}><span><FileText size={17} /> Automations</span><b>{Object.values(data.buyers).length}</b><small>families in the communication journey</small></button></div>
+      </Section>
     </div>
-    <div className="ops-strip panel-wide">
-      <button onClick={() => setView("Care")}><b>{a.upcomingCare.length}</b><span>Care tasks due in 30 days</span></button>
-      <button onClick={() => setView("Inventory")}><b>{money(a.inventorySpend)}</b><span>Supply and medical spend</span></button>
-      <button onClick={() => setView("Comms")}><b>{a.draftUpdates.length}</b><span>Family updates waiting</span></button>
-      <button onClick={() => setView("Reports")}><b>{a.docsNeeded}</b><span>Estimated missing documents</span></button>
-    </div>
-    <Section eyebrow="Risk Radar" title="Attention queue" action={<button className="ghost" onClick={() => openCreate("events")}>Schedule</button>}>
-      {alerts.length ? <div className="signal-list">{alerts.slice(0, 7).map((item, index) => <button key={`${item.title}-${index}`} onClick={() => setView(item.view)}><Status tone={item.tone}>{item.tone.toUpperCase()}</Status><span><b>{item.title}</b><small>{item.detail}</small></span></button>)}</div> : <Empty title="No immediate risks" text="No overdue balances, care deadlines, or unassigned puppy records are currently flagged." action="Add event" onAction={() => openCreate("events")} />}
-    </Section>
-    <Section eyebrow="Program Pulse" title="Breeding and pipeline">
-      <div className="pulse-bars"><span style={{ "--value": `${Math.min(100, a.activeLitters.length * 22)}%` } as React.CSSProperties}><b>Litters</b><i>{a.activeLitters.length}</i></span><span style={{ "--value": `${Math.min(100, a.approvedBuyers.length * 12)}%` } as React.CSSProperties}><b>Approved buyers</b><i>{a.approvedBuyers.length}</i></span><span style={{ "--value": `${Math.min(100, a.pendingBuyers.length * 12)}%` } as React.CSSProperties}><b>In review</b><i>{a.pendingBuyers.length}</i></span><span style={{ "--value": `${a.registryCoverage}%` } as React.CSSProperties}><b>Registry coverage</b><i>{a.registryCoverage}%</i></span></div>
-    </Section>
-    <Section eyebrow="Upcoming" title="Next events" action={<button className="ghost" onClick={() => setView("Calendar")}>Calendar</button>}>
-      {a.upcoming.length ? <div className="event-stack">{a.upcoming.slice(0, 5).map((item) => <button key={item.id} onClick={() => setView("Calendar")}><span><b>{new Date(`${item.event_date}T12:00:00`).getDate()}</b><small>{new Date(`${item.event_date}T12:00:00`).toLocaleString("en-US", { month: "short" })}</small></span><p><b>{item.title}</b><small>{[item.event_time, item.location, item.event_type].filter(Boolean).join(" / ")}</small></p><Status>{item.status}</Status></button>)}</div> : <Empty title="No events scheduled" text="Add veterinary visits, whelping reminders, buyer pickups, and follow-up tasks." action="Schedule event" onAction={() => openCreate("events")} />}
-    </Section>
   </div>;
 }
 
@@ -343,6 +353,74 @@ function PuppiesView({ data, openCreate, openEdit, remove }: ViewProps) {
     <Section eyebrow="Family Connections" title="Assigned puppies">
       {assigned.length ? <div className="table-list">{assigned.map((puppy) => <a href={`/families/${puppy.buyer_id}`} key={puppy.id}><span><b>{puppy.name}</b><small>{buyerName(puppy.buyer_id)} · {litterName(puppy.litter_id)}</small></span><strong>{money(puppy.price_cents)}</strong></a>)}</div> : <Empty title="No family assignments" text="Assign a buyer from a puppy record to connect the placement." action="Add family" onAction={() => openCreate("buyers")} />}
     </Section>
+  </div>;
+}
+
+function ApplicationsView({ data, openCreate, openEdit }: ViewProps) {
+  const statusOf = (buyer: Buyer) => buyer.application_status || "New";
+  const review = data.buyers.filter((buyer) => !["Approved", "Waitlist", "Matched", "Placed", "Declined", "Archived"].includes(statusOf(buyer)));
+  const approved = data.buyers.filter((buyer) => ["Approved", "Waitlist"].includes(statusOf(buyer)));
+  const matched = data.buyers.filter((buyer) => data.puppies.some((puppy) => puppy.buyer_id === buyer.id));
+  const closed = data.buyers.filter((buyer) => ["Declined", "Archived"].includes(statusOf(buyer)));
+  const stages = [
+    { label: "Needs review", items: review, tone: "warn" as const },
+    { label: "Approved / waitlist", items: approved, tone: "good" as const },
+    { label: "Matched", items: matched, tone: "good" as const },
+    { label: "Not moving forward", items: closed, tone: "neutral" as const },
+  ];
+
+  return <div className="breeder-operations-page">
+    <section className="workflow-summary panel-wide">
+      <div><span>APPLICATION PIPELINE</span><h2>Screen families before placement</h2><p>Keep the inquiry, application decision, preferences, waitlist position, and puppy match connected to one family record.</p></div>
+      <button className="primary-action" onClick={() => openCreate("buyers", { application_status: "New" })}><Plus size={16} /> New application</button>
+      <div className="workflow-counts">{stages.map((stage) => <span key={stage.label}><b>{stage.items.length}</b><small>{stage.label}</small></span>)}</div>
+    </section>
+    <section className="pipeline-board" aria-label="Application review board">{stages.map((stage) => <div className="pipeline-column" key={stage.label}><header><span>{stage.label}</span><b>{stage.items.length}</b></header>{stage.items.length ? stage.items.map((buyer) => {
+      const puppy = data.puppies.find((item) => item.buyer_id === buyer.id);
+      return <article key={buyer.id}><button className="pipeline-card-main" onClick={() => openEdit("buyers", buyer as unknown as Record<string, unknown>)}><span className="family-avatar">{initials(fullName(buyer))}</span><span><b>{fullName(buyer)}</b><small>{[buyer.city, buyer.state].filter(Boolean).join(", ") || "Location not recorded"}</small></span><Status tone={stage.tone}>{statusOf(buyer)}</Status></button><dl><div><dt>Preference</dt><dd>{[buyer.preferred_sex, buyer.preferred_color].filter(Boolean).join(" · ") || "Open"}</dd></div><div><dt>Puppy</dt><dd>{puppy?.name ?? "Not matched"}</dd></div></dl><footer><a href={`/families/${buyer.id}`}>Open family file</a><button onClick={() => openEdit("buyers", buyer as unknown as Record<string, unknown>)}>Review</button></footer></article>;
+    }) : <p className="pipeline-empty">No families in this stage.</p>}</div>)}</section>
+  </div>;
+}
+
+function PlacementView({ data, openCreate, openEdit, openContracts }: ViewProps) {
+  const approvedBuyers = data.buyers.filter((buyer) => ["Approved", "Waitlist"].includes(buyer.application_status) && !data.puppies.some((puppy) => puppy.buyer_id === buyer.id));
+  const unassigned = data.puppies.filter((puppy) => !puppy.buyer_id && !["Retained", "Archived"].includes(puppy.status));
+  const assigned = data.puppies.filter((puppy) => puppy.buyer_id);
+  const buyerFor = (puppy: Puppy) => data.buyers.find((buyer) => buyer.id === puppy.buyer_id);
+  const paidFor = (puppy: Puppy) => data.transactions.filter((item) => item.buyer_id === puppy.buyer_id && isPaidTransaction(item) && (!item.puppy_id || item.puppy_id === puppy.id)).reduce((sum, item) => sum + item.amount_cents, 0);
+
+  return <div className="breeder-operations-page">
+    <section className="workflow-summary panel-wide"><div><span>PUPPY PLACEMENT</span><h2>Match the right puppy to the right family</h2><p>Work from approved preferences, then carry the match into deposits, contracts, communication, and go-home planning.</p></div><button className="primary-action" onClick={() => openCreate("puppies")}><Plus size={16} /> Add puppy</button><div className="workflow-counts"><span><b>{unassigned.length}</b><small>Need a family</small></span><span><b>{approvedBuyers.length}</b><small>Families waiting</small></span><span><b>{assigned.length}</b><small>Matched</small></span></div></section>
+    <div className="placement-workbench">
+      <Section eyebrow="Placement queue" title="Puppies needing a family" action={<button className="ghost" onClick={() => openCreate("buyers", { application_status: "Approved" })}>Add approved family</button>}>
+        {unassigned.length ? <div className="placement-cards">{unassigned.map((puppy) => {
+          const litter = data.litters.find((item) => item.id === puppy.litter_id);
+          return <article key={puppy.id}><header><span className="puppy-avatar"><PawPrint size={18} /></span><span><b>{puppy.name}</b><small>{litter?.name ?? "Litter not found"} · {[puppy.sex, puppy.color].filter(Boolean).join(" · ") || "Details needed"}</small></span><Status tone="warn">{puppy.status}</Status></header><dl><div><dt>Price</dt><dd>{money(puppy.price_cents)}</dd></div><div><dt>Best next step</dt><dd>Review approved families</dd></div></dl><button onClick={() => openEdit("puppies", puppy as unknown as Record<string, unknown>)}>Assign family</button></article>;
+        })}</div> : <Empty title="Every available puppy is matched" text="There are no puppies waiting for a family." action="Add puppy" onAction={() => openCreate("puppies")} />}
+      </Section>
+      <Section eyebrow="Approved waitlist" title="Families ready for a match" action={<button className="ghost" onClick={() => openCreate("buyers", { application_status: "Approved" })}>New family</button>}>
+        {approvedBuyers.length ? <div className="waitlist-stack">{approvedBuyers.map((buyer) => <button key={buyer.id} onClick={() => openEdit("buyers", buyer as unknown as Record<string, unknown>)}><span className="family-avatar">{initials(fullName(buyer))}</span><span><b>{fullName(buyer)}</b><small>{[buyer.preferred_sex, buyer.preferred_color].filter(Boolean).join(" · ") || "Open preferences"}</small></span><ChevronRight size={15} /></button>)}</div> : <Empty title="No approved families are waiting" text="Approve an application to add the family to the matching queue." action="Add application" onAction={() => openCreate("buyers", { application_status: "New" })} />}
+      </Section>
+    </div>
+    <Section eyebrow="Active placements" title="Matched puppy and family records">
+      {assigned.length ? <div className="placement-ledger">{assigned.map((puppy) => {
+        const buyer = buyerFor(puppy); const paid = paidFor(puppy); const balance = Math.max(0, (puppy.price_cents ?? 0) - paid); const docs = data.buyer_documents.filter((item) => item.buyer_id === buyer?.id);
+        return <article key={puppy.id}><a href={`/puppies/${puppy.id}`}><span className="puppy-avatar"><PawPrint size={17} /></span><span><b>{puppy.name}</b><small>{buyer ? fullName(buyer) : "Buyer record missing"}</small></span></a><span><small>Sale price</small><b>{money(puppy.price_cents)}</b></span><span><small>Received</small><b>{money(paid)}</b></span><span><small>Balance</small><b>{money(balance)}</b></span><span><small>Documents</small><b>{docs.length}</b></span><footer><button onClick={() => openEdit("puppies", puppy as unknown as Record<string, unknown>)}>Edit match</button>{buyer && <><button onClick={() => openCreate("transactions", { type: "Payment", buyer_id: buyer.id, puppy_id: puppy.id, status: "Paid" })}>Record payment</button><button onClick={() => openContracts(buyer.id)}>Contracts</button></>}</footer></article>;
+      })}</div> : <Empty title="No active placements" text="Assign an approved family from a puppy record to start the placement workflow." action="Add puppy" onAction={() => openCreate("puppies")} />}
+    </Section>
+  </div>;
+}
+
+function DeliveryView({ data, openCreate, openEdit, openContracts }: ViewProps) {
+  const assigned = data.puppies.filter((puppy) => puppy.buyer_id);
+  const deliveryFor = (puppy: Puppy, buyer: Buyer | undefined) => data.events.find((event) => /pickup|delivery|transport|go.home/i.test(`${event.event_type} ${event.title}`) && ((event.related_type === "buyers" && event.related_id === buyer?.id) || `${event.title} ${event.notes}`.toLowerCase().includes(puppy.name.toLowerCase())));
+
+  return <div className="breeder-operations-page">
+    <section className="workflow-summary panel-wide"><div><span>GO-HOME OPERATIONS</span><h2>Prepare every puppy and family for handoff</h2><p>See the balance, signed documents, schedule, and care handoff together before pickup or delivery.</p></div><button className="primary-action" onClick={() => openCreate("events", { event_type: "Pickup", status: "Scheduled" })}><Plus size={16} /> Schedule go-home</button><div className="workflow-counts"><span><b>{assigned.length}</b><small>Matched puppies</small></span><span><b>{assigned.filter((puppy) => deliveryFor(puppy, data.buyers.find((buyer) => buyer.id === puppy.buyer_id))).length}</b><small>Scheduled</small></span><span><b>{data.events.filter((event) => /pickup|delivery|transport|go.home/i.test(`${event.event_type} ${event.title}`) && event.status === "Completed").length}</b><small>Completed</small></span></div></section>
+    {assigned.length ? <div className="delivery-board">{assigned.map((puppy) => {
+      const buyer = data.buyers.find((item) => item.id === puppy.buyer_id); const paid = data.transactions.filter((item) => item.buyer_id === buyer?.id && isPaidTransaction(item) && (!item.puppy_id || item.puppy_id === puppy.id)).reduce((sum, item) => sum + item.amount_cents, 0); const balance = Math.max(0, (puppy.price_cents ?? 0) - paid); const contracts = data.buyer_documents.filter((item) => item.buyer_id === buyer?.id && /bill of sale|health guarantee|agreement/i.test(item.document_type)); const delivery = deliveryFor(puppy, buyer); const ready = balance === 0 && contracts.length >= 2 && Boolean(delivery);
+      return <article key={puppy.id} className={ready ? "ready" : ""}><header><span className="puppy-avatar"><PawPrint size={18} /></span><span><b>{puppy.name}</b><small>{buyer ? fullName(buyer) : "Family record missing"}</small></span><Status tone={ready ? "good" : "warn"}>{ready ? "Ready" : "In progress"}</Status></header><div className="readiness-checks"><span className={buyer ? "complete" : ""}><i>{buyer ? "✓" : "1"}</i><b>Family matched</b><small>{buyer?.email || buyer?.phone || "Contact needed"}</small></span><span className={balance === 0 ? "complete" : ""}><i>{balance === 0 ? "✓" : "2"}</i><b>Balance</b><small>{balance === 0 ? "Paid in full" : `${money(balance)} due`}</small></span><span className={contracts.length >= 2 ? "complete" : ""}><i>{contracts.length >= 2 ? "✓" : "3"}</i><b>Documents</b><small>{contracts.length >= 2 ? "Package on file" : `${contracts.length}/2 on file`}</small></span><span className={delivery ? "complete" : ""}><i>{delivery ? "✓" : "4"}</i><b>Go-home plan</b><small>{delivery ? `${shortDate(delivery.event_date)}${delivery.location ? ` · ${delivery.location}` : ""}` : "Not scheduled"}</small></span></div><footer>{buyer && balance > 0 && <button onClick={() => openCreate("transactions", { type: "Payment", buyer_id: buyer.id, puppy_id: puppy.id, status: "Paid", description: "Final balance" })}>Record balance</button>}{buyer && <button onClick={() => openContracts(buyer.id)}>Contracts</button>}{delivery ? <button onClick={() => openEdit("events", delivery as unknown as Record<string, unknown>)}>Edit schedule</button> : <button onClick={() => openCreate("events", { title: `${puppy.name} go-home`, event_type: "Pickup", status: "Scheduled", related_type: "buyers", related_id: buyer?.id })}>Schedule pickup</button>}</footer></article>;
+    })}</div> : <Empty title="No puppies are in go-home planning" text="A puppy appears here after a family is assigned." action="Add puppy" onAction={() => openCreate("puppies")} />}
   </div>;
 }
 
@@ -918,7 +996,7 @@ function RecordModal({ modal, data, saving, onClose, onSubmit }: { modal: Exclud
     {resource === "puppies" && <><SelectField label="Litter" name="litter_id" options={litterOptions} record={record} preset={preset} required /><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} empty="No buyer" /><Field label="Name" name="name" record={record} preset={preset} required /><Field label="Sex" name="sex" record={record} preset={preset} /><Field label="Color" name="color" record={record} preset={preset} /><Field label="Birth date" name="birth_date" type="date" record={record} preset={preset} /><Field label="Birth weight" name="birth_weight" type="number" record={record} preset={preset} /><Field label="Current weight" name="current_weight" type="number" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><Field label="Price" name="price" type="number" record={record} preset={preset} defaultValue={dollarDefault(record, "price", "price_cents", preset)} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
     {resource === "transactions" && <TransactionFields data={data} record={record} preset={preset} />}
     {resource === "payment_plans" && <><SelectField label="Buyer" name="buyer_id" options={buyerOptions} record={record} preset={preset} /><Field label="Name" name="name" record={record} preset={preset} required /><Field label="Contract amount" name="total_amount" type="number" record={record} preset={preset} required defaultValue={dollarDefault(record, "total_amount", "total_amount_cents", preset)} /><Field label="Payment amount" name="payment_amount" type="number" record={record} preset={preset} required defaultValue={dollarDefault(record, "payment_amount", "payment_amount_cents", preset)} /><Field label="Number of payments" name="term_count" type="number" record={record} preset={preset} required /><Field label="Frequency" name="frequency" record={record} preset={preset} /><Field label="Next due date" name="next_due_date" type="date" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
-    {resource === "events" && <><Field label="Title" name="title" record={record} preset={preset} required /><Field label="Type" name="event_type" record={record} preset={preset} required /><Field label="Date" name="event_date" type="date" record={record} preset={preset} required /><Field label="Time" name="event_time" type="time" record={record} preset={preset} /><Field label="Location" name="location" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
+    {resource === "events" && <><input type="hidden" name="related_type" value={valueOf(record, "related_type", valueOf(preset, "related_type"))} /><input type="hidden" name="related_id" value={valueOf(record, "related_id", valueOf(preset, "related_id"))} /><Field label="Title" name="title" record={record} preset={preset} required /><Field label="Type" name="event_type" record={record} preset={preset} required /><Field label="Date" name="event_date" type="date" record={record} preset={preset} required /><Field label="Time" name="event_time" type="time" record={record} preset={preset} /><Field label="Location" name="location" record={record} preset={preset} /><Field label="Status" name="status" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
     {resource === "updates" && <><SelectField label="Puppy" name="puppy_id" options={puppyOptions} record={record} preset={preset} /><Field label="Title" name="title" record={record} preset={preset} required /><Field label="Week" name="week_number" type="number" record={record} preset={preset} /><Field label="Weight" name="weight" type="number" record={record} preset={preset} /><TextArea label="Body" name="body" record={record} preset={preset} /><label className="check wide"><input name="published" type="checkbox" defaultChecked={Boolean(record?.published ?? preset?.published)} /><span>Publish update</span></label></>}
     {resource === "dog_medical_records" && <><SelectField label="Dog" name="dog_id" options={dogOptions} record={record} preset={preset} /><Field label="Type" name="record_type" record={record} preset={preset} required /><Field label="Title" name="title" record={record} preset={preset} required /><Field label="Date" name="record_date" type="date" record={record} preset={preset} /><Field label="Provider" name="provider" record={record} preset={preset} /><Field label="Cost" name="cost" type="number" record={record} preset={preset} defaultValue={dollarDefault(record, "cost", "cost_cents", preset)} /><Field label="Next due" name="next_due_date" type="date" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
     {resource === "dog_registrations" && <><SelectField label="Dog" name="dog_id" options={dogOptions} record={record} preset={preset} /><Field label="Registry" name="registry" record={record} preset={preset} required /><Field label="Registration number" name="registration_number" record={record} preset={preset} required /><Field label="Registered name" name="registered_name" record={record} preset={preset} /><Field label="Issue date" name="issue_date" type="date" record={record} preset={preset} /><TextArea label="Notes" name="notes" record={record} preset={preset} /></>}
@@ -1036,11 +1114,7 @@ export default function Home() {
   const [activitySyncedAt, setActivitySyncedAt] = useState<Date | null>(null);
   const [activityError, setActivityError] = useState("");
   const [newCallId, setNewCallId] = useState<number | null>(null);
-  const [launcherOpen, setLauncherOpen] = useState(false);
-  const [controlCenterOpen, setControlCenterOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
-  const [windowMinimized, setWindowMinimized] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
   const dataRef = useRef<DataSet>(emptyData);
   const activityRequestInFlight = useRef(false);
@@ -1049,8 +1123,6 @@ export default function Home() {
 
   const navigateTo = useCallback((nextView: View) => {
     setView(nextView);
-    setWindowMinimized(false);
-    setLauncherOpen(false);
     setCommandOpen(false);
     setSearch("");
   }, []);
@@ -1139,8 +1211,6 @@ export default function Home() {
         return;
       }
       if (event.key === "Escape") {
-        setLauncherOpen(false);
-        setControlCenterOpen(false);
         setCommandOpen(false);
         setSearch("");
         return;
@@ -1271,32 +1341,35 @@ export default function Home() {
     return [
       ...data.dogs.map((item) => ({ label: item.name, detail: `${item.role} / ${item.status}`, view: "Breeding" as View })),
       ...data.litters.map((item) => ({ label: item.name, detail: `Litter / ${item.status}`, view: "Litters" as View })),
-      ...data.buyers.map((item) => ({ label: fullName(item), detail: [item.phone, item.email].filter(Boolean).join(" / "), view: item.phone ? "CRM" as View : "Families" as View })),
+      ...data.buyers.map((item) => ({ label: fullName(item), detail: `${item.application_status} / ${[item.phone, item.email].filter(Boolean).join(" / ")}`, view: ["Approved", "Waitlist", "Matched", "Placed"].includes(item.application_status) ? "Families" as View : "Applications" as View })),
       ...data.puppies.map((item) => ({ label: item.name, detail: `Puppy / ${item.status}`, view: "Puppies" as View })),
       ...data.transactions.map((item) => ({ label: item.description, detail: `${item.type} / ${money(item.amount_cents)}`, view: "Finance" as View })),
-      ...data.events.map((item) => ({ label: item.title, detail: shortDate(item.event_date), view: "Calendar" as View })),
+      ...data.events.map((item) => ({ label: item.title, detail: shortDate(item.event_date), view: /pickup|delivery|transport|go.home/i.test(`${item.event_type} ${item.title}`) ? "Delivery" as View : "Calendar" as View })),
       ...data.dog_medical_records.map((item) => ({ label: item.title, detail: `${item.record_type} / ${shortDate(item.next_due_date)}`, view: "Care" as View })),
       ...data.updates.map((item) => ({ label: item.title, detail: item.published ? "Published update" : "Draft update", view: "Comms" as View })),
     ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query)).slice(0, 8);
   }, [data, search]);
 
   const activeViewProps = { data, openCreate, openEdit, openDocumentUpload, remove, removeDocument, openContracts };
-  const quickResource = view === "Litters" ? "litters" : view === "Puppies" ? "puppies" : view === "Calendar" || view === "Care" || view === "CRM" ? "events" : view === "Families" || view === "Comms" || view === "Portal" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
+  const quickResource = view === "Litters" ? "litters" : view === "Puppies" || view === "Placement" ? "puppies" : view === "Calendar" || view === "Care" || view === "CRM" || view === "Delivery" ? "events" : view === "Applications" || view === "Families" || view === "Comms" || view === "Portal" ? "buyers" : view === "Breeding" ? "dogs" : view === "Finance" || view === "Inventory" || view === "Reports" ? "transactions" : "events";
   const viewCopy: Record<View, { title: string; text: string }> = {
-    Command: { title: "Operating command", text: "Control surface for every record in the program." },
-    Breeding: { title: "Breeding control", text: "Manage dogs, litters, registrations, health context, and pairings." },
-    Litters: { title: "Litter operations", text: "Manage litter plans, pairings, due dates, birth records, and puppy rosters." },
-    Puppies: { title: "Puppy operations", text: "Manage every puppy, family assignment, placement status, price, and update." },
-    Families: { title: "Families and placement", text: "Manage buyer pipeline, puppy assignments, and family-facing updates." },
-    Care: { title: "Care operations", text: "Run medical schedules, open tasks, heat watch, and appointment control." },
-    Finance: { title: "Finance ledger", text: "Track payments, costs, balances, payment plans, and profitability." },
-    Inventory: { title: "Inventory control", text: "Control supply spend, restock watchlists, and cost category burn." },
-    Comms: { title: "Communications hub", text: "Manage family pipeline, puppy updates, and quick outreach." },
+    Command: { title: "Today’s breeder desk", text: "The next care, placement, payment, communication, and go-home work across the program." },
+    Breeding: { title: "Dogs & breeding", text: "Manage breeding dogs, pairings, heat dates, registrations, and program records." },
+    Litters: { title: "Litters", text: "Track every litter from planned pairing and due date through whelping and puppy roster." },
+    Puppies: { title: "Puppies", text: "Keep identity, growth, care, availability, pricing, and family assignment on one record." },
+    Care: { title: "Health & care", text: "Run medical schedules, puppy milestones, recurring care, and kennel work." },
+    Applications: { title: "Applications", text: "Screen families, record preferences, approve the right homes, and build the waitlist." },
+    Families: { title: "Buyers & waitlist", text: "Open the complete family relationship: contact, preferences, puppies, payments, documents, and portal." },
+    Placement: { title: "Puppy placement", text: "Match approved families to puppies and carry every placement into payment and contract work." },
+    Delivery: { title: "Pickup & delivery", text: "Control final balances, signed documents, handoff schedules, and go-home readiness." },
+    Finance: { title: "Payments & sales", text: "Credit every payment to the right buyer and puppy, then manage balances and sale revenue." },
+    Inventory: { title: "Costs & expenses", text: "See veterinary, breeding, supply, travel, and program costs against recorded sales." },
+    Comms: { title: "Family communications", text: "Manage family updates, calls, messages, requests, and communication history." },
     Portal: { title: "Puppy Portal simulator", text: "See exactly what each customer sees and manage secure family access." },
     CRM: { title: "Caller CRM", text: "Identify callers and surface their account, assigned puppy, payment, update, and conversation records." },
-    Calendar: { title: "Mission calendar", text: "Schedule care, breeding, pickup, buyer, and reminder events." },
-    Vault: { title: "Document vault", text: "Access buyer files, dog files, certificates, agreements, and reports." },
-    Templates: { title: "Templates and automation", text: "Edit signed documents and the automatic emails sent throughout each customer journey." },
+    Calendar: { title: "Schedule", text: "Schedule breeding, whelping, care, family calls, pickup, delivery, and follow-up work." },
+    Vault: { title: "Documents", text: "Access buyer files, dog records, certificates, signed agreements, and reports." },
+    Templates: { title: "Automations & templates", text: "Control the saved business language and automatic emails used across each family journey." },
     Reports: { title: "Reports and intelligence", text: "Review performance, compliance, profitability, and export an operating snapshot." },
   };
   const ActiveViewIcon = views.find((item) => item.id === view)?.icon ?? LayoutDashboard;
@@ -1306,7 +1379,10 @@ export default function Home() {
     Breeding: analytics.activeLitters.length,
     Litters: analytics.activeLitters.length,
     Puppies: analytics.unmatched.length,
-    Families: analytics.pendingBuyers.length,
+    Applications: analytics.pendingBuyers.length,
+    Families: analytics.approvedBuyers.length,
+    Placement: analytics.unmatched.length,
+    Delivery: data.events.filter((item) => /pickup|delivery|transport|go.home/i.test(`${item.event_type} ${item.title}`) && item.status !== "Completed").length,
     Care: analytics.upcomingCare.length,
     Finance: analytics.overdue.length,
     Comms: analytics.draftUpdates.length,
@@ -1315,27 +1391,44 @@ export default function Home() {
     Vault: analytics.docs,
   };
 
-  return <div className={`app-shell ${focusMode ? "focus-mode" : ""}`}>
-    <aside className="sidebar">
-      <button className="brand" onClick={() => setLauncherOpen(true)} aria-expanded={launcherOpen}><span><Grid2X2 size={21} /></span><b>SWVAOS</b><small>App launcher</small></button>
-      <div className="dock-groups">{viewGroups.map((group) => <section key={group}><span className="dock-caption">{group}</span><nav aria-label={`${group} applications`}>{views.filter((item) => item.group === group).map((item) => { const Icon = item.icon; const badge = viewBadges[item.id]; return <button key={item.id} className={view === item.id && !windowMinimized ? "active" : ""} onClick={() => navigateTo(item.id)} title={`${item.label} · Alt+${item.shortcut}`}><span className="dock-app-icon"><Icon size={19} />{Boolean(badge) && <em>{Number(badge) > 99 ? "99+" : badge}</em>}</span><span className="dock-app-label">{item.label}</span></button>; })}</nav></section>)}</div>
-      <button className="system-card" onClick={() => setControlCenterOpen((current) => !current)} aria-expanded={controlCenterOpen}><span className={error ? "offline" : ""} /><b>{error ? "Action needed" : "System online"}</b><small>{analytics.readiness}% readiness · {analytics.docs} files</small><Settings2 size={14} /></button>
+  return <div className="breeder-shell">
+    <aside className="breeder-sidebar">
+      <button className="breeder-brand" onClick={() => navigateTo("Command")}><span><DogIcon size={23} /></span><b>Southwest Virginia Chihuahua</b><small>Breeder operating system</small></button>
+      <button className="breeder-new-record" onClick={() => openCreate(quickResource)}><Plus size={17} /> Add to {activeViewDefinition.label}</button>
+      <div className="breeder-nav-groups">{viewGroups.map((group) => <section key={group}><span>{group}</span><nav aria-label={group}>{views.filter((item) => item.group === group).map((item) => { const Icon = item.icon; const badge = viewBadges[item.id]; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigateTo(item.id)} title={`Alt+${item.shortcut}`}><Icon size={18} /><b>{item.label}</b>{Boolean(badge) && <em>{Number(badge) > 99 ? "99+" : badge}</em>}</button>; })}</nav></section>)}</div>
+      <footer className="breeder-sidebar-footer"><span><i className={error ? "offline" : ""} />{error ? "Data needs attention" : "Records connected"}</span><small>{coreRecordCount} dogs, litters, puppies, and families · {analytics.docs} documents</small></footer>
     </aside>
-    <main className="os-workspace">
-      <header className="topbar">
-        <div className="os-menu-cluster"><button className="os-menu-brand" onClick={() => setLauncherOpen(true)}><span><CircleGauge size={17} /></span><b>SWVAOS</b><small>KENNEL OPERATIONS</small></button><nav className="desktop-menus" aria-label="System menu"><button onClick={() => setLauncherOpen(true)}>Apps</button><button onClick={() => setCommandOpen(true)}>Go</button><button onClick={() => setFocusMode((current) => !current)}>Window</button></nav></div>
-        <div className="search command-search"><SearchIcon size={18} /><input ref={searchInputRef} aria-label="Search or open a command" value={search} onFocus={() => setCommandOpen(true)} onChange={(event) => { setSearch(event.target.value); setCommandOpen(true); }} placeholder="Search everything or run a command..." /><kbd><CommandIcon size={11} />K</kbd>{commandOpen && <div className="search-menu command-palette"><header><span>COMMAND CENTER</span><button onClick={() => { setCommandOpen(false); setSearch(""); }} aria-label="Close command center"><X size={14} /></button></header>{search.trim() ? searchResults.length ? <div className="command-results">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => navigateTo(item.view)}><span><b>{item.label}</b><small>{item.detail}</small></span><ChevronRight size={15} /></button>)}</div> : <div className="command-empty"><SearchIcon size={19} /><b>No matching records</b><small>Try a family name, puppy, transaction, event, or document area.</small></div> : <><span className="command-section-label">Quick launch</span><div className="command-apps">{views.slice(0, 8).map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => navigateTo(item.id)}><Icon size={17} /><span>{item.label}</span><kbd>⌥{item.shortcut}</kbd></button>; })}</div><span className="command-section-label">Quick actions</span><div className="command-actions"><button onClick={() => { setCommandOpen(false); openCreate("transactions", { type: "Payment" }); }}><ReceiptText size={16} /><span><b>Credit a payment</b><small>Assign income to a buyer account</small></span></button><button onClick={() => { setCommandOpen(false); openCreate("buyers"); }}><UserRound size={16} /><span><b>Add a family</b><small>Create a buyer profile</small></span></button><button onClick={() => { setCommandOpen(false); openDocumentUpload("dog"); }}><Upload size={16} /><span><b>Store a document</b><small>Open the secure vault uploader</small></span></button></div></>}</div>}</div>
-        <div className="top-actions"><button className="network-state" onClick={() => setControlCenterOpen((current) => !current)}><Wifi size={14} /> LIVE</button><span className="menu-clock" suppressHydrationWarning>{now ? new Intl.DateTimeFormat("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }).format(now) : "Syncing..."}</span><button className="icon-action" onClick={() => setControlCenterOpen((current) => !current)} aria-label="Open notifications and controls"><Bell size={16} />{(analytics.overdue.length + analytics.dueHealth.length) > 0 && <i />}</button><button className="upload-quick" onClick={() => openDocumentUpload(view === "Families" ? "buyer" : "dog")}><Upload size={16} /> Upload</button><button className="payment-quick" onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={16} /> Payment</button><button className="primary-action" onClick={() => openCreate(quickResource)}><Plus size={16} /> Add</button></div>
+    <main className="breeder-workspace">
+      <header className="breeder-topbar">
+        <div className="breeder-mobile-brand"><DogIcon size={18} /><b>SWVAOS</b></div>
+        <div className="breeder-global-search"><SearchIcon size={18} /><input ref={searchInputRef} aria-label="Search SWVAOS" value={search} onFocus={() => setCommandOpen(true)} onChange={(event) => { setSearch(event.target.value); setCommandOpen(true); }} placeholder="Search a dog, litter, puppy, family, payment, or task…" /><kbd><CommandIcon size={11} />K</kbd>{commandOpen && <div className="breeder-search-menu"><header><span>Search and quick actions</span><button onClick={() => { setCommandOpen(false); setSearch(""); }} aria-label="Close search"><X size={15} /></button></header>{search.trim() ? searchResults.length ? <div className="command-results">{searchResults.map((item) => <button key={`${item.view}-${item.label}`} onClick={() => navigateTo(item.view)}><span><b>{item.label}</b><small>{item.detail}</small></span><ChevronRight size={15} /></button>)}</div> : <div className="command-empty"><SearchIcon size={19} /><b>No matching records</b><small>Try a family name, puppy, transaction, or event.</small></div> : <><span className="command-section-label">Go to workspace</span><div className="breeder-search-links">{views.slice(0, 12).map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => navigateTo(item.id)}><Icon size={16} /><span>{item.label}</span></button>; })}</div><span className="command-section-label">Create</span><div className="command-actions"><button onClick={() => { setCommandOpen(false); openCreate("transactions", { type: "Payment" }); }}><ReceiptText size={16} /><span><b>Record payment</b><small>Credit a buyer account</small></span></button><button onClick={() => { setCommandOpen(false); openCreate("buyers", { application_status: "New" }); }}><ClipboardCheck size={16} /><span><b>New application</b><small>Start family screening</small></span></button><button onClick={() => { setCommandOpen(false); openCreate("events", { event_type: "Pickup", status: "Scheduled" }); }}><Route size={16} /><span><b>Schedule go-home</b><small>Pickup or delivery</small></span></button></div></>}</div>}</div>
+        <div className="breeder-top-actions"><span suppressHydrationWarning>{now ? new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(now) : "Today"}</span><button onClick={() => openCreate("transactions", { type: "Payment" })}><ReceiptText size={16} /> Record payment</button><button className="primary-action" onClick={() => openCreate(quickResource)}><Plus size={16} /> Add record</button></div>
       </header>
-      {controlCenterOpen && <aside className="control-center"><header><div><span>CONTROL CENTER</span><h2>System overview</h2></div><button onClick={() => setControlCenterOpen(false)} aria-label="Close control center"><X size={15} /></button></header><div className="control-toggles"><button className="active"><Wifi size={18} /><span><b>Live data</b><small>Connected</small></span></button><button className={focusMode ? "active" : ""} onClick={() => setFocusMode((current) => !current)}>{focusMode ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}<span><b>Focus mode</b><small>{focusMode ? "Dock hidden" : "Dock visible"}</small></span></button><button onClick={() => setCommandOpen(true)}><Keyboard size={18} /><span><b>Command</b><small>Ctrl/⌘ K</small></span></button><button onClick={() => navigateTo("Vault")}><ShieldCheck size={18} /><span><b>Vault</b><small>{analytics.docs} files</small></span></button></div><div className="control-meters"><span><small>Operational readiness</small><b>{analytics.readiness}%</b><i style={{ "--meter": `${analytics.readiness}%` } as React.CSSProperties} /></span><span><small>Registry coverage</small><b>{analytics.registryCoverage}%</b><i style={{ "--meter": `${analytics.registryCoverage}%` } as React.CSSProperties} /></span></div><div className="control-alerts"><span><Bell size={16} /><b>Attention center</b></span>{analytics.overdue.length + analytics.dueHealth.length ? <p>{analytics.overdue.length} overdue finance items and {analytics.dueHealth.length} care deadlines need review.</p> : <p>No urgent finance or care alerts. Core systems are nominal.</p>}</div></aside>}
-      <div className="os-desktop">{windowMinimized ? <section className="desktop-home"><div className="desktop-shortcuts">{taskbarViews.map((itemId) => { const item = views.find((candidate) => candidate.id === itemId)!; const Icon = item.icon; return <button key={item.id} onClick={() => navigateTo(item.id)}><span><Icon size={28} /></span><b>{item.label}</b></button>; })}</div><div className="desktop-widget"><span><Sparkles size={18} /> TODAY IN SWVAOS</span><b>{analytics.readiness}% ready</b><p>{coreRecordCount} core records · {analytics.upcoming.length} upcoming events · {money(analytics.outstanding)} outstanding</p><button onClick={() => setWindowMinimized(false)}><AppWindow size={16} /> Restore {activeViewDefinition.label}</button></div></section> : <section className="workspace-window"><header className="window-bar"><div className="window-lights"><button onClick={() => navigateTo("Command")} aria-label="Close current app and return to Command" title="Return to Command" /><button onClick={() => setWindowMinimized(true)} aria-label="Minimize workspace" title="Minimize" /><button onClick={() => setFocusMode((current) => !current)} aria-label="Toggle maximized focus mode" title="Maximize" /></div><div className="window-identity"><span><ActiveViewIcon size={16} /></span><b>{viewCopy[view].title}</b><small>SWVAOS / {activeViewDefinition.group} / {view}</small></div><div className="window-state"><span>{focusMode ? "FOCUS MODE" : "ACTIVE WORKSPACE"}</span><i /></div></header><div className="window-toolbar"><div><button onClick={() => setLauncherOpen(true)}><Layers3 size={14} /> Applications</button><ChevronRight size={13} /><span>{activeViewDefinition.group}</span><ChevronRight size={13} /><b>{activeViewDefinition.label}</b></div><div><span><i /> Live records</span><span>{coreRecordCount} core objects</span><button onClick={() => setFocusMode((current) => !current)}>{focusMode ? <Minimize2 size={14} /> : <Expand size={14} />}{focusMode ? "Exit focus" : "Focus"}</button></div></div><div className="content">
-        <div className="view-title"><span>{view.toUpperCase()}</span><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p><div className="view-title-meta"><span><i /> Live workspace</span><span>{now ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(now) : "Today"}</span></div></div>
+      <div className="breeder-content">
+        {view !== "Command" && <header className="breeder-page-head"><span className="breeder-page-icon"><ActiveViewIcon size={22} /></span><div><small>{activeViewDefinition.group}</small><h1>{viewCopy[view].title}</h1><p>{viewCopy[view].text}</p></div><span className="breeder-page-date" suppressHydrationWarning>{now ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(now) : "Today"}</span></header>}
         {error && <div className="error-banner"><b>Something needs attention</b><span>{error}</span><button onClick={() => void loadData()}>Retry</button></div>}
-        {loading ? <div className="loading"><span />Loading records...</div> : <>{view === "Command" && <CommandView data={data} openCreate={openCreate} setView={navigateTo} />}{view === "Breeding" && <BreedingView {...activeViewProps} />}{view === "Litters" && <LittersView {...activeViewProps} />}{view === "Puppies" && <PuppiesView {...activeViewProps} />}{view === "Families" && <FamiliesView {...activeViewProps} />}{view === "Care" && <CareView {...activeViewProps} />}{view === "Finance" && <FinanceView {...activeViewProps} />}{view === "Inventory" && <InventoryView {...activeViewProps} />}{view === "Comms" && <CommunicationsView {...activeViewProps} />}{view === "Portal" && <PortalPreviewView data={data} />}{view === "CRM" && <CallerCrmView {...activeViewProps} refreshActivity={refreshActivity} activityRefreshing={activityRefreshing} activitySyncedAt={activitySyncedAt} activityError={activityError} newCallId={newCallId} />}{view === "Calendar" && <CalendarView {...activeViewProps} />}{view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}{view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}{view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}</>}
-      </div></section>}</div>
-      <footer className="os-statusbar os-taskbar"><button className={launcherOpen ? "taskbar-start active" : "taskbar-start"} onClick={() => setLauncherOpen((current) => !current)} aria-label="Open app launcher"><Grid2X2 size={15} /></button><nav aria-label="Pinned applications">{taskbarViews.map((itemId) => { const item = views.find((candidate) => candidate.id === itemId)!; const Icon = item.icon; return <button key={item.id} onClick={() => view === item.id && windowMinimized ? setWindowMinimized(false) : navigateTo(item.id)} className={view === item.id && !windowMinimized ? "active" : ""} title={item.label}><Icon size={15} /><span>{item.label}</span></button>; })}</nav><div className="taskbar-system"><span><i className={error ? "offline" : ""} /> {error ? "Attention" : "Online"}</span><button onClick={() => setControlCenterOpen((current) => !current)}><Wifi size={13} /><span>{analytics.readiness}%</span></button><time>{now ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(now) : "--:--"}</time></div></footer>
+        {loading ? <div className="loading"><span />Loading records...</div> : <>
+          {view === "Command" && <CommandView data={data} openCreate={openCreate} setView={navigateTo} />}
+          {view === "Breeding" && <BreedingView {...activeViewProps} />}
+          {view === "Litters" && <LittersView {...activeViewProps} />}
+          {view === "Puppies" && <PuppiesView {...activeViewProps} />}
+          {view === "Care" && <CareView {...activeViewProps} />}
+          {view === "Applications" && <ApplicationsView {...activeViewProps} />}
+          {view === "Families" && <FamiliesView {...activeViewProps} />}
+          {view === "Placement" && <PlacementView {...activeViewProps} />}
+          {view === "Delivery" && <DeliveryView {...activeViewProps} />}
+          {view === "Finance" && <FinanceView {...activeViewProps} />}
+          {view === "Inventory" && <InventoryView {...activeViewProps} />}
+          {view === "Comms" && <CommunicationsView {...activeViewProps} />}
+          {view === "Portal" && <PortalPreviewView data={data} />}
+          {view === "CRM" && <CallerCrmView {...activeViewProps} refreshActivity={refreshActivity} activityRefreshing={activityRefreshing} activitySyncedAt={activitySyncedAt} activityError={activityError} newCallId={newCallId} />}
+          {view === "Calendar" && <CalendarView {...activeViewProps} />}
+          {view === "Vault" && <VaultView data={data} openDocumentUpload={openDocumentUpload} removeDocument={removeDocument} />}
+          {view === "Templates" && <TemplatesCenter initialConfig={templates} onSaved={setTemplates} />}
+          {view === "Reports" && <ReportsView data={data} openCreate={openCreate} />}
+        </>}
+      </div>
     </main>
-    {launcherOpen && <div className="launcher-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLauncherOpen(false); }}><section className="app-launcher" role="dialog" aria-modal="true" aria-labelledby="app-launcher-title"><header><div><span><Grid2X2 size={18} /></span><div><small>SWVAOS DESKTOP</small><h2 id="app-launcher-title">Applications</h2></div></div><button onClick={() => setLauncherOpen(false)} aria-label="Close app launcher"><X size={17} /></button></header><button className="launcher-search" onClick={() => { setLauncherOpen(false); setCommandOpen(true); window.setTimeout(() => searchInputRef.current?.focus(), 0); }}><SearchIcon size={17} /><span>Search records, apps, and commands</span><kbd><CommandIcon size={11} />K</kbd></button><div className="launcher-grid">{views.map((item) => { const Icon = item.icon; const badge = viewBadges[item.id]; return <button key={item.id} onClick={() => navigateTo(item.id)}><span><Icon size={23} />{Boolean(badge) && <em>{badge}</em>}</span><b>{item.label}</b><small>{item.group}</small></button>; })}</div><footer><div><span><i className={error ? "offline" : ""} /> {error ? "Connection needs attention" : "All systems nominal"}</span><small>{coreRecordCount} core records synced</small></div><button onClick={() => { setLauncherOpen(false); setControlCenterOpen(true); }}><Settings2 size={15} /> Controls</button></footer></section></div>}
     {modal && <RecordModal modal={modal} data={data} saving={saving} onClose={() => setModal(null)} onSubmit={submitRecord} />}
     {documentModal && <DocumentUploadModal modal={documentModal} data={data} saving={saving} error={uploadError} onClose={() => setDocumentModal(null)} onKindChange={(kind) => setDocumentModal({ kind })} onSubmit={submitDocument} />}
     {contractModal && <ContractModal modal={contractModal} data={data} templates={templates} saving={saving} error={contractError} onClose={() => setContractModal(null)} onSubmit={submitContracts} onOpenPortal={() => void openExistingPortal()} />}
