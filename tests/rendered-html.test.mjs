@@ -8,9 +8,9 @@ test("ships the SWVAOS command surface", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
 
   assert.match(page, /SWVAOS/);
-  assert.match(page, /Breeder operating system/i);
-  assert.match(page, /Action queue/);
-  assert.match(page, /Records that need a next step/);
+  assert.match(page, /BREEDER OS/i);
+  assert.match(page, /PRIORITY QUEUE/);
+  assert.match(page, /Work that is waiting on you/);
   assert.match(page, /Documents/);
   assert.match(page, /Health & care/);
   assert.match(page, /Costs & expenses/);
@@ -128,18 +128,26 @@ test("credits every received payment to a visible buyer account", async () => {
 });
 
 test("ships a breeder workflow operating system rather than decorative desktop chrome", async () => {
-  const [page, css] = await Promise.all([
+  const [page, layout, css, breederOsCss] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("app/breeder-os.css", root), "utf8"),
   ]);
 
-  assert.match(page, /breeder-shell/);
-  assert.match(page, /breeder-nav-groups/);
-  assert.match(page, /From application to go-home/);
-  assert.match(page, /What needs your attention today/);
-  assert.match(page, /Search a dog, litter, puppy, family, payment, or task/);
-  assert.doesNotMatch(page, /workspace-window|os-taskbar|app-launcher|control-center|windowMinimized|focusMode/);
-  assert.match(css, /Breeder-first operating workspace/);
+  assert.match(page, /bos-shell/);
+  assert.match(page, /bos-command-bar/);
+  assert.match(page, /bos-workspaces/);
+  assert.match(page, /Run the breeding program/);
+  assert.match(page, /DAILY RUN SHEET/);
+  assert.match(page, /PRIORITY QUEUE/);
+  assert.match(page, /Application to go-home/);
+  assert.match(page, /Find any dog, puppy, family, payment/);
+  assert.doesNotMatch(page, /breeder-sidebar|breeder-nav-groups|workspace-window|os-taskbar|app-launcher|control-center|windowMinimized|focusMode/);
+  assert.match(layout, /import "\.\/breeder-os\.css"/);
+  assert.match(breederOsCss, /structure, not a theme layer/);
+  assert.match(breederOsCss, /\.bos-command-bar/);
+  assert.match(breederOsCss, /\.bos-priority-list/);
   assert.match(css, /\.breeder-lifecycle/);
   assert.match(css, /\.pipeline-board/);
   assert.match(css, /\.delivery-board/);
@@ -195,7 +203,6 @@ test("ships the caller CRM and complete line-aware voice menus", async () => {
   ]);
 
   assert.match(page, /Caller CRM/);
-  assert.match(page, /suppressHydrationWarning/);
   assert.match(page, /Recognized family flow/);
   assert.match(page, /Public SWVAOS flow/);
   assert.match(page, /Pup-Lift support flow/);
@@ -311,7 +318,7 @@ test("ships a connected breeder workspace with portal preview and customer sign-
   ]);
 
   assert.match(page, /Puppy Portal simulator/);
-  assert.match(page, /Today’s breeder desk/);
+  assert.match(page, /Breeder daily run/);
   assert.match(page, /Payments & sales/);
   assert.match(page, /Pickup & delivery/);
   assert.match(family, /Portal Preview/);
