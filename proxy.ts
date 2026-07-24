@@ -6,6 +6,7 @@ const publicPath = (pathname: string) =>
   || pathname.startsWith("/api/auth/")
   || pathname.startsWith("/portal/")
   || pathname.startsWith("/api/portal/")
+  || pathname.startsWith("/api/website/")
   || pathname.startsWith("/api/voice/")
   || pathname === "/api/caller-crm/lookup";
 
