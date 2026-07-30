@@ -184,28 +184,40 @@ export async function renderContractPdf(snapshot: ContractSnapshot) {
     if (!visible.length) return;
     section(title);
 
-    const labelWidth = 176;
-    const gutter = 14;
-    const valueWidth = contentWidth - labelWidth - gutter - 16;
-    const labelX = margin + 8;
-    const valueX = margin + 8 + labelWidth + gutter;
-    const lineHeight = 10.5;
+    const horizontalPadding = 12;
+    const usableWidth = contentWidth - horizontalPadding * 2;
+    const labelSize = 6.6;
+    const valueSize = 8.8;
+    const labelLineHeight = 8.5;
+    const valueLineHeight = 11;
+    const labelValueGap = 5;
+    const verticalPadding = 10;
 
     for (const [label, value] of visible) {
-      const labelLines = wrapText(label.toUpperCase(), bold, 6.4, labelWidth);
-      const valueLines = wrapText(value, regular, 8.6, valueWidth);
-      const textLineCount = Math.max(labelLines.length, valueLines.length, 1);
-      const rowHeight = Math.max(29, 13 + textLineCount * lineHeight);
-      ensure(rowHeight + 2);
+      const labelLines = wrapText(label.toUpperCase(), bold, labelSize, usableWidth);
+      const valueLines = wrapText(value, regular, valueSize, usableWidth);
+      const labelHeight = Math.max(1, labelLines.length) * labelLineHeight;
+      const valueHeight = Math.max(1, valueLines.length) * valueLineHeight;
+      const rowHeight = verticalPadding * 2 + labelHeight + labelValueGap + valueHeight;
+      ensure(rowHeight + 3);
 
-      state.page.drawRectangle({ x: margin, y: state.y - rowHeight + 8, width: contentWidth, height: rowHeight, color: soft });
-      labelLines.forEach((item, index) => {
-        state.page.drawText(item, { x: labelX, y: state.y - index * lineHeight, size: 6.4, font: bold, color: muted });
+      const rowTop = state.y + 7;
+      const rowBottom = rowTop - rowHeight;
+      state.page.drawRectangle({ x: margin, y: rowBottom, width: contentWidth, height: rowHeight, color: soft });
+
+      let cursorY = rowTop - verticalPadding - labelSize;
+      labelLines.forEach((item) => {
+        state.page.drawText(item, { x: margin + horizontalPadding, y: cursorY, size: labelSize, font: bold, color: muted });
+        cursorY -= labelLineHeight;
       });
-      valueLines.forEach((item, index) => {
-        state.page.drawText(item, { x: valueX, y: state.y - index * lineHeight, size: 8.6, font: regular, color: ink });
+
+      cursorY -= labelValueGap;
+      valueLines.forEach((item) => {
+        state.page.drawText(item, { x: margin + horizontalPadding, y: cursorY, size: valueSize, font: regular, color: ink });
+        cursorY -= valueLineHeight;
       });
-      state.y -= rowHeight + 2;
+
+      state.y = rowBottom - 3;
     }
     state.y -= 5;
   };
