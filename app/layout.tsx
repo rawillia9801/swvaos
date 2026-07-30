@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
+import { ApplicationStatusSelectEnhancer } from "../components/application-status-select-enhancer";
 import "./globals.css";
 import "./breeder-os.css";
 
@@ -24,5 +25,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body></html>;
+  return <html lang="en"><body className={`${geistSans.variable} ${geistMono.variable}`}><ApplicationStatusSelectEnhancer />{children}</body></html>;
 }
