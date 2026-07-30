@@ -71,17 +71,35 @@ const clean = (value: unknown) => String(value ?? "").trim();
 const yesNo = (value: boolean | undefined) => value === true ? "Yes" : value === false ? "No" : "";
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
-  const words = text.replace(/\s+/g, " ").trim().split(" ");
+  const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
   const lines: string[] = [];
   let line = "";
+
   for (const word of words) {
     const next = line ? `${line} ${word}` : word;
-    if (font.widthOfTextAtSize(next, size) <= maxWidth) line = next;
-    else {
-      if (line) lines.push(line);
-      line = word;
+    if (font.widthOfTextAtSize(next, size) <= maxWidth) {
+      line = next;
+      continue;
     }
+
+    if (line) lines.push(line);
+    if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+      line = word;
+      continue;
+    }
+
+    let fragment = "";
+    for (const character of word) {
+      const candidate = `${fragment}${character}`;
+      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) fragment = candidate;
+      else {
+        if (fragment) lines.push(fragment);
+        fragment = character;
+      }
+    }
+    line = fragment;
   }
+
   if (line) lines.push(line);
   return lines.length ? lines : [""];
 }
@@ -113,11 +131,18 @@ export async function renderContractPdf(snapshot: ContractSnapshot) {
     const page = pdf.addPage([pageWidth, pageHeight]);
     page.drawRectangle({ x: 0, y: pageHeight - 15, width: pageWidth, height: 15, color: accent });
     page.drawText(snapshot.sellerName, { x: margin, y: pageHeight - 39, size: 8, font: bold, color: ink });
-    page.drawText(snapshot.title.toUpperCase(), { x: margin, y: pageHeight - 51, size: 7, font: regular, color: muted });
+
+    const runningTitle = wrapText(snapshot.title.toUpperCase(), regular, 6.6, contentWidth).slice(0, 2);
+    runningTitle.forEach((titleLine, index) => {
+      page.drawText(titleLine, { x: margin, y: pageHeight - 51 - index * 8, size: 6.6, font: regular, color: muted });
+    });
+
     page.drawLine({ start: { x: margin, y: 61 }, end: { x: pageWidth - margin, y: 61 }, thickness: 0.6, color: line });
     page.drawText(`Document ${snapshot.groupId.slice(0, 8).toUpperCase()} | Page ${pageNumber}`, { x: margin, y: 44, size: 7, font: regular, color: muted });
-    page.drawText(snapshot.status === "signed" ? "SIGNED COPY" : "AWAITING SIGNATURE", { x: pageWidth - margin - 76, y: 44, size: 7, font: bold, color: snapshot.status === "signed" ? rgb(0.08, 0.5, 0.35) : muted });
-    return { page, y: pageHeight - 86, pageNumber };
+    const statusText = snapshot.status === "signed" ? "SIGNED COPY" : "AWAITING SIGNATURE";
+    const statusWidth = bold.widthOfTextAtSize(statusText, 7);
+    page.drawText(statusText, { x: pageWidth - margin - statusWidth, y: 44, size: 7, font: bold, color: snapshot.status === "signed" ? rgb(0.08, 0.5, 0.35) : muted });
+    return { page, y: pageHeight - 91, pageNumber };
   }
 
   let state = newPage(1);
@@ -136,34 +161,62 @@ export async function renderContractPdf(snapshot: ContractSnapshot) {
     state.y -= options.gap ?? 6;
   };
   const section = (title: string) => {
-    ensure(30);
-    state.page.drawText(title.toUpperCase(), { x: margin, y: state.y, size: 8, font: bold, color: accent });
-    state.y -= 18;
+    const titleLines = wrapText(title.toUpperCase(), bold, 8, contentWidth);
+    const height = titleLines.length * 10 + 8;
+    ensure(height);
+    titleLines.forEach((titleLine, index) => {
+      state.page.drawText(titleLine, { x: margin, y: state.y - index * 10, size: 8, font: bold, color: accent });
+    });
+    state.y -= height;
   };
   const fact = (label: string, value: string, column: 0 | 1, rowY: number) => {
-    const x = margin + column * (contentWidth / 2 + 8);
-    const width = contentWidth / 2 - 8;
-    state.page.drawText(label.toUpperCase(), { x, y: rowY, size: 6.5, font: bold, color: muted });
-    const lines = wrapText(value || "Not recorded", regular, 8.6, width).slice(0, 2);
-    lines.forEach((item, index) => state.page.drawText(item, { x, y: rowY - 13 - index * 11, size: 8.6, font: regular, color: ink }));
+    const columnGap = 16;
+    const columnWidth = (contentWidth - columnGap) / 2;
+    const x = margin + column * (columnWidth + columnGap);
+    const labelLines = wrapText(label.toUpperCase(), bold, 6.5, columnWidth).slice(0, 2);
+    labelLines.forEach((item, index) => state.page.drawText(item, { x, y: rowY - index * 8, size: 6.5, font: bold, color: muted }));
+    const valueY = rowY - labelLines.length * 8 - 5;
+    const lines = wrapText(value || "Not recorded", regular, 8.6, columnWidth).slice(0, 3);
+    lines.forEach((item, index) => state.page.drawText(item, { x, y: valueY - index * 11, size: 8.6, font: regular, color: ink }));
   };
   const detailSection = (title: string, entries: Array<[string, unknown]>) => {
     const visible = entries.map(([label, value]) => [label, clean(value)] as const).filter(([, value]) => value);
     if (!visible.length) return;
     section(title);
+
+    const labelWidth = 176;
+    const gutter = 14;
+    const valueWidth = contentWidth - labelWidth - gutter - 16;
+    const labelX = margin + 8;
+    const valueX = margin + 8 + labelWidth + gutter;
+    const lineHeight = 10.5;
+
     for (const [label, value] of visible) {
-      ensure(27);
-      state.page.drawRectangle({ x: margin, y: state.y - 16, width: contentWidth, height: 25, color: soft });
-      state.page.drawText(label.toUpperCase(), { x: margin + 8, y: state.y, size: 6.4, font: bold, color: muted });
-      const lines = wrapText(value, regular, 8.6, contentWidth - 135).slice(0, 3);
-      lines.forEach((item, index) => state.page.drawText(item, { x: margin + 127, y: state.y - index * 10.5, size: 8.6, font: regular, color: ink }));
-      state.y -= Math.max(31, 19 + (lines.length - 1) * 10.5);
+      const labelLines = wrapText(label.toUpperCase(), bold, 6.4, labelWidth);
+      const valueLines = wrapText(value, regular, 8.6, valueWidth);
+      const textLineCount = Math.max(labelLines.length, valueLines.length, 1);
+      const rowHeight = Math.max(29, 13 + textLineCount * lineHeight);
+      ensure(rowHeight + 2);
+
+      state.page.drawRectangle({ x: margin, y: state.y - rowHeight + 8, width: contentWidth, height: rowHeight, color: soft });
+      labelLines.forEach((item, index) => {
+        state.page.drawText(item, { x: labelX, y: state.y - index * lineHeight, size: 6.4, font: bold, color: muted });
+      });
+      valueLines.forEach((item, index) => {
+        state.page.drawText(item, { x: valueX, y: state.y - index * lineHeight, size: 8.6, font: regular, color: ink });
+      });
+      state.y -= rowHeight + 2;
     }
     state.y -= 5;
   };
 
-  state.page.drawText(snapshot.title, { x: margin, y: state.y, size: 22, font: bold, color: ink });
-  state.y -= 30;
+  const titleLines = wrapText(snapshot.title, bold, 20, contentWidth);
+  const titleHeight = titleLines.length * 24 + 8;
+  ensure(titleHeight);
+  titleLines.forEach((titleLine, index) => {
+    state.page.drawText(titleLine, { x: margin, y: state.y - index * 24, size: 20, font: bold, color: ink });
+  });
+  state.y -= titleHeight;
   textBlock(snapshot.introduction, { size: 10, color: muted, gap: 14 });
   const details = snapshot.agreementDetails;
   const combinedAgreement = Boolean(details) || /bill of sale.*health guarantee/i.test(snapshot.title);
@@ -198,14 +251,14 @@ export async function renderContractPdf(snapshot: ContractSnapshot) {
     ]);
   } else {
     section("Buyer and puppy");
-    ensure(118);
+    ensure(138);
     const facts = [
       ["Buyer", snapshot.buyerName], ["Puppy", snapshot.puppyName], ["Buyer contact", [snapshot.buyerPhone, snapshot.buyerEmail].filter(Boolean).join(" / ")],
       ["Sex and color", [snapshot.puppySex, snapshot.puppyColor].filter(Boolean).join(" / ")], ["Buyer location", snapshot.buyerLocation], ["Birth date", date(snapshot.puppyBirthDate)],
       ["Litter", snapshot.litterName], ["Parents", [snapshot.damName && `Dam: ${snapshot.damName}`, snapshot.sireName && `Sire: ${snapshot.sireName}`].filter(Boolean).join(" / ")],
     ];
-    facts.forEach(([label, value], index) => fact(label, value, index % 2 as 0 | 1, state.y - Math.floor(index / 2) * 29));
-    state.y -= 120;
+    facts.forEach(([label, value], index) => fact(label, value, index % 2 as 0 | 1, state.y - Math.floor(index / 2) * 34));
+    state.y -= 138;
   }
 
   if (snapshot.kind === "bill_of_sale" || combinedAgreement) {
@@ -219,10 +272,10 @@ export async function renderContractPdf(snapshot: ContractSnapshot) {
         ["Balance due before transfer", money(snapshot.balanceCents)], ["Balance due date", date(snapshot.balanceDueDate)], ["Payment method", details.paymentMethod],
       ]);
     } else {
-      section("Sale and payment summary"); ensure(72);
+      section("Sale and payment summary"); ensure(102);
       const saleFacts = [["Purchase price", money(snapshot.salePriceCents)], ["Deposit recorded", money(snapshot.depositCents)], ["Balance", money(snapshot.balanceCents)], ["Balance due", date(snapshot.balanceDueDate)], ["Transfer date", date(snapshot.transferDate)], ["Seller", snapshot.sellerName]];
-      saleFacts.forEach(([label, value], index) => fact(label, value, index % 2 as 0 | 1, state.y - Math.floor(index / 2) * 29));
-      state.y -= 92;
+      saleFacts.forEach(([label, value], index) => fact(label, value, index % 2 as 0 | 1, state.y - Math.floor(index / 2) * 34));
+      state.y -= 102;
     }
   }
 
