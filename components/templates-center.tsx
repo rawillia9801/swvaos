@@ -9,7 +9,7 @@ type EmailStatus = { configured: boolean; host: string; port: number; secure: bo
 export function TemplatesCenter({ initialConfig, onSaved }: { initialConfig: TemplatesConfig; onSaved: (config: TemplatesConfig) => void }) {
   const [config, setConfig] = useState(initialConfig);
   const [section, setSection] = useState<"documents" | "emails">("documents");
-  const [documentKey, setDocumentKey] = useState<DocumentTemplateKey>("bill_of_sale");
+  const [documentKey, setDocumentKey] = useState<DocumentTemplateKey>("bill_of_sale_health_guarantee");
   const [emailKey, setEmailKey] = useState<EmailTemplateKey>("application_received");
   const [status, setStatus] = useState<EmailStatus | null>(null);
   const [testTo, setTestTo] = useState("");
@@ -55,18 +55,18 @@ export function TemplatesCenter({ initialConfig, onSaved }: { initialConfig: Tem
 
   return <div className="templates-center">
     <section className="template-overview panel-wide">
-      <div><span className="eyebrow">AUTOMATED COMMUNICATIONS & DOCUMENTS</span><h2>Control the language families actually receive</h2><p>These saved business templates are used at real application, approval, payment, contract, update, and portal milestones. Nothing here should be replaced with generic copy.</p></div>
+      <div><span className="eyebrow">AUTOMATED COMMUNICATIONS & DOCUMENTS</span><h2>Control the language families actually receive</h2><p>These saved business templates are used at real application, approval, payment, agreement, update, and portal milestones. The combined production agreement can be prepared directly from this workspace.</p></div>
       <div className={`smtp-card ${status?.configured ? "ready" : "needs-setup"}`}><span>{status?.configured ? <CheckCircle2 size={20} /> : <ShieldCheck size={20} />}</span><div><b>{status?.configured ? "Hostinger email connected" : "Hostinger email needs its server secret"}</b><small>{status ? `${status.fromName} <${status.fromEmail}> · ${status.host}:${status.port} ${status.secure ? "SSL/TLS" : "STARTTLS"}` : "Checking email connection…"}</small></div></div>
     </section>
 
-    <section className="automation-journey panel-wide" aria-label="Automated family journey"><span>APPLICATION RECEIVED</span><i /><span>APPROVAL</span><i /><span>PAYMENT & RECEIPT</span><i /><span>CONTRACTS</span><i /><span>PUPPY UPDATES</span><i /><span>PORTAL ACCESS</span></section>
+    <section className="automation-journey panel-wide" aria-label="Automated family journey"><span>APPLICATION RECEIVED</span><i /><span>APPROVAL</span><i /><span>PAYMENT & RECEIPT</span><i /><span>AGREEMENT</span><i /><span>PUPPY UPDATES</span><i /><span>PORTAL ACCESS</span></section>
     <div className="template-mode-tabs" role="tablist"><button className={section === "documents" ? "active" : ""} onClick={() => setSection("documents")}><FileSignature size={17} /> Contract & document templates</button><button className={section === "emails" ? "active" : ""} onClick={() => setSection("emails")}><Mail size={17} /> Automatic email templates</button></div>
     {error && <div className="inline-error">{error}</div>}{message && <div className="template-success"><CheckCircle2 size={17} /> {message}</div>}
 
     {section === "documents" ? <div className="template-workspace">
       <aside className="template-list">{(Object.keys(config.documents) as DocumentTemplateKey[]).map((key) => <button key={key} className={documentKey === key ? "active" : ""} onClick={() => setDocumentKey(key)}><FileSignature size={17} /><span><b>{config.documents[key].name}</b><small>{config.documents[key].enabled ? "Active template" : "Disabled"}</small></span></button>)}</aside>
       <section className="template-editor">
-        <header><div><span>DOCUMENT TEMPLATE</span><h2>{document.name}</h2><p>{document.description}</p></div>{document.downloadUrl && <a href={document.downloadUrl}><Download size={16} /> Download current PDF</a>}</header>
+        <header><div><span>DOCUMENT TEMPLATE</span><h2>{document.name}</h2><p>{document.description}</p></div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>{document.prepareUrl && <a href={document.prepareUrl}><FileSignature size={16} /> Prepare for buyer</a>}{document.downloadUrl && <a href={document.downloadUrl} target="_blank" rel="noreferrer"><Download size={16} /> Preview current PDF</a>}</div></header>
         <div className="template-fields"><label><span>Template name</span><input value={document.name} onChange={(event) => updateDocument({ name: event.target.value })} /></label><label><span>Description</span><input value={document.description} onChange={(event) => updateDocument({ description: event.target.value })} /></label><label className="template-switch"><input type="checkbox" checked={document.enabled} onChange={(event) => updateDocument({ enabled: event.target.checked })} /><span>Use this template when documents are prepared</span></label><label><span>Standard language</span><textarea rows={24} value={document.content} onChange={(event) => updateDocument({ content: event.target.value })} /></label></div>
       </section>
     </div> : <div className="template-workspace">
