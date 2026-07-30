@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { parseContractTerm } from "./contract-format.ts";
+import type { CombinedAgreementDetails } from "./combined-agreement.ts";
 
 export type ContractKind = "bill_of_sale" | "health_guarantee";
 
@@ -43,6 +44,7 @@ export type ContractSnapshot = {
   title: string;
   introduction: string;
   terms: string[];
+  agreementDetails?: CombinedAgreementDetails;
   signature?: ContractSignature;
 };
 
@@ -65,6 +67,8 @@ export function parseContractNotes(notes: unknown) {
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const date = (value: string) => value ? new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`)) : "Not specified";
+const clean = (value: unknown) => String(value ?? "").trim();
+const yesNo = (value: boolean | undefined) => value === true ? "Yes" : value === false ? "No" : "";
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
   const words = text.replace(/\s+/g, " ").trim().split(" ");
@@ -103,6 +107,7 @@ export async function renderContractPdf(snapshot: ContractSnapshot) {
   const muted = rgb(0.34, 0.44, 0.47);
   const accent = rgb(0.02, 0.62, 0.7);
   const line = rgb(0.79, 0.87, 0.87);
+  const soft = rgb(0.95, 0.98, 0.98);
 
   function newPage(pageNumber: number): PageState {
     const page = pdf.addPage([pageWidth, pageHeight]);
@@ -116,9 +121,7 @@ export async function renderContractPdf(snapshot: ContractSnapshot) {
   }
 
   let state = newPage(1);
-  const ensure = (height: number) => {
-    if (state.y - height < 78) state = newPage(state.pageNumber + 1);
-  };
+  const ensure = (height: number) => { if (state.y - height < 78) state = newPage(state.pageNumber + 1); };
   const textBlock = (text: string, options: { size?: number; font?: PDFFont; color?: ReturnType<typeof rgb>; gap?: number; indent?: number } = {}) => {
     const size = options.size ?? 9.5;
     const font = options.font ?? regular;
@@ -139,62 +142,126 @@ export async function renderContractPdf(snapshot: ContractSnapshot) {
   };
   const fact = (label: string, value: string, column: 0 | 1, rowY: number) => {
     const x = margin + column * (contentWidth / 2 + 8);
+    const width = contentWidth / 2 - 8;
     state.page.drawText(label.toUpperCase(), { x, y: rowY, size: 6.5, font: bold, color: muted });
-    state.page.drawText(value || "Not recorded", { x, y: rowY - 13, size: 9, font: regular, color: ink });
+    const lines = wrapText(value || "Not recorded", regular, 8.6, width).slice(0, 2);
+    lines.forEach((item, index) => state.page.drawText(item, { x, y: rowY - 13 - index * 11, size: 8.6, font: regular, color: ink }));
+  };
+  const detailSection = (title: string, entries: Array<[string, unknown]>) => {
+    const visible = entries.map(([label, value]) => [label, clean(value)] as const).filter(([, value]) => value);
+    if (!visible.length) return;
+    section(title);
+    for (const [label, value] of visible) {
+      ensure(27);
+      state.page.drawRectangle({ x: margin, y: state.y - 16, width: contentWidth, height: 25, color: soft });
+      state.page.drawText(label.toUpperCase(), { x: margin + 8, y: state.y, size: 6.4, font: bold, color: muted });
+      const lines = wrapText(value, regular, 8.6, contentWidth - 135).slice(0, 3);
+      lines.forEach((item, index) => state.page.drawText(item, { x: margin + 127, y: state.y - index * 10.5, size: 8.6, font: regular, color: ink }));
+      state.y -= Math.max(31, 19 + (lines.length - 1) * 10.5);
+    }
+    state.y -= 5;
   };
 
   state.page.drawText(snapshot.title, { x: margin, y: state.y, size: 22, font: bold, color: ink });
   state.y -= 30;
   textBlock(snapshot.introduction, { size: 10, color: muted, gap: 14 });
+  const details = snapshot.agreementDetails;
+  const combinedAgreement = Boolean(details) || /bill of sale.*health guarantee/i.test(snapshot.title);
 
-  section("Buyer and puppy");
-  ensure(118);
-  const facts = [
-    ["Buyer", snapshot.buyerName], ["Puppy", snapshot.puppyName],
-    ["Buyer contact", [snapshot.buyerPhone, snapshot.buyerEmail].filter(Boolean).join(" / ")], ["Sex and color", [snapshot.puppySex, snapshot.puppyColor].filter(Boolean).join(" / ")],
-    ["Buyer location", snapshot.buyerLocation], ["Birth date", date(snapshot.puppyBirthDate)],
-    ["Litter", snapshot.litterName], ["Parents", [snapshot.damName && `Dam: ${snapshot.damName}`, snapshot.sireName && `Sire: ${snapshot.sireName}`].filter(Boolean).join(" / ")],
-  ];
-  facts.forEach(([label, value], index) => fact(label, value, index % 2 as 0 | 1, state.y - Math.floor(index / 2) * 29));
-  state.y -= 120;
-
-  if (snapshot.kind === "bill_of_sale") {
-    section("Sale summary");
-    ensure(72);
-    const saleFacts = [
-      ["Purchase price", money(snapshot.salePriceCents)], ["Deposit recorded", money(snapshot.depositCents)],
-      ["Balance", money(snapshot.balanceCents)], ["Balance due", date(snapshot.balanceDueDate)],
-      ["Transfer date", date(snapshot.transferDate)], ["Seller", snapshot.sellerName],
+  if (combinedAgreement && details) {
+    detailSection("Transaction summary", [
+      ["Agreement number", details.agreementNumber || snapshot.groupId],
+      ["Agreement date", details.agreementDate || snapshot.createdAt.slice(0, 10)],
+      ["Scheduled transfer date", snapshot.transferDate ? date(snapshot.transferDate) : ""],
+      ["Puppy name / litter ID", [snapshot.puppyName, details.litterInternalId || snapshot.litterName].filter(Boolean).join(" / ")],
+      ["Buyer legal name", snapshot.buyerName], ["Co-Buyer", details.coBuyerName], ["Total puppy purchase price", money(snapshot.salePriceCents)],
+    ]);
+    detailSection("Buyer information", [
+      ["Buyer legal name", snapshot.buyerName], ["Co-Buyer legal name", details.coBuyerName], ["Street address", details.buyerStreetAddress],
+      ["City / State / ZIP", details.buyerCityStateZip || snapshot.buyerLocation], ["Primary phone", snapshot.buyerPhone], ["Email", snapshot.buyerEmail], ["Emergency contact", details.buyerEmergencyContact],
+    ]);
+    detailSection("Puppy description and animal history", [
+      ["Registered / call name", snapshot.puppyName], ["Breed", "Chihuahua"], ["Sex", snapshot.puppySex], ["Date of birth", date(snapshot.puppyBirthDate)],
+      ["Age at transfer", details.puppyAgeAtTransfer], ["Color / markings", snapshot.puppyColor], ["Coat type", details.puppyCoatType], ["Current weight", details.puppyCurrentWeight],
+      ["Estimated adult size (not guaranteed)", details.estimatedAdultSize], ["Microchip number", details.microchipNumber], ["Registry", details.registry],
+      ["Registration number / pending status", details.registrationNumber], ["Litter number / internal ID", details.litterInternalId || snapshot.litterName],
+      ["Very small / Micro-Toy designation", yesNo(snapshot.microToy)], ["Known conditions, medications, feeding needs, or disclosures", details.knownConditions || details.specialFeedingInstructions],
+    ]);
+    detailSection("Breeder and parent information", [
+      ["Breeder", `${snapshot.sellerName}, ${snapshot.sellerLocation}`], ["Bred by Seller", yesNo(details.bredBySeller)], ["Person from whom Seller obtained puppy", details.acquiredFrom],
+      ["Sire", snapshot.sireName], ["Sire registration number", details.sireRegistrationNumber], ["Dam", snapshot.damName], ["Dam registration number", details.damRegistrationNumber],
+    ]);
+    detailSection("Documents and disclosures provided at transfer", [
+      ["Health record / vaccine labels", details.healthRecordStatus], ["Puppy care and feeding guide", details.careGuideStatus], ["Registration documents", details.registrationDocumentsStatus],
+      ["Microchip registration instructions", details.microchipInstructionsStatus], ["Complimentary insurance information", details.insuranceInformationStatus],
+      ["Known-condition disclosure", details.knownConditionDisclosureStatus], ["Transport / transfer instructions", details.transportInstructionsStatus], ["Attachments included", details.attachments],
+    ]);
+  } else {
+    section("Buyer and puppy");
+    ensure(118);
+    const facts = [
+      ["Buyer", snapshot.buyerName], ["Puppy", snapshot.puppyName], ["Buyer contact", [snapshot.buyerPhone, snapshot.buyerEmail].filter(Boolean).join(" / ")],
+      ["Sex and color", [snapshot.puppySex, snapshot.puppyColor].filter(Boolean).join(" / ")], ["Buyer location", snapshot.buyerLocation], ["Birth date", date(snapshot.puppyBirthDate)],
+      ["Litter", snapshot.litterName], ["Parents", [snapshot.damName && `Dam: ${snapshot.damName}`, snapshot.sireName && `Sire: ${snapshot.sireName}`].filter(Boolean).join(" / ")],
     ];
-    saleFacts.forEach(([label, value], index) => fact(label, value, index % 2 as 0 | 1, state.y - Math.floor(index / 2) * 29));
-    state.y -= 92;
+    facts.forEach(([label, value], index) => fact(label, value, index % 2 as 0 | 1, state.y - Math.floor(index / 2) * 29));
+    state.y -= 120;
+  }
+
+  if (snapshot.kind === "bill_of_sale" || combinedAgreement) {
+    if (details) {
+      const salesTax = Number(details.salesTaxCents ?? 0), transport = Number(details.transportCents ?? 0), other = Number(details.otherChargesCents ?? 0);
+      const reservation = Number(details.reservationCreditCents ?? 0), additional = Number(details.additionalPaymentsCents ?? 0);
+      detailSection("Sale and payment summary", [
+        ["Cash price of puppy", money(snapshot.salePriceCents)], ["Virginia sales tax, if applicable", money(salesTax)], ["Transport / delivery", money(transport)],
+        ["Other disclosed purchase charges", money(other)], ["Total sale price", money(snapshot.salePriceCents + salesTax + transport + other)],
+        ["Deposit / reservation credit", money(reservation)], ["Additional payments received", money(additional)], ["Total payments recorded", money(snapshot.depositCents)],
+        ["Balance due before transfer", money(snapshot.balanceCents)], ["Balance due date", date(snapshot.balanceDueDate)], ["Payment method", details.paymentMethod],
+      ]);
+    } else {
+      section("Sale and payment summary"); ensure(72);
+      const saleFacts = [["Purchase price", money(snapshot.salePriceCents)], ["Deposit recorded", money(snapshot.depositCents)], ["Balance", money(snapshot.balanceCents)], ["Balance due", date(snapshot.balanceDueDate)], ["Transfer date", date(snapshot.transferDate)], ["Seller", snapshot.sellerName]];
+      saleFacts.forEach(([label, value], index) => fact(label, value, index % 2 as 0 | 1, state.y - Math.floor(index / 2) * 29));
+      state.y -= 92;
+    }
+  }
+
+  if (details) {
+    detailSection("Transfer record", [["Transfer method", details.transferMethod], ["Transfer location", details.transferLocation], ["Transfer date", date(snapshot.transferDate)], ["Transfer time", details.transferTime], ["Person receiving puppy", details.recipientName]]);
+    detailSection("Transfer-date health disclosure checklist", [
+      ["Appetite and feeding at transfer", details.appetiteAtTransfer], ["Stool / parasite history", details.stoolParasiteHistory], ["Respiratory findings", details.respiratoryFindings],
+      ["Skin / coat findings", details.skinCoatFindings], ["Bite / teeth / hernia findings", details.biteTeethHerniaFindings], ["Patella / gait findings", details.patellaGaitFindings],
+      ["Medication or supplement", details.medicationSupplement], ["Other material health disclosure", details.otherHealthDisclosure], ["Special feeding instructions", details.specialFeedingInstructions],
+    ]);
+    detailSection("Buyer's first veterinary examination", [["Veterinary clinic", details.firstVetClinic], ["Veterinarian", details.firstVetName], ["Appointment date / time", details.firstVetAppointment], ["Clinic phone", details.firstVetPhone], ["Exam findings attached / reported", details.firstVetFindingsStatus]]);
+    detailSection("Registration, breeding rights, insurance, and notices", [
+      ["Registration status", details.registrationStatus], ["Registration type", details.registrationType], ["Registry promised", details.registryPromised], ["Documents expected by", details.registrationDueDate],
+      ["Spay / neuter term", details.spayNeuterTerm], ["Separate breeding addendum", details.breedingAddendum], ["Complimentary insurance", details.insuranceSelection],
+      ["Buyer's preferred written-notice method", details.buyerNoticeMethod], ["Seller's authorized representative", details.sellerRepresentative],
+    ]);
   }
 
   section("Agreement terms");
   let clauseNumber = 0;
   snapshot.terms.forEach((term) => {
     const parsed = parseContractTerm(term);
-    if (parsed.kind === "section") {
-      section(parsed.text);
-      return;
-    }
-    if (parsed.kind === "notice") {
-      parsed.text.split(/\n\s*\n/).filter(Boolean).forEach((paragraph) => textBlock(paragraph, { size: 10, font: bold, indent: 2, gap: 9 }));
-      return;
-    }
+    if (parsed.kind === "section") { section(parsed.text); return; }
+    if (parsed.kind === "notice") { parsed.text.split(/\n\s*\n/).filter(Boolean).forEach((paragraph) => textBlock(paragraph, { size: 10, font: bold, indent: 2, gap: 9 })); return; }
     clauseNumber += 1;
     textBlock(`${clauseNumber}. ${parsed.text}`, { size: 9.2, indent: 2, gap: 7 });
   });
 
-  ensure(snapshot.signature ? 140 : 65);
+  ensure(snapshot.signature ? 160 : 78);
   section("Electronic signature");
   if (snapshot.signature) {
     textBlock(`Signed electronically by ${snapshot.signature.signerName} on ${new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeStyle: "short" }).format(new Date(snapshot.signature.signedAt))}.`, { font: bold, size: 10, gap: 4 });
-    textBlock("The signer separately consented to conduct this transaction electronically and confirmed that the typed name represents their signature on this exact document.", { size: 8.5, color: muted, gap: 5 });
-    if (snapshot.kind === "health_guarantee" && snapshot.signature.healthAcknowledged) textBlock("The signer specifically acknowledged the health terms, care responsibilities, voluntary limitations, applicable Micro-Toy designation, and Virginia Consumer Notice.", { size: 8.5, color: muted, gap: 5 });
+    textBlock("The signer separately consented to conduct this transaction electronically and confirmed that the typed legal name represents the signer's signature on this exact document.", { size: 8.5, color: muted, gap: 5 });
+    if (snapshot.kind === "health_guarantee" && snapshot.signature.healthAcknowledged) textBlock("The signer specifically acknowledged the one-year health terms, care responsibilities, voluntary limitations, applicable toy-size provisions, and Virginia Consumer Notice.", { size: 8.5, color: muted, gap: 5 });
+    if (details?.sellerRepresentative) textBlock(`Seller issuance: ${details.sellerRepresentative} prepared and issued this Agreement through the authenticated SWVAOS document workflow.`, { size: 8.5, color: muted, gap: 5 });
     textBlock(`Audit record: ${snapshot.signature.auditHash} | Network: ${snapshot.signature.ipAddress || "Unavailable"}`, { font: italic, size: 7, color: muted, gap: 2 });
   } else {
-    textBlock("This document is awaiting the buyer's electronic signature in the secure puppy portal.", { font: italic, size: 9.5, color: muted });
+    textBlock("This document is awaiting the Buyer's electronic signature in the secure puppy portal.", { font: italic, size: 9.5, color: muted });
+    if (details?.sellerRepresentative) textBlock(`Prepared and issued through SWVAOS by ${details.sellerRepresentative}.`, { size: 8.5, color: muted });
   }
 
   return pdf.save();
