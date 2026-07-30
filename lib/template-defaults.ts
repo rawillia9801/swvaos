@@ -1,6 +1,7 @@
+import { combinedAgreementTerms } from "./combined-agreement";
 import { billOfSaleTerms, healthGuaranteeTerms } from "./contract-templates";
 
-export type DocumentTemplateKey = "bill_of_sale" | "health_guarantee" | "payment_agreement" | "puppy_application";
+export type DocumentTemplateKey = "bill_of_sale_health_guarantee" | "bill_of_sale" | "health_guarantee" | "payment_agreement" | "puppy_application";
 export type EmailTemplateKey = "application_received" | "application_approved" | "payment_receipt" | "payment_reminder" | "puppy_update" | "contract_ready" | "contract_signed" | "portal_sign_in";
 
 export type DocumentTemplate = {
@@ -9,6 +10,7 @@ export type DocumentTemplate = {
   content: string;
   enabled: boolean;
   downloadUrl?: string;
+  prepareUrl?: string;
 };
 
 export type EmailTemplate = {
@@ -45,15 +47,23 @@ export const defaultTemplatesConfig: TemplatesConfig = {
   version: 1,
   updatedAt: "",
   documents: {
+    bill_of_sale_health_guarantee: {
+      name: "Bill of Sale + 1-Year Health Guarantee",
+      description: "Production combined agreement with animal history, payment and transfer terms, Virginia notice, one-year congenital and hereditary guarantee, care acknowledgments, one electronic signature, and a retained buyer-portal copy.",
+      content: combinedAgreementTerms.join("\n\n"),
+      enabled: true,
+      downloadUrl: "/api/templates/bill-of-sale-health-guarantee",
+      prepareUrl: "/forms/bill-of-sale-health-guarantee",
+    },
     bill_of_sale: {
       name: "Bill of Sale",
-      description: "Default terms used when a Bill of Sale is prepared for a family.",
+      description: "Default terms used when a separate Bill of Sale is prepared for a family.",
       content: billOfSaleTerms.join("\n\n"),
       enabled: true,
     },
     health_guarantee: {
       name: "Health Guarantee",
-      description: "Default 10-day examination and 12-month voluntary guarantee language.",
+      description: "Default examination and 12-month voluntary guarantee language used for the separate-document workflow.",
       content: healthGuaranteeTerms(240, 12, false).join("\n\n"),
       enabled: true,
     },
@@ -110,16 +120,16 @@ export const defaultTemplatesConfig: TemplatesConfig = {
     },
     contract_ready: {
       name: "Contracts ready",
-      trigger: "Sent when the Bill of Sale and Health Guarantee package is prepared.",
-      subject: "Your puppy contracts are ready to review",
-      body: "Hi {{first_name}},\n\nYour Bill of Sale and Health Guarantee are ready. Please review and sign them using your private link:\n\n{{portal_url}}\n\nContact us before signing if you have any questions.\n\n{{business_name}}",
+      trigger: "Sent when a Bill of Sale, Health Guarantee, or combined production agreement is prepared.",
+      subject: "Your puppy agreement is ready to review",
+      body: "Hi {{first_name}},\n\nYour puppy agreement is ready. Please review every page and sign it using your private link:\n\n{{portal_url}}\n\nContact us before signing if any information needs to be corrected.\n\n{{business_name}}",
       enabled: true,
     },
     contract_signed: {
       name: "Contract signed confirmation",
-      trigger: "Sent after a customer signs a contract in the puppy portal.",
-      subject: "Signed contract received",
-      body: "Hi {{first_name}},\n\nWe received your signed contract. A retained copy remains available in your private puppy portal:\n\n{{portal_url}}\n\nThank you,\n{{business_name}}",
+      trigger: "Sent after a customer signs an agreement in the puppy portal.",
+      subject: "Signed agreement received",
+      body: "Hi {{first_name}},\n\nWe received your signed agreement. A retained copy remains available in your private puppy portal:\n\n{{portal_url}}\n\nThank you,\n{{business_name}}",
       enabled: true,
     },
     portal_sign_in: {
