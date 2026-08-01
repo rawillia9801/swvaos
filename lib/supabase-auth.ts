@@ -23,7 +23,7 @@ function authUrl(path: string) {
 
 async function authJson<T>(path: string, init: RequestInit, mode: "anon" | "admin") {
   const { anonKey, serviceRoleKey } = getSupabaseConfig();
-  const key = mode === "admin" ? serviceRoleKey : anonKey;
+  const key = mode === "admin" ? serviceRoleKey : (anonKey ?? serviceRoleKey);
   if (!key) throw new Error(mode === "admin" ? "Portal account administration is not configured." : "Portal password sign-in is not configured.");
   const headers = new Headers(init.headers);
   headers.set("apikey", key);
