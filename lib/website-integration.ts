@@ -8,49 +8,78 @@ const WEBSITE_ORIGINS = new Set([
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const APPLICATION_FIELDS = [
+  ["co_applicant", "Co-applicant"],
   ["age_confirm", "Applicant is 18+"],
   ["preferred_contact", "Preferred contact"],
   ["best_time", "Best time to reach"],
   ["how_hear", "How they heard about us"],
+  ["street_address", "Street address"],
   ["home_type", "Home type"],
   ["own_or_rent", "Own or rent"],
-  ["landlord_ok", "Landlord approval"],
-  ["yard_type", "Outdoor setup"],
-  ["fence_details", "Fence details"],
-  ["household_count", "Household size"],
+  ["housing_permission", "Pets permitted confirmation"],
+  ["household_details", "Household and primary caregiver"],
   ["children_ages", "Children / ages"],
-  ["allergies", "Dog allergies"],
-  ["where_sleep", "Where puppy will sleep"],
-  ["where_day", "Where puppy will be during the day"],
+  ["frequent_young_visitors", "Frequent young visitors"],
+  ["yard_type", "Outdoor setup"],
+  ["move_travel", "Upcoming move or travel"],
   ["work_schedule", "Work / school schedule"],
   ["hours_alone", "Hours puppy will be alone"],
-  ["break_plan", "Potty break / care plan"],
-  ["travel_frequency", "Overnight travel frequency"],
-  ["travel_plan", "Travel care plan"],
-  ["activity_level", "Household activity level"],
-  ["past_dogs", "Previously owned dogs"],
-  ["toy_breed_exp", "Toy breed experience"],
+  ["backup_caregiver", "Backup caregiver"],
   ["current_pets", "Current pets"],
   ["vaccinated_pets", "Current pets vaccinated"],
-  ["heartworm_flea", "Heartworm / flea prevention"],
-  ["vet_name", "Veterinary clinic"],
-  ["vet_phone", "Veterinary phone"],
-  ["food_plan", "Food plan"],
-  ["training_plan", "Training plan"],
-  ["tiny_safety", "Tiny-puppy safety plan"],
-  ["interest", "Interested in"],
-  ["timeline", "Ideal timeframe"],
+  ["altered_pets", "Current pets altered"],
+  ["chihuahua_exp", "Chihuahua experience"],
+  ["toy_breed_exp", "Toy breed experience"],
+  ["rehomed_history", "Rehoming / surrender history"],
+  ["animal_incident_history", "Animal safety history"],
+  ["planned_vet", "Planned routine veterinary practice"],
+  ["emergency_vet", "Planned emergency veterinary hospital"],
   ["sex_pref", "Sex preference"],
   ["coat_pref", "Coat preference"],
+  ["registry_pref", "Registry preference"],
+  ["placement_pref", "Placement size preference"],
   ["color_pref", "Color / markings preference"],
-  ["temperament", "Temperament / lifestyle match"],
   ["purpose", "Purpose"],
-  ["specific_puppy", "Specific puppy"],
+  ["timeline", "Ideal timeframe"],
+  ["budget", "Budget range"],
+  ["specific_puppy", "Specific puppy or litter"],
+  ["temperament", "Temperament / lifestyle match"],
+  ["essential_preferences", "Essential versus flexible preferences"],
+  ["tiny_interest", "Interested in exceptionally small puppy"],
+  ["tiny_feedings", "Every-two-hour feeding readiness"],
+  ["tiny_overnight", "Overnight monitoring readiness"],
+  ["tiny_care_plan", "Small-puppy care and emergency plan"],
+  ["where_day", "Where puppy will stay during the day"],
+  ["where_sleep", "Where puppy will sleep"],
+  ["training_plan", "Training plan"],
+  ["travel_restraint", "Travel restraint"],
+  ["tiny_safety", "Tiny-puppy safety plan"],
+  ["socialization_plan", "Pre-vaccination socialization plan"],
+  ["breeding_intent", "Breeding intention"],
+  ["breeding_experience", "Breeding experience"],
+  ["breeding_plan", "Breeding and health-testing plan"],
+  ["payment_method", "Expected payment method"],
+  ["deposit_readiness", "Deposit readiness"],
+  ["payment_plan_review", "Payment-plan review requested"],
+  ["transfer_method", "Preferred pickup or delivery"],
+  ["starting_location", "Starting city / state"],
+  ["transport_assistance", "Transportation assistance"],
+  ["scheduling_limits", "Scheduling limitations"],
   ["ref1_name", "Reference 1"],
-  ["ref1_phone", "Reference 1 phone"],
+  ["ref1_phone", "Reference 1 phone / email"],
   ["ref2_name", "Reference 2"],
-  ["ref2_phone", "Reference 2 phone"],
+  ["ref2_phone", "Reference 2 phone / email"],
+  ["why_us", "Why Southwest Virginia Chihuahua"],
   ["notes", "Additional notes"],
+  ["communication_preferences", "Communication preferences"],
+] as const;
+
+const REQUIRED_ACKNOWLEDGEMENTS = [
+  "ack_policies",
+  "ack_financial",
+  "ack_truth",
+  "ack_records",
+  "ack_small_puppy",
 ] as const;
 
 export type WebsiteApplication = Record<string, string | boolean>;
@@ -94,11 +123,9 @@ export function normalizeWebsiteApplication(body: unknown) {
 
   for (const [key] of APPLICATION_FIELDS) application[key] = cleanString(source[key]);
   for (const key of ["full_name", "email", "phone", "city_state", "company"]) {
-    application[key] = cleanString(source[key], key === "email" ? 254 : 160);
+    application[key] = cleanString(source[key], key === "email" ? 254 : 200);
   }
-  for (const key of ["ack_policies", "ack_financial", "ack_truth", "ack_contact"]) {
-    application[key] = cleanBoolean(source[key]);
-  }
+  for (const key of REQUIRED_ACKNOWLEDGEMENTS) application[key] = cleanBoolean(source[key]);
 
   const fullName = String(application.full_name);
   const email = String(application.email).toLowerCase();
@@ -108,8 +135,8 @@ export function normalizeWebsiteApplication(body: unknown) {
   if (!EMAIL_PATTERN.test(email)) throw new Error("Enter a valid email address.");
   if (phone.replace(/\D/g, "").length < 10) throw new Error("Enter a valid phone number.");
   if (application.age_confirm !== "Yes") throw new Error("The applicant must be 18 or older.");
-  if (!["ack_policies", "ack_financial", "ack_truth", "ack_contact"].every((key) => application[key] === true)) {
-    throw new Error("All required acknowledgements must be accepted.");
+  if (!REQUIRED_ACKNOWLEDGEMENTS.every((key) => application[key] === true)) {
+    throw new Error("All required acknowledgements must be accepted, including the small-puppy policy.");
   }
 
   application.email = email;
@@ -139,7 +166,9 @@ export function formatApplicationNotes(application: WebsiteApplication, received
   });
   return [
     `Website puppy application received ${receivedAt}`,
-    `Source: swvachihuahua.com/application.html`,
+    "Source: swvachihuahua.com/application",
+    "Small-puppy policy acknowledged: Yes",
+    "Applicant record-use authorization acknowledged: Yes",
     "",
     ...lines,
   ].join("\n").slice(0, 30_000);
@@ -159,9 +188,11 @@ export function applicationBuyerInput(application: WebsiteApplication, receivedA
     preferred_sex: cleanString(application.sex_pref, 80) || null,
     preferred_color: cleanString(application.color_pref, 160) || null,
     household_notes: [
+      cleanString(application.street_address, 300),
       cleanString(application.home_type, 120),
       cleanString(application.own_or_rent, 120),
-      cleanString(application.household_count, 120),
+      cleanString(application.housing_permission, 200),
+      cleanString(application.household_details, 1_000),
       cleanString(application.children_ages, 500),
       cleanString(application.current_pets, 1_000),
     ].filter(Boolean).join(" | ") || null,
