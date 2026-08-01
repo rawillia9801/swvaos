@@ -1,6 +1,6 @@
-import { uploadBuyerDocumentToSupabase } from "../../../../../../../db/supabase-documents";
-import { sendOwnerNotification } from "../../../../../../../lib/email-service";
-import { verifyPortalToken } from "../../../../../../../lib/portal-token";
+import { uploadBuyerDocumentToSupabase } from "../../../../../../db/supabase-documents";
+import { sendOwnerNotification } from "../../../../../../lib/email-service";
+import { verifyPortalToken } from "../../../../../../lib/portal-token";
 
 export const runtime = "nodejs";
 
