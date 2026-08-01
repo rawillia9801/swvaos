@@ -1,7 +1,8 @@
 import { combinedAgreementTerms } from "./combined-agreement";
 import { billOfSaleTerms, healthGuaranteeTerms } from "./contract-templates";
+import { defaultPuppyPacketTemplate, puppyPacketVariables } from "./puppy-packet-template";
 
-export type DocumentTemplateKey = "bill_of_sale_health_guarantee" | "bill_of_sale" | "health_guarantee" | "payment_agreement" | "puppy_application";
+export type DocumentTemplateKey = "puppy_packet" | "bill_of_sale_health_guarantee" | "bill_of_sale" | "health_guarantee" | "payment_agreement" | "puppy_application";
 export type EmailTemplateKey = "application_received" | "application_approved" | "payment_receipt" | "payment_reminder" | "puppy_update" | "contract_ready" | "contract_signed" | "portal_sign_in";
 
 export type DocumentTemplate = {
@@ -28,25 +29,28 @@ export type TemplatesConfig = {
   emails: Record<EmailTemplateKey, EmailTemplate>;
 };
 
-export const templateVariables = [
+export const templateVariables = [...puppyPacketVariables,
   "{{first_name}}",
-  "{{buyer_name}}",
-  "{{puppy_name}}",
-  "{{puppy_context}}",
   "{{amount}}",
   "{{due_date}}",
   "{{portal_url}}",
   "{{access_link}}",
   "{{update_title}}",
-  "{{business_name}}",
   "{{support_email}}",
   "{{support_phone}}",
-];
+].filter((value, index, values) => values.indexOf(value) === index);
 
 export const defaultTemplatesConfig: TemplatesConfig = {
   version: 1,
   updatedAt: "",
   documents: {
+    puppy_packet: {
+      name: "Complete Personalized Puppy Packet",
+      description: "The complete buyer-facing go-home packet: personalized binder cover, puppy and family record, table of contents, Chihuahua care guide, Pup-Lift information, emergency guidance, safety, training, insurance, and go-home checklist. Saved wording remains editable while puppy and buyer fields populate automatically.",
+      content: defaultPuppyPacketTemplate,
+      enabled: true,
+      prepareUrl: "/puppy-packet",
+    },
     bill_of_sale_health_guarantee: {
       name: "Bill of Sale + 1-Year Health Guarantee",
       description: "Production combined agreement with animal history, payment and transfer terms, Virginia notice, one-year congenital and hereditary guarantee, care acknowledgments, one electronic signature, and a retained buyer-portal copy.",
