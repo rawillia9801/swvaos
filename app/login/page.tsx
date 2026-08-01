@@ -16,8 +16,8 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }) });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "Unable to unlock SWVAOS.");
-      const requested = new URLSearchParams(window.location.search).get("next") || "/";
-      window.location.assign(requested.startsWith("/") && !requested.startsWith("//") ? requested : "/");
+      const requested = new URLSearchParams(window.location.search).get("next") || "/dashboard";
+      window.location.assign(requested.startsWith("/") && !requested.startsWith("//") ? requested : "/dashboard");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to unlock SWVAOS.");
       setSubmitting(false);
