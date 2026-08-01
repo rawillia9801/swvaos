@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   CalendarDays,
@@ -89,14 +89,60 @@ const groupForView = (view: string): GroupKey => {
   return match?.label ?? "Today";
 };
 
+const itemForView = (view: string) => groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label }))).find((item) => item.view === view) ?? null;
+
 export function NavigationGroupEnhancer() {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<GroupKey>("Today");
+  const [currentView, setCurrentView] = useState("Command");
+  const bypassGroupInterception = useRef(false);
+  const initializedFromUrl = useRef(false);
 
-  useEffect(() => {
-    const currentView = new URLSearchParams(window.location.search).get("view") || "Command";
-    setSelectedGroup(groupForView(currentView));
+  const findMainGroupButton = useCallback((group: GroupKey) => {
+    return Array.from(document.querySelectorAll<HTMLButtonElement>(".bos-workspaces > button"))
+      .find((button) => button.querySelector("b")?.textContent?.trim() === group) ?? null;
   }, []);
+
+  const findOriginalSubtab = useCallback((label: string) => {
+    return Array.from(document.querySelectorAll<HTMLButtonElement>(".bos-context-bar > nav > button"))
+      .find((button) => button.querySelector("b")?.textContent?.trim() === label) ?? null;
+  }, []);
+
+  const updateAddress = useCallback((view: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", view);
+    window.history.replaceState({ view }, "", url);
+  }, []);
+
+  const openInternalView = useCallback((item: NavItem, group: GroupKey, updateUrl = true) => {
+    setSelectedGroup(group);
+    setCurrentView(item.view);
+    if (updateUrl) updateAddress(item.view);
+
+    const existingSubtab = findOriginalSubtab(item.label);
+    if (existingSubtab) {
+      existingSubtab.click();
+      return;
+    }
+
+    const groupButton = findMainGroupButton(group);
+    if (!groupButton) return;
+
+    bypassGroupInterception.current = true;
+    groupButton.click();
+
+    let attempts = 0;
+    const openWhenAvailable = () => {
+      const target = findOriginalSubtab(item.label);
+      if (target) {
+        target.click();
+        return;
+      }
+      attempts += 1;
+      if (attempts < 20) window.setTimeout(openWhenAvailable, 25);
+    };
+    window.setTimeout(openWhenAvailable, 0);
+  }, [findMainGroupButton, findOriginalSubtab, updateAddress]);
 
   useEffect(() => {
     const attach = () => {
@@ -134,6 +180,12 @@ export function NavigationGroupEnhancer() {
       const target = event.target as HTMLElement | null;
       const button = target?.closest<HTMLButtonElement>(".bos-workspaces > button");
       if (!button) return;
+
+      if (bypassGroupInterception.current) {
+        bypassGroupInterception.current = false;
+        return;
+      }
+
       const label = button.querySelector("b")?.textContent?.trim() as GroupKey | undefined;
       if (!label || !groups.some((group) => group.label === label)) return;
       event.preventDefault();
@@ -146,8 +198,20 @@ export function NavigationGroupEnhancer() {
     return () => document.removeEventListener("click", handler, true);
   }, []);
 
+  useEffect(() => {
+    if (!host || initializedFromUrl.current) return;
+    initializedFromUrl.current = true;
+    const requestedView = new URLSearchParams(window.location.search).get("view") || "Command";
+    const requestedItem = itemForView(requestedView);
+    if (!requestedItem) return;
+    setSelectedGroup(requestedItem.group);
+    setCurrentView(requestedItem.view);
+    if (requestedItem.view !== "Command") {
+      window.setTimeout(() => openInternalView(requestedItem, requestedItem.group, false), 0);
+    }
+  }, [host, openInternalView]);
+
   const selected = useMemo(() => groups.find((group) => group.label === selectedGroup) ?? groups[0], [selectedGroup]);
-  const currentView = typeof window === "undefined" ? "Command" : new URLSearchParams(window.location.search).get("view") || "Command";
 
   if (!host) return null;
   const GroupIcon = selected.icon;
@@ -160,10 +224,10 @@ export function NavigationGroupEnhancer() {
     <nav aria-label={`${selected.label} pages`}>
       {selected.items.map((item) => {
         const Icon = item.icon;
-        return <a key={item.view} className={currentView === item.view ? "active" : ""} href={`/?view=${encodeURIComponent(item.view)}`}>
+        return <button key={item.view} type="button" className={currentView === item.view ? "active" : ""} onClick={() => openInternalView(item, selected.label)}>
           <Icon size={15} />
           <b>{item.label}</b>
-        </a>;
+        </button>;
       })}
     </nav>
     <footer><i /><span><b>Connected</b><small>Select a page above to open it.</small></span></footer>
