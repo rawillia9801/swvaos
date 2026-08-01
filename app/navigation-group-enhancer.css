@@ -86,26 +86,31 @@
   padding: 10px 0;
 }
 
-.navigation-group-panel > nav a {
+.navigation-group-panel > nav button {
+  width: 100%;
   min-height: 38px;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
+  border: 0;
   border-radius: 10px;
+  background: transparent;
   color: #9fc8c4;
+  font: inherit;
   font-size: 9px;
-  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
 }
 
-.navigation-group-panel > nav a:hover,
-.navigation-group-panel > nav a.active {
+.navigation-group-panel > nav button:hover,
+.navigation-group-panel > nav button.active {
   background: rgba(41, 202, 191, .12);
   color: #fff;
 }
 
-.navigation-group-panel > nav a b {
+.navigation-group-panel > nav button b {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
