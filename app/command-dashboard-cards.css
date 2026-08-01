@@ -1,0 +1,311 @@
+/* Modern dashboard cards for the main SWVAOS command view. */
+@media (min-width: 901px) {
+  .bos-global-add {
+    order: 3 !important;
+    margin: 0 0 12px !important;
+  }
+
+  .bos-workspaces {
+    order: 4 !important;
+  }
+
+  .bos-context-bar {
+    top: auto !important;
+    bottom: 18px !important;
+    height: min(326px, calc(100vh - 585px)) !important;
+    min-height: 215px;
+  }
+
+  .bos-command-bar {
+    overflow-y: auto !important;
+    padding-bottom: 360px !important;
+  }
+}
+
+.bos-run-header {
+  display: none !important;
+}
+
+.bos-daybook,
+.bos-business-line {
+  display: none !important;
+}
+
+.command-dashboard-host {
+  min-width: 0;
+}
+
+.command-dashboard-shell {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 2px;
+}
+
+.command-dashboard-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 4px 1px 2px;
+}
+
+.command-dashboard-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.command-dashboard-heading span {
+  color: #4b7877;
+  font-size: 8px;
+  font-weight: 880;
+  letter-spacing: .16em;
+}
+
+.command-dashboard-heading h1 {
+  margin: 0;
+  color: #143337;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(28px, 3vw, 43px);
+  font-weight: 500;
+  letter-spacing: -.045em;
+}
+
+.command-dashboard-heading p {
+  max-width: 520px;
+  margin: 0 0 4px;
+  color: #688183;
+  font-size: 10px;
+  line-height: 1.55;
+  text-align: right;
+}
+
+.command-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.command-dashboard-card {
+  position: relative;
+  min-width: 0;
+  min-height: 185px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 18px;
+  border: 1px solid rgba(78, 130, 128, .18);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(31, 185, 178, .12), transparent 27%),
+    rgba(255, 255, 255, .76);
+  color: #15353a;
+  text-decoration: none;
+  box-shadow: 0 18px 52px rgba(26, 75, 76, .07);
+  backdrop-filter: blur(18px);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.command-dashboard-card::after {
+  content: "";
+  position: absolute;
+  right: -45px;
+  bottom: -54px;
+  width: 125px;
+  height: 125px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(21, 171, 165, .10), rgba(204, 161, 82, .08));
+  pointer-events: none;
+}
+
+.command-dashboard-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(11, 143, 141, .30);
+  box-shadow: 0 24px 62px rgba(22, 72, 73, .12);
+}
+
+.command-dashboard-card > header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.command-card-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0f9798, #2abaae);
+  color: white;
+  box-shadow: 0 10px 25px rgba(12, 145, 143, .20);
+}
+
+.command-card-arrow {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(236, 246, 244, .92);
+  color: #548081;
+}
+
+.command-dashboard-card > small {
+  position: relative;
+  z-index: 1;
+  color: #628486;
+  font-size: 8px;
+  font-weight: 880;
+  letter-spacing: .14em;
+}
+
+.command-dashboard-card > strong {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 8px;
+  color: #123438;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(27px, 2.4vw, 37px);
+  font-weight: 500;
+  letter-spacing: -.04em;
+}
+
+.command-dashboard-card > h3 {
+  position: relative;
+  z-index: 1;
+  margin: 5px 0 0;
+  color: #193c40;
+  font-size: 12px;
+}
+
+.command-dashboard-card > p {
+  position: relative;
+  z-index: 1;
+  margin: 6px 0 0;
+  color: #6b8587;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.command-dashboard-card.attention-card {
+  border-color: rgba(194, 145, 48, .30);
+  background:
+    radial-gradient(circle at 88% 10%, rgba(221, 178, 86, .18), transparent 28%),
+    rgba(255, 253, 247, .84);
+}
+
+.command-dashboard-card.attention-card .command-card-icon {
+  background: linear-gradient(135deg, #b8872b, #d5a44e);
+  box-shadow: 0 10px 25px rgba(183, 133, 35, .20);
+}
+
+.command-dashboard-card.calendar-card {
+  grid-column: span 2;
+  min-height: 286px;
+}
+
+.mini-calendar {
+  position: relative;
+  z-index: 1;
+  margin-top: 17px;
+  padding: 14px;
+  border: 1px solid rgba(100, 144, 142, .16);
+  border-radius: 17px;
+  background: rgba(245, 250, 249, .80);
+}
+
+.mini-calendar > b {
+  display: block;
+  margin-bottom: 10px;
+  color: #315c5e;
+  font-size: 10px;
+}
+
+.calendar-weekdays,
+.calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.calendar-weekdays {
+  margin-bottom: 4px;
+}
+
+.calendar-weekdays span {
+  color: #809597;
+  font-size: 7px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.calendar-days span {
+  min-height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: #486a6c;
+  font-size: 8px;
+}
+
+.calendar-days span.today {
+  background: #118e91;
+  color: white;
+  font-weight: 850;
+  box-shadow: 0 6px 14px rgba(12, 133, 136, .20);
+}
+
+.command-dashboard-loading,
+.command-dashboard-error {
+  padding: 18px 20px;
+  border: 1px solid rgba(97, 141, 139, .18);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .72);
+  color: #607d7f;
+  font-size: 10px;
+}
+
+.command-dashboard-error {
+  border-color: rgba(183, 77, 77, .20);
+  color: #983f3f;
+  background: #fff4f3;
+}
+
+@media (max-width: 1240px) {
+  .command-dashboard-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .command-dashboard-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .command-dashboard-heading p {
+    text-align: left;
+  }
+
+  .command-dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .command-dashboard-card.calendar-card {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 620px) {
+  .command-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .command-dashboard-card.calendar-card {
+    grid-column: auto;
+  }
+}
