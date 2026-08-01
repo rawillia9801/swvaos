@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createSupabaseResource, updateSupabaseResource } from "../../../../db/supabase-kennel";
 import { getSupabaseConfig, supabaseRequest } from "../../../../db/supabase";
 import { sendBuyerAutomation } from "../../../../lib/automation-email";
+import { sendOwnerNotification } from "../../../../lib/email-service";
 import {
   applicationBuyerInput,
   isAllowedWebsiteOrigin,
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   if (!isAllowedWebsiteOrigin(origin)) return response(origin, { error: "This submission source is not allowed." }, 403);
 
   const length = Number(request.headers.get("content-length") ?? 0);
-  if (length > 50_000) return response(origin, { error: "The application is too large." }, 413);
+  if (length > 75_000) return response(origin, { error: "The application is too large." }, 413);
 
   try {
     if (!getSupabaseConfig().serviceRoleKey) {
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
       buyer = await createSupabaseResource("buyers", input) as BuyerRow;
     }
 
-    let emailSent = false;
+    let confirmationEmailSent = false;
     try {
       const fingerprint = createHash("sha256")
         .update(`${String(input.email)}|${JSON.stringify(application)}`)
@@ -71,16 +72,44 @@ export async function POST(request: Request) {
       const email = await sendBuyerAutomation("application_received", Number(buyer.id), {
         dedupeKey: `website-application-${fingerprint}`,
       });
-      emailSent = email.sent === true;
+      confirmationEmailSent = email.sent === true;
     } catch (error) {
       console.error("Website application confirmation failed", error instanceof Error ? error.message : error);
+    }
+
+    let ownerNotificationSent = false;
+    try {
+      const ownerEmail = await sendOwnerNotification({
+        category: "Application",
+        subject: `New puppy application from ${String(application.full_name)}`,
+        buyerId: Number(buyer.id),
+        body: [
+          "A puppy application was submitted through swvachihuahua.com.",
+          "",
+          `Applicant: ${String(application.full_name)}`,
+          `Email: ${String(application.email)}`,
+          `Phone: ${String(application.phone)}`,
+          `Location: ${String(application.city_state || "Not provided")}`,
+          `Preferred size: ${String(application.placement_pref || "Not provided")}`,
+          `Specific puppy or litter: ${String(application.specific_puppy || "Not provided")}`,
+          `Application status: ${retainAdvancedStatus(buyer.application_status)}`,
+          "Small-puppy policy acknowledged: Yes",
+          "",
+          "Review the full application in SWVAOS:",
+          "https://swvaos.site/?view=Applications",
+        ].join("\n"),
+      });
+      ownerNotificationSent = ownerEmail.sent === true;
+    } catch (error) {
+      console.error("Owner application notification failed", error instanceof Error ? error.message : error);
     }
 
     return response(origin, {
       ok: true,
       application_id: Number(buyer.id),
       status: retainAdvancedStatus(buyer.application_status),
-      confirmation_email_sent: emailSent,
+      confirmation_email_sent: confirmationEmailSent,
+      owner_notification_sent: ownerNotificationSent,
     }, current ? 200 : 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to save the application.";
