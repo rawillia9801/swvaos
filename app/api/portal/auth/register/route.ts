@@ -1,5 +1,5 @@
 import { findPortalBuyerByEmail } from "../../../../../db/contracts";
-import { sendTemplateEmail } from "../../../../../lib/email-service";
+import { sendPortalAccountSetupEmail } from "../../../../../lib/email-service";
 import { createPortalToken } from "../../../../../lib/portal-token";
 
 export const runtime = "nodejs";
@@ -18,17 +18,12 @@ export async function POST(request: Request) {
     if (buyer) {
       const token = await createPortalToken(buyer.id, 30 / 1440);
       const setupLink = `${new URL(request.url).origin}/portal/setup?token=${encodeURIComponent(token)}`;
-      const result = await sendTemplateEmail({
-        templateKey: "portal_sign_in",
+      const result = await sendPortalAccountSetupEmail({
         to: buyer.email,
         buyerId: buyer.id,
+        firstName: buyer.firstName || buyer.name,
+        setupLink,
         dedupeKey: `portal-account-setup-${Math.floor(Date.now() / 600_000)}`,
-        variables: {
-          first_name: buyer.firstName || buyer.name,
-          buyer_name: buyer.name,
-          access_link: setupLink,
-          portal_url: setupLink,
-        },
       });
       if (!result.sent && result.skipped !== "Already sent.") {
         return Response.json({ error: result.skipped || "Account setup email delivery is not available." }, { status: 503 });
