@@ -14,6 +14,13 @@ type SendInput = {
   dedupeKey?: string;
 };
 
+type OwnerNotificationInput = {
+  subject: string;
+  body: string;
+  buyerId?: number | null;
+  category?: "Application" | "Contract" | "Document" | "Message" | "General";
+};
+
 const businessDefaults: Variables = {
   business_name: "Southwest Virginia Chihuahua",
   support_email: "support@swvachihuahua.com",
@@ -23,6 +30,7 @@ const businessDefaults: Variables = {
 const smtpUser = () => process.env.SMTP_USER?.trim() || "support@swvachihuahua.com";
 const configured = () => Boolean(process.env.SMTP_PASSWORD?.trim());
 const fromEmail = () => process.env.SMTP_FROM_EMAIL?.trim() || smtpUser();
+const ownerEmail = () => process.env.SWVAOS_OWNER_EMAIL?.trim() || "chichi@swvachihuahua.com";
 
 export function getEmailStatus() {
   return {
@@ -32,6 +40,7 @@ export function getEmailStatus() {
     secure: (Number(process.env.SMTP_PORT) || 465) === 465,
     fromEmail: fromEmail(),
     fromName: process.env.SMTP_FROM_NAME?.trim() || "Southwest Virginia Chihuahua",
+    ownerEmail: ownerEmail(),
   };
 }
 
@@ -42,6 +51,19 @@ function render(value: string, variables: Variables) {
 
 function escapeHtml(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+function transporter() {
+  const status = getEmailStatus();
+  return nodemailer.createTransport({
+    host: status.host,
+    port: status.port,
+    secure: status.secure,
+    auth: { user: smtpUser(), pass: process.env.SMTP_PASSWORD! },
+    connectionTimeout: 12_000,
+    greetingTimeout: 12_000,
+    socketTimeout: 20_000,
+  });
 }
 
 async function eventExists(title: string, buyerId?: number | null) {
@@ -75,6 +97,34 @@ async function logEmail(title: string, buyerId: number | null | undefined, statu
   if (!response.ok) console.error("Unable to record email activity", response.status);
 }
 
+export async function sendOwnerNotification(input: OwnerNotificationInput) {
+  const to = ownerEmail();
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { sent: false, skipped: "No valid owner notification email." };
+  if (!configured()) return { sent: false, skipped: "SMTP is not configured." };
+
+  const subject = `[SWVAOS ${input.category || "General"}] ${input.subject}`.replace(/[\r\n]+/g, " ").trim().slice(0, 250);
+  const body = input.body.trim();
+  const status = getEmailStatus();
+  const eventTitle = `Owner notification: ${input.category || "General"} - ${input.subject}`.slice(0, 240);
+
+  try {
+    const result = await transporter().sendMail({
+      from: { name: status.fromName, address: status.fromEmail },
+      replyTo: process.env.SMTP_REPLY_TO?.trim() || status.fromEmail,
+      to,
+      subject,
+      text: body,
+      html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#173536;max-width:680px"><div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#087f84;margin-bottom:12px">SWVAOS ${escapeHtml(input.category || "GENERAL").toUpperCase()} NOTIFICATION</div>${escapeHtml(body).replace(/\n/g, "<br>")}</div>`,
+    });
+    await logEmail(eventTitle, input.buyerId, "Completed", `Owner recipient: ${to}\nSubject: ${subject}\nProvider message: ${result.messageId}`);
+    return { sent: true, messageId: result.messageId };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "SMTP delivery failed.";
+    await logEmail(eventTitle, input.buyerId, "Failed", `Owner recipient: ${to}\nSubject: ${subject}\nError: ${message}`);
+    throw new Error(`Owner notification failed: ${message}`);
+  }
+}
+
 export async function sendTemplateEmail(input: SendInput) {
   const to = input.to.trim();
   if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { sent: false, skipped: "No valid recipient email." };
@@ -88,18 +138,9 @@ export async function sendTemplateEmail(input: SendInput) {
   const subject = render(template.subject, input.variables ?? {}).replace(/[\r\n]+/g, " ").trim();
   const body = render(template.body, input.variables ?? {}).trim();
   const status = getEmailStatus();
-  const transporter = nodemailer.createTransport({
-    host: status.host,
-    port: status.port,
-    secure: status.secure,
-    auth: { user: smtpUser(), pass: process.env.SMTP_PASSWORD! },
-    connectionTimeout: 12_000,
-    greetingTimeout: 12_000,
-    socketTimeout: 20_000,
-  });
 
   try {
-    const result = await transporter.sendMail({
+    const result = await transporter().sendMail({
       from: { name: status.fromName, address: status.fromEmail },
       replyTo: process.env.SMTP_REPLY_TO?.trim() || status.fromEmail,
       to,
