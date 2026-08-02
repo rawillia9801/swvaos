@@ -7,6 +7,9 @@ import { journeyMilestonesForPuppy, projectAdultWeight, syncPuppyJourneyMileston
 
 type Row = Record<string, unknown>;
 
+type AgreementDocument = { title: string; documentType: string; isContract: boolean };
+type AgreementContract = { title: string; documentType: string; status: string };
+
 async function rows(path: string) {
   const response = await supabaseRequest(path, { cache: "no-store" });
   if (!response.ok) throw new Error((await response.text()) || "Unable to load the buyer journey.");
@@ -17,11 +20,7 @@ function normalized(value: unknown) {
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function agreementStatus(
-  documents: Array<{ title: string; documentType: string; isContract: boolean }>,
-  contracts: Array<{ title: string; documentType: string; status: string }>,
-  terms: string[],
-) {
+function agreementStatus(documents: AgreementDocument[], contracts: AgreementContract[], terms: string[]) {
   const contract = contracts.find((item) => terms.some((term) => normalized(`${item.title} ${item.documentType}`).includes(term)));
   if (contract) return contract.status === "signed" ? "Signed" : "Ready to review";
   const document = documents.find((item) => terms.some((term) => normalized(`${item.title} ${item.documentType}`).includes(term)));
@@ -44,6 +43,7 @@ export async function GET(request: Request) {
     const portal = await getPuppyPortalForBuyer(claims.buyerId);
     if (!portal) return Response.json({ error: "The family account was not found." }, { status: 404 });
 
+    const portalContracts = portal.contracts.filter((item): item is NonNullable<typeof item> => Boolean(item));
     const puppyIds = portal.puppies.map((puppy) => puppy.id);
     const [rawUpdates, rawEvents] = await Promise.all([
       puppyIds.length ? rows(`rest/v1/puppy_updates?select=*&puppy_id=in.(${puppyIds.join(",")})&order=created_at.desc`) : Promise.resolve([]),
@@ -51,11 +51,11 @@ export async function GET(request: Request) {
     ]);
 
     const agreements = [
-      { key: "deposit", title: "Deposit Agreement", required: true, status: agreementStatus(portal.documents, portal.contracts, ["deposit agreement", "reservation agreement"]) },
-      { key: "hypoglycemia", title: "Hypoglycemia Awareness Form", required: true, status: agreementStatus(portal.documents, portal.contracts, ["hypoglycemia awareness", "hypoglycemia form", "pup lift acknowledgement"]) },
-      { key: "transportation", title: "Transportation Policy", required: true, status: agreementStatus(portal.documents, portal.contracts, ["transportation policy", "pickup delivery policy", "transport policy"]) },
-      { key: "sale", title: "Puppy Sale Agreement", required: true, status: agreementStatus(portal.documents, portal.contracts, ["puppy sale agreement", "bill of sale", "sales agreement"]) },
-      { key: "financing", title: "Puppy Payment Financing", required: false, status: agreementStatus(portal.documents, portal.contracts, ["payment plan agreement", "financing agreement", "puppy payment financing"]) },
+      { key: "deposit", title: "Deposit Agreement", required: true, status: agreementStatus(portal.documents, portalContracts, ["deposit agreement", "reservation agreement"]) },
+      { key: "hypoglycemia", title: "Hypoglycemia Awareness Form", required: true, status: agreementStatus(portal.documents, portalContracts, ["hypoglycemia awareness", "hypoglycemia form", "pup lift acknowledgement"]) },
+      { key: "transportation", title: "Transportation Policy", required: true, status: agreementStatus(portal.documents, portalContracts, ["transportation policy", "pickup delivery policy", "transport policy"]) },
+      { key: "sale", title: "Puppy Sale Agreement", required: true, status: agreementStatus(portal.documents, portalContracts, ["puppy sale agreement", "bill of sale", "sales agreement"]) },
+      { key: "financing", title: "Puppy Payment Financing", required: false, status: agreementStatus(portal.documents, portalContracts, ["payment plan agreement", "financing agreement", "puppy payment financing"]) },
     ];
 
     const applicationStatus = portal.buyer.applicationStatus || "Applied";
