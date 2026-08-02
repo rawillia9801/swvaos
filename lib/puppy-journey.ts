@@ -108,6 +108,18 @@ function dewormingEventTitle(puppyName: string, week: number) {
   return `Deworming check — ${puppyName} — Week ${week}`;
 }
 
+function dewormingUpdateMatch(existingUpdate: Row, week: number, puppyName: string) {
+  const title = text(existingUpdate, "title");
+  const recordedWeek = Number(existingUpdate.week_number) || 0;
+  return (
+    (title === "Dewormed" && recordedWeek === week) ||
+    title === legacyAutomatedTitle(`deworming-week-${week}`, puppyName) ||
+    title === `Deworming recorded — Week ${week} — ${puppyName}` ||
+    title === `Deworming confirmation — Week ${week}` ||
+    title === `Dewormed — Week ${week}`
+  );
+}
+
 export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
   const buyerFilter = buyerId && buyerId > 0 ? `&buyer_id=eq.${buyerId}` : "";
   const puppies = await rows(`rest/v1/puppies?select=*&birth_date=not.is.null${buyerFilter}`);
@@ -165,45 +177,43 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
 
     for (const day of dewormingDays) {
       const week = Math.ceil(day / 7);
-      const title = dewormingEventTitle(puppyName, week);
-      if (!existingEvents.some((event) => text(event, "title") === title)) {
+      const milestoneDate = addDays(birthDate, day);
+      const eventTitle = dewormingEventTitle(puppyName, week);
+
+      if (!existingEvents.some((event) => text(event, "title") === eventTitle)) {
         await insert("events", {
-          title,
+          title: eventTitle,
           event_type: "Health & Care",
-          event_date: addDays(birthDate, day),
+          event_date: milestoneDate,
           event_time: null,
           related_type: "puppies",
           related_id: puppyId,
           location: "Breeder care schedule",
-          status: daysOld >= day ? "Due" : "Scheduled",
-          notes: "Confirm the product, amount, date, and puppy response before marking this care item Completed.",
+          status: daysOld >= day ? "Completed" : "Scheduled",
+          notes: `Automatic ${week}-week deworming milestone.`,
           created_at: createdAt,
           updated_at: createdAt,
         });
         careItemsCreated += 1;
       }
-    }
 
-    const completedDeworming = existingEvents.filter((event) => /deworm/i.test(text(event, "title")) && /complete|administered/i.test(text(event, "status")));
-    for (const event of completedDeworming) {
-      const eventId = Number(event.id);
-      const eventDate = text(event, "event_date");
-      const week = Math.max(1, Math.ceil(ageDays(birthDate, new Date(`${eventDate}T12:00:00`)) / 7));
-      const legacyTitle = legacyAutomatedTitle(`deworming-confirmed-${eventId}`, puppyName);
-      const oldTitle = `Deworming recorded — Week ${week} — ${puppyName}`;
-      const title = "Dewormed";
-      const body = eventDate ? `Dewormed on ${eventDate}.` : "Dewormed.";
-      const existing = existingUpdates.find((existingUpdate) => {
-        const existingTitle = text(existingUpdate, "title");
-        return existingTitle === legacyTitle || existingTitle === oldTitle || (existingTitle === title && text(existingUpdate, "body").includes(eventDate));
-      });
+      if (daysOld < day) continue;
 
+      const existing = existingUpdates.find((existingUpdate) => dewormingUpdateMatch(existingUpdate, week, puppyName));
+      const dewormedAt = `${milestoneDate}T12:00:00.000Z`;
       if (existing) {
-        if (text(existing, "title") !== title || text(existing, "body") !== body) {
+        if (
+          text(existing, "title") !== "Dewormed" ||
+          text(existing, "body") !== "" ||
+          Number(existing.week_number) !== week ||
+          text(existing, "created_at") !== dewormedAt
+        ) {
           await update("puppy_updates", Number(existing.id), {
-            title,
-            body,
-            created_at: createdAt,
+            title: "Dewormed",
+            body: "",
+            week_number: week,
+            published: true,
+            created_at: dewormedAt,
             updated_at: createdAt,
           });
         }
@@ -212,12 +222,12 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
 
       await insert("puppy_updates", {
         puppy_id: puppyId,
-        title,
-        body,
+        title: "Dewormed",
+        body: "",
         week_number: week,
         weight: null,
         published: true,
-        created_at: createdAt,
+        created_at: dewormedAt,
         updated_at: createdAt,
       });
       updatesCreated += 1;
@@ -264,13 +274,12 @@ export function projectAdultWeight(input: { birthDate: string; currentWeight: nu
   };
 }
 
-export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], events: Row[]) {
+export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], _events: Row[]) {
   const birthDate = text(puppy, "birthDate") || text(puppy, "birth_date");
   if (!birthDate) return [];
   const puppyId = Number(puppy.id);
   const daysOld = ageDays(birthDate);
   const relatedUpdates = updates.filter((update) => Number(update.puppyId ?? update.puppy_id) === puppyId);
-  const relatedEvents = events.filter((event) => Number(event.relatedId ?? event.related_id) === puppyId);
 
   const development = developmentalMilestones.map((milestone) => ({
     key: milestone.key,
@@ -281,14 +290,12 @@ export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], events: Ro
   }));
 
   const deworming = dewormingDays.flatMap((day) => {
+    if (daysOld < day) return [];
     const week = Math.ceil(day / 7);
-    const matching = relatedEvents.find((event) => text(event, "title").includes(`Week ${week}`) && /deworm/i.test(text(event, "title")));
-    const completed = Boolean(matching && /complete|administered/i.test(text(matching, "status")));
-    if (!matching || !completed) return [];
     return [{
       key: `deworming-week-${week}`,
       title: "Dewormed",
-      date: text(matching, "event_date") || addDays(birthDate, day),
+      date: addDays(birthDate, day),
       status: "Completed",
       detail: "",
     }];
