@@ -207,10 +207,9 @@ export function PortalJourneyEnhancer() {
           <div className="portal-milestone-list">
             {selectedPuppy.milestones.map((milestone) => <article key={milestone.key} className={/reached|completed/i.test(milestone.status) ? "complete" : /due/i.test(milestone.status) ? "due" : "upcoming"}>
               <span>{/reached|completed/i.test(milestone.status) ? <Check size={14}/> : <Circle size={12}/>}</span>
-              <div><b>{milestone.title}</b><small>{formatDate(milestone.date)} · {milestone.status}</small><p>{milestone.detail}</p></div>
+              <div><b>{milestone.title}</b><small>{formatDate(milestone.date)} · {milestone.status}</small>{milestone.detail && <p>{milestone.detail}</p>}</div>
             </article>)}
           </div>
-          <p className="portal-medical-safeguard"><ShieldCheck size={15}/> Medication is never shown as administered from age alone. Deworming appears as completed only after the breeder confirms the care record in SWVAOS.</p>
         </div>
       </>}
     </section>}
