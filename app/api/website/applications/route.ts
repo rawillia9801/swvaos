@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { createSupabaseResource, updateSupabaseResource } from "../../../../db/supabase-kennel";
 import { getSupabaseConfig, supabaseRequest } from "../../../../db/supabase";
-import { sendBuyerAutomation } from "../../../../lib/automation-email";
+import { sendApplicationJourneyEmail } from "../../../../lib/application-journey-email";
 import { sendOwnerNotification } from "../../../../lib/email-service";
+import { createPortalToken } from "../../../../lib/portal-token";
 import {
   applicationBuyerInput,
   isAllowedWebsiteOrigin,
@@ -10,7 +11,7 @@ import {
   websiteCorsHeaders,
 } from "../../../../lib/website-integration";
 
-type BuyerRow = Record<string, unknown> & { id: number; application_status?: string; notes?: string };
+type BuyerRow = Record<string, unknown> & { id: number; first_name?: string; email?: string; application_status?: string; notes?: string };
 
 function response(origin: string | null, payload: Record<string, unknown>, status = 200) {
   return Response.json(payload, { status, headers: websiteCorsHeaders(origin) });
@@ -64,12 +65,19 @@ export async function POST(request: Request) {
     }
 
     let confirmationEmailSent = false;
+    let portalSetupUrl = "";
     try {
       const fingerprint = createHash("sha256")
         .update(`${String(input.email)}|${JSON.stringify(application)}`)
         .digest("hex")
         .slice(0, 20);
-      const email = await sendBuyerAutomation("application_received", Number(buyer.id), {
+      const setupToken = await createPortalToken(Number(buyer.id), 7);
+      portalSetupUrl = `${new URL(request.url).origin}/portal/setup?token=${encodeURIComponent(setupToken)}`;
+      const email = await sendApplicationJourneyEmail({
+        buyerId: Number(buyer.id),
+        to: String(buyer.email || input.email),
+        firstName: String(buyer.first_name || String(application.full_name).split(/\s+/)[0] || "there"),
+        setupLink: portalSetupUrl,
         dedupeKey: `website-application-${fingerprint}`,
       });
       confirmationEmailSent = email.sent === true;
@@ -94,6 +102,7 @@ export async function POST(request: Request) {
           `Specific puppy or litter: ${String(application.specific_puppy || "Not provided")}`,
           `Application status: ${retainAdvancedStatus(buyer.application_status)}`,
           "Small-puppy policy acknowledged: Yes",
+          `Portal setup email: ${confirmationEmailSent ? "Sent" : "Not sent"}`,
           "",
           "Review the full application in SWVAOS:",
           "https://swvaos.site/?view=Applications",
@@ -109,6 +118,7 @@ export async function POST(request: Request) {
       application_id: Number(buyer.id),
       status: retainAdvancedStatus(buyer.application_status),
       confirmation_email_sent: confirmationEmailSent,
+      portal_setup_ready: Boolean(portalSetupUrl),
       owner_notification_sent: ownerNotificationSent,
     }, current ? 200 : 201);
   } catch (error) {
