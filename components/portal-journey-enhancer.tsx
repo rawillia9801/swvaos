@@ -70,18 +70,23 @@ function currentPortalToken() {
   return ["account", "login", "setup"].includes(value) ? "" : value;
 }
 
+function normalizedButtonText(button: HTMLButtonElement | undefined) {
+  return button?.textContent?.trim().toLowerCase().replace(/\d+$/, "").trim() || "";
+}
+
 function activePortalMode(): DisplayMode {
-  const active = Array.from(document.querySelectorAll<HTMLButtonElement>(".family-nav button"))
-    .find((button) => button.classList.contains("active"))
-    ?.textContent?.trim().toLowerCase() || "";
-  if (active === "overview") return "overview";
-  if (active === "my puppy") return "puppy";
+  const activeButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".family-nav button"))
+    .find((button) => button.classList.contains("active"));
+  const active = normalizedButtonText(activeButton);
+  if (active.startsWith("overview")) return "overview";
+  if (active.startsWith("my puppy")) return "puppy";
   return null;
 }
 
 function openPortalTab(label: string) {
+  const wanted = label.toLowerCase();
   const target = Array.from(document.querySelectorAll<HTMLButtonElement>(".family-nav button"))
-    .find((button) => button.textContent?.trim().toLowerCase() === label.toLowerCase());
+    .find((button) => normalizedButtonText(button).startsWith(wanted));
   target?.click();
 }
 
