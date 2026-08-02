@@ -53,7 +53,6 @@ const developmentalMilestones: DevelopmentMilestone[] = [
 const dewormingDays = [14, 28, 42, 56];
 
 const text = (row: Row | null | undefined, key: string) => String(row?.[key] ?? "").trim();
-const number = (row: Row | null | undefined, key: string) => Number(row?.[key] ?? 0) || 0;
 
 async function rows(path: string) {
   const response = await supabaseRequest(path, { cache: "no-store" });
@@ -177,7 +176,7 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
           related_id: puppyId,
           location: "Breeder care schedule",
           status: daysOld >= day ? "Due" : "Scheduled",
-          notes: "Confirm the product, amount, date, and puppy response before marking this care item Completed. The buyer portal will never state that medication was administered until staff confirms completion.",
+          notes: "Confirm the product, amount, date, and puppy response before marking this care item Completed.",
           created_at: createdAt,
           updated_at: createdAt,
         });
@@ -191,13 +190,19 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
       const eventDate = text(event, "event_date");
       const week = Math.max(1, Math.ceil(ageDays(birthDate, new Date(`${eventDate}T12:00:00`)) / 7));
       const legacyTitle = legacyAutomatedTitle(`deworming-confirmed-${eventId}`, puppyName);
-      const title = `Deworming recorded — Week ${week} — ${puppyName}`;
-      const existing = existingUpdates.find((existingUpdate) => [legacyTitle, title].includes(text(existingUpdate, "title")));
+      const oldTitle = `Deworming recorded — Week ${week} — ${puppyName}`;
+      const title = "Dewormed";
+      const body = eventDate ? `Dewormed on ${eventDate}.` : "Dewormed.";
+      const existing = existingUpdates.find((existingUpdate) => {
+        const existingTitle = text(existingUpdate, "title");
+        return existingTitle === legacyTitle || existingTitle === oldTitle || (existingTitle === title && text(existingUpdate, "body").includes(eventDate));
+      });
 
       if (existing) {
-        if (text(existing, "title") === legacyTitle) {
+        if (text(existing, "title") !== title || text(existing, "body") !== body) {
           await update("puppy_updates", Number(existing.id), {
             title,
+            body,
             created_at: createdAt,
             updated_at: createdAt,
           });
@@ -208,7 +213,7 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
       await insert("puppy_updates", {
         puppy_id: puppyId,
         title,
-        body: `Southwest Virginia Chihuahua recorded the scheduled deworming care for ${puppyName} as completed on ${eventDate || "the recorded date"}. Product and dosing details remain in the breeder's care record.`,
+        body,
         week_number: week,
         weight: null,
         published: true,
@@ -275,17 +280,18 @@ export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], events: Ro
     detail: milestone.body,
   }));
 
-  const deworming = dewormingDays.map((day) => {
+  const deworming = dewormingDays.flatMap((day) => {
     const week = Math.ceil(day / 7);
     const matching = relatedEvents.find((event) => text(event, "title").includes(`Week ${week}`) && /deworm/i.test(text(event, "title")));
-    const completed = matching && /complete|administered/i.test(text(matching, "status"));
-    return {
+    const completed = Boolean(matching && /complete|administered/i.test(text(matching, "status")));
+    if (!matching || !completed) return [];
+    return [{
       key: `deworming-week-${week}`,
-      title: completed ? `Deworming recorded — Week ${week}` : `Deworming confirmation — Week ${week}`,
+      title: "Dewormed",
       date: text(matching, "event_date") || addDays(birthDate, day),
-      status: completed ? "Completed" : daysOld >= day ? "Breeder confirmation due" : "Upcoming",
-      detail: completed ? "The breeder marked this care item completed." : "This remains a breeder care item until the product, amount, and administration are confirmed. The portal does not automatically claim that medication was given.",
-    };
+      status: "Completed",
+      detail: "",
+    }];
   });
 
   return [...development, ...deworming]
