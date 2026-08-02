@@ -43,7 +43,7 @@ function SetupForm() {
       <p>Choose a secure password for the email address already connected to your application or puppy record.</p>
       <div className="portal-auth-benefits">
         <span><ShieldCheck size={20}/><div><b>Verified setup link</b><small>This page can only be opened from the temporary link sent to the email on file.</small></div></span>
-        <span><CheckCircle2 size={20}/><div><b>Connected automatically</b><small>Your puppy, updates, agreements, payments, appointments, and messages remain connected to one family record.</small></div></span>
+        <span><CheckCircle2 size={20}/><div><b>Connected automatically</b><small>Your application, puppy, updates, agreements, payments, appointments, and messages remain connected to one family record.</small></div></span>
       </div>
     </section>
     <section className="portal-auth-panel">
@@ -57,7 +57,7 @@ function SetupForm() {
           <button type="submit" disabled={busy}>{busy ? "Creating account…" : "Create account and open portal"}</button>
         </form>}
         {error && <div className="portal-auth-error" role="alert">{error}</div>}
-        <div className="portal-auth-note">The setup link expires after 30 minutes. Your password is handled by the secure authentication service and is not stored in your buyer notes or displayed to staff.</div>
+        <div className="portal-auth-note">Setup links are time-limited. The link sent immediately after a new application may remain valid for up to 7 days. A replacement link requested from the sign-in page expires after 30 minutes. Your password is handled by the secure authentication service and is not displayed to staff.</div>
         <footer><Link href="/portal/login">Return to Puppy Portal sign in</Link></footer>
       </div>
     </section>
