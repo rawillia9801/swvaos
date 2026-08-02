@@ -2,6 +2,8 @@ import { isResource, ResourceValidationError, type ResourceInput } from "../../.
 import { createSupabaseResource, deleteSupabaseResource, getKennelDataFromSupabase, updateSupabaseResource } from "../../../db/supabase-kennel";
 import { requireAdminSession } from "../../../lib/admin-session";
 import { sendBuyerAutomation, sendPublishedUpdate, sendTransactionReceipt } from "../../../lib/automation-email";
+import { syncPuppyJourneyMilestones } from "../../../lib/puppy-journey";
+import { recordWeeklyPuppyWeight } from "../../../lib/puppy-weight-log";
 
 function writeError(error: unknown, fallback: string) {
   return Response.json(
@@ -14,6 +16,11 @@ export async function GET(request: Request) {
   const unauthorized = requireAdminSession(request);
   if (unauthorized) return unauthorized;
   try {
+    try {
+      await syncPuppyJourneyMilestones();
+    } catch (milestoneError) {
+      console.error("Puppy milestone synchronization failed", milestoneError instanceof Error ? milestoneError.message : milestoneError);
+    }
     return Response.json(await getKennelDataFromSupabase());
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to load kennel data." }, { status: 500 });
@@ -31,8 +38,13 @@ export async function POST(request: Request) {
       if (body.resource === "buyers" && Number(created.id) > 0) await sendBuyerAutomation("application_received", Number(created.id), { dedupeKey: `buyer-${Number(created.id)}` });
       if (body.resource === "transactions") await sendTransactionReceipt(created);
       if (body.resource === "updates") await sendPublishedUpdate(created, new URL(request.url).origin);
-    } catch (emailError) {
-      console.error("Automatic email failed after record creation", emailError instanceof Error ? emailError.message : emailError);
+      if (body.resource === "puppies") {
+        const weightUpdate = await recordWeeklyPuppyWeight(created);
+        if (weightUpdate) await sendPublishedUpdate(weightUpdate, new URL(request.url).origin);
+        await syncPuppyJourneyMilestones(Number(created.buyer_id) || null);
+      }
+    } catch (automationError) {
+      console.error("Automatic workflow failed after record creation", automationError instanceof Error ? automationError.message : automationError);
     }
     return Response.json(created, { status: 201 });
   } catch (error) {
@@ -51,8 +63,16 @@ export async function PUT(request: Request) {
     try {
       if (body.resource === "transactions") await sendTransactionReceipt(updated);
       if (body.resource === "updates") await sendPublishedUpdate(updated, new URL(request.url).origin);
-    } catch (emailError) {
-      console.error("Automatic email failed after record update", emailError instanceof Error ? emailError.message : emailError);
+      if (body.resource === "puppies") {
+        const weightUpdate = await recordWeeklyPuppyWeight(updated);
+        if (weightUpdate) await sendPublishedUpdate(weightUpdate, new URL(request.url).origin);
+        await syncPuppyJourneyMilestones(Number(updated.buyer_id) || null);
+      }
+      if (body.resource === "events" && /deworm|health|care/i.test(`${String(updated.title || "")} ${String(updated.event_type || "")}`)) {
+        await syncPuppyJourneyMilestones();
+      }
+    } catch (automationError) {
+      console.error("Automatic workflow failed after record update", automationError instanceof Error ? automationError.message : automationError);
     }
     return Response.json(updated);
   } catch (error) {
