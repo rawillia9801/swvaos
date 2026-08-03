@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Download, FileSignature, Mail, RefreshCw, Save, Send, ShieldCheck } from "lucide-react";
+import { CalendarClock, CheckCircle2, Download, FileSignature, Mail, RefreshCw, Save, Send, ShieldCheck } from "lucide-react";
 import { templateVariables, type DocumentTemplateKey, type EmailTemplateKey, type TemplatesConfig } from "../lib/template-defaults";
+import { MilestoneManager } from "./milestone-manager";
 
 type EmailStatus = { configured: boolean; host: string; port: number; secure: boolean; fromEmail: string; fromName: string };
 
 export function TemplatesCenter({ initialConfig, onSaved }: { initialConfig: TemplatesConfig; onSaved: (config: TemplatesConfig) => void }) {
   const [config, setConfig] = useState(initialConfig);
-  const [section, setSection] = useState<"documents" | "emails">("documents");
+  const [section, setSection] = useState<"documents" | "emails" | "milestones">("documents");
   const [documentKey, setDocumentKey] = useState<DocumentTemplateKey>("puppy_packet");
   const [emailKey, setEmailKey] = useState<EmailTemplateKey>("application_received");
   const [status, setStatus] = useState<EmailStatus | null>(null);
@@ -100,9 +101,10 @@ export function TemplatesCenter({ initialConfig, onSaved }: { initialConfig: Tem
     <div className="template-mode-tabs" role="tablist">
       <button className={section === "documents" ? "active" : ""} onClick={() => setSection("documents")}><FileSignature size={17} /> Contract & document templates</button>
       <button className={section === "emails" ? "active" : ""} onClick={() => setSection("emails")}><Mail size={17} /> Automatic email templates</button>
+      <button className={section === "milestones" ? "active" : ""} onClick={() => setSection("milestones")}><CalendarClock size={17} /> Buyer milestones</button>
     </div>
-    {error && <div className="inline-error">{error}</div>}
-    {message && <div className="template-success"><CheckCircle2 size={17} /> {message}</div>}
+    {section !== "milestones" && error && <div className="inline-error">{error}</div>}
+    {section !== "milestones" && message && <div className="template-success"><CheckCircle2 size={17} /> {message}</div>}
 
     {section === "documents" ? <div className="template-workspace">
       <aside className="template-list">{(Object.keys(config.documents) as DocumentTemplateKey[]).map((key) => <button key={key} className={documentKey === key ? "active" : ""} onClick={() => setDocumentKey(key)}><FileSignature size={17} /><span><b>{config.documents[key].name}</b><small>{config.documents[key].enabled ? "Active template" : "Disabled"}</small></span></button>)}</aside>
@@ -123,7 +125,7 @@ export function TemplatesCenter({ initialConfig, onSaved }: { initialConfig: Tem
           {documentKey === "puppy_packet" && <div className="template-variables"><b>Personalized fields</b><span>{templateVariables.map((item) => <code key={item}>{item}</code>)}</span></div>}
         </div>
       </section>
-    </div> : <div className="template-workspace">
+    </div> : section === "emails" ? <div className="template-workspace">
       <aside className="template-list">{(Object.keys(config.emails) as EmailTemplateKey[]).map((key) => <button key={key} className={emailKey === key ? "active" : ""} onClick={() => setEmailKey(key)}><Mail size={17} /><span><b>{config.emails[key].name}</b><small>{config.emails[key].enabled ? "Automatic" : "Disabled"}</small></span></button>)}</aside>
       <section className="template-editor">
         <header><div><span>EMAIL AUTOMATION</span><h2>{email.name}</h2><p>{email.trigger}</p></div></header>
@@ -136,12 +138,12 @@ export function TemplatesCenter({ initialConfig, onSaved }: { initialConfig: Tem
           <div className="template-test"><label><span>Send a test to</span><input type="email" value={testTo} onChange={(event) => setTestTo(event.target.value)} placeholder="your@email.com" /></label><button disabled={saving || !testTo} onClick={() => void sendTest()}><Send size={16} /> Send test</button></div>
         </div>
       </section>
-    </div>}
+    </div> : <MilestoneManager />}
 
-    <footer className="template-save-bar">
+    {section !== "milestones" && <footer className="template-save-bar">
       <span>{changed ? "You have unsaved template changes." : config.updatedAt ? `Last saved ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(config.updatedAt))}` : "Using the saved business template set."}</span>
       <button type="button" disabled={!changed || saving} onClick={() => void save()}><Save size={16} /> {saving ? "Saving…" : "Save all templates"}</button>
       <button type="button" disabled={!changed || saving} onClick={() => { setConfig(initialConfig); setMessage(""); setError(""); }} title="Discard edits made since the templates were loaded"><RefreshCw size={16} /> Discard edits</button>
-    </footer>
+    </footer>}
   </div>;
 }
