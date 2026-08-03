@@ -10,8 +10,29 @@ export type BuyerMilestoneRule = {
 export type BuyerMilestoneConfig = {
   version: 1;
   updatedAt: string;
+  excludePastAdoptions: boolean;
+  excludedBuyerIds: number[];
   milestones: BuyerMilestoneRule[];
 };
+
+const pastAdoptionStatuses = new Set([
+  "gone home",
+  "adopted",
+  "delivered",
+  "complete",
+  "completed",
+  "archived",
+  "closed",
+]);
+
+export function isPastAdoptionPuppyStatus(value: unknown) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+  return pastAdoptionStatuses.has(normalized);
+}
 
 export const defaultBuyerMilestones: BuyerMilestoneRule[] = [
   {
@@ -99,6 +120,8 @@ export const defaultBuyerMilestones: BuyerMilestoneRule[] = [
 export const defaultBuyerMilestoneConfig: BuyerMilestoneConfig = {
   version: 1,
   updatedAt: "",
+  excludePastAdoptions: true,
+  excludedBuyerIds: [],
   milestones: defaultBuyerMilestones,
 };
 
@@ -106,6 +129,10 @@ const cleanId = (value: unknown, fallback: string) => {
   const cleaned = String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
   return cleaned || fallback;
 };
+
+const cleanBuyerIds = (value: unknown) => Array.isArray(value)
+  ? [...new Set(value.map(Number).filter((buyerId) => Number.isInteger(buyerId) && buyerId > 0))].slice(0, 1_000)
+  : [];
 
 export function mergeBuyerMilestoneConfig(value: unknown): BuyerMilestoneConfig {
   const incoming = value && typeof value === "object" ? value as Partial<BuyerMilestoneConfig> : {};
@@ -116,21 +143,20 @@ export function mergeBuyerMilestoneConfig(value: unknown): BuyerMilestoneConfig 
     let id = cleanId(item.id, `milestone-${index + 1}`);
     while (seen.has(id)) id = `${id}-${index + 1}`;
     seen.add(id);
-    const excludedBuyerIds = Array.isArray(item.excludedBuyerIds)
-      ? [...new Set(item.excludedBuyerIds.map(Number).filter((buyerId) => Number.isInteger(buyerId) && buyerId > 0))].slice(0, 1_000)
-      : [];
     return {
       id,
       title: String(item.title ?? "Puppy milestone").trim().slice(0, 160) || "Puppy milestone",
       body: String(item.body ?? "").trim().slice(0, 5_000),
       week: Math.max(1, Math.min(52, Math.round(Number(item.week) || 1))),
       enabled: item.enabled !== false,
-      excludedBuyerIds,
+      excludedBuyerIds: cleanBuyerIds(item.excludedBuyerIds),
     };
   });
   return {
     version: 1,
     updatedAt: String(incoming.updatedAt ?? ""),
+    excludePastAdoptions: incoming.excludePastAdoptions !== false,
+    excludedBuyerIds: cleanBuyerIds(incoming.excludedBuyerIds),
     milestones,
   };
 }
