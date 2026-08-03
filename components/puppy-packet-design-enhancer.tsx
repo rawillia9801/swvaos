@@ -62,7 +62,7 @@ function applyDesign() {
   const cover = packet.querySelector<HTMLElement>(".binder-cover");
 
   if (cover && cover.dataset.redesigned !== "true") {
-    const puppy = fieldValue(cover, "Puppy") || textOf(cover.querySelector("h1")).replace(/'s.*$/s, "").trim() || "Your Puppy";
+    const puppy = fieldValue(cover, "Puppy") || textOf(cover.querySelector("h1")).replace(/'s[\s\S]*$/, "").trim() || "Your Puppy";
     const family = fieldValue(cover, "Family") || "Your Family";
     const birthDate = fieldValue(cover, "Date of birth") || "Not recorded";
     const packetDate = fieldValue(cover, "Go-home packet date") || "Prepared for go-home";
