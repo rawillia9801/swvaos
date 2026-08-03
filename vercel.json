@@ -2,6 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "npm run build",
+  "git": {
+    "deploymentEnabled": {
+      "swva-work*": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/payment-reminders",
