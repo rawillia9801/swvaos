@@ -1,57 +1,12 @@
 import "server-only";
 
 import { supabaseRequest } from "../db/supabase";
+import { getBuyerMilestoneConfig } from "./milestone-config";
+import type { BuyerMilestoneRule } from "./milestone-defaults";
 
 type Row = Record<string, unknown>;
 
-type DevelopmentMilestone = {
-  key: string;
-  day: number;
-  title: string;
-  body: string;
-};
-
-const developmentalMilestones: DevelopmentMilestone[] = [
-  {
-    key: "eyes-opening",
-    day: 10,
-    title: "Eyes beginning to open",
-    body: "At this stage, puppies commonly begin opening their eyes. Vision is still developing, and the litter remains closely monitored in a calm, protected environment.",
-  },
-  {
-    key: "eyes-open",
-    day: 14,
-    title: "Eyes open and adjusting",
-    body: "The eyes are generally open by this stage, although vision is still immature. Gentle handling and careful environmental monitoring continue.",
-  },
-  {
-    key: "early-socialization",
-    day: 21,
-    title: "Early socialization begins",
-    body: "Age-appropriate handling and calm exposure to normal household sounds begin as the puppy becomes more aware of people, movement, and the surrounding environment.",
-  },
-  {
-    key: "exploration",
-    day: 28,
-    title: "Exploration and confidence milestone",
-    body: "The puppy is entering a more active learning period with supervised exploration, gentle handling, new textures, and carefully managed social experiences.",
-  },
-  {
-    key: "social-skills",
-    day: 35,
-    title: "Social skills are developing",
-    body: "Play, communication with littermates, handling tolerance, and confidence-building experiences continue under close supervision.",
-  },
-  {
-    key: "go-home-foundation",
-    day: 49,
-    title: "Go-home foundation work",
-    body: "Routine development now includes age-appropriate preparation for household life, handling, feeding transitions, early confinement skills, and individual observation.",
-  },
-];
-
-const dewormingDays = [14, 28, 42, 56];
-
+const MANAGED_SEPARATOR = "\u2063";
 const text = (row: Row | null | undefined, key: string) => String(row?.[key] ?? "").trim();
 
 async function rows(path: string) {
@@ -80,6 +35,11 @@ async function update(table: string, id: number, data: Row) {
   return ((await response.json()) as Row[])[0] ?? null;
 }
 
+async function remove(table: string, id: number) {
+  const response = await supabaseRequest(`rest/v1/${table}?id=eq.${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error((await response.text()) || `Unable to delete ${table} record.`);
+}
+
 function dateOnly(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : value.slice(0, 10);
 }
@@ -96,145 +56,158 @@ function ageDays(birthDate: string, now = new Date()) {
   return Math.max(0, Math.floor((now.getTime() - birth.getTime()) / 86_400_000));
 }
 
-function legacyAutomatedTitle(key: string, puppyName: string) {
-  return `[Automatic milestone:${key}] ${puppyName}`;
+function visibleMilestoneTitle(rule: BuyerMilestoneRule, puppyName: string) {
+  return rule.title.trim().toLowerCase() === "dewormed" ? "Dewormed" : `${rule.title.trim()} — ${puppyName}`;
 }
 
-function milestoneUpdateTitle(milestoneTitle: string, puppyName: string) {
-  return `${milestoneTitle} — ${puppyName}`;
+function storedMilestoneTitle(rule: BuyerMilestoneRule, puppyName: string) {
+  return `${visibleMilestoneTitle(rule, puppyName)}${MANAGED_SEPARATOR}${rule.id}`;
 }
 
-function dewormingEventTitle(puppyName: string, week: number) {
-  return `Deworming check — ${puppyName} — Week ${week}`;
+function managedRuleId(title: string) {
+  const marker = title.lastIndexOf(MANAGED_SEPARATOR);
+  return marker >= 0 ? title.slice(marker + MANAGED_SEPARATOR.length).trim() : "";
 }
 
-function dewormingUpdateMatch(existingUpdate: Row, week: number, puppyName: string) {
-  const title = text(existingUpdate, "title");
-  const recordedWeek = Number(existingUpdate.week_number) || 0;
-  return (
-    (title === "Dewormed" && recordedWeek === week) ||
-    title === legacyAutomatedTitle(`deworming-week-${week}`, puppyName) ||
-    title === `Deworming recorded — Week ${week} — ${puppyName}` ||
-    title === `Deworming confirmation — Week ${week}` ||
-    title === `Dewormed — Week ${week}`
-  );
+function legacyRuleId(title: string) {
+  const match = title.match(/^\[Automatic milestone:([^\]]+)\]/i);
+  if (!match) return "";
+  const key = match[1].trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    "eyes-opening": "eyes-beginning-week-2",
+    "eyes-open": "eyes-open-week-2",
+    "early-socialization": "early-socialization-week-3",
+    exploration: "exploration-week-4",
+    "social-skills": "social-skills-week-5",
+    "go-home-foundation": "go-home-foundation-week-7",
+    "deworming-week-2": "dewormed-week-2",
+    "deworming-week-4": "dewormed-week-4",
+    "deworming-week-6": "dewormed-week-6",
+    "deworming-week-8": "dewormed-week-8",
+  };
+  if (aliases[key]) return aliases[key];
+  if (key.startsWith("deworming-confirmed")) return "";
+  return "";
+}
+
+function matchesRule(updateRow: Row, rule: BuyerMilestoneRule, puppyName: string) {
+  const title = text(updateRow, "title");
+  const updateWeek = Number(updateRow.week_number) || 0;
+  const markerId = managedRuleId(title) || legacyRuleId(title);
+  if (markerId) return markerId === rule.id;
+  const visibleTitle = visibleMilestoneTitle(rule, puppyName);
+  if (title === visibleTitle && updateWeek === rule.week) return true;
+  if (rule.title.toLowerCase() === "dewormed" && /^(Dewormed|Deworming recorded|Deworming confirmation)/i.test(title) && updateWeek === rule.week) return true;
+  return false;
+}
+
+export function cleanManagedMilestoneTitle(value: string) {
+  const marker = value.lastIndexOf(MANAGED_SEPARATOR);
+  const withoutMarker = marker >= 0 ? value.slice(0, marker) : value;
+  const legacy = withoutMarker.match(/^\[Automatic milestone:([^\]]+)\]\s*(.*)$/i);
+  if (!legacy) return withoutMarker;
+  const key = legacy[1].trim().toLowerCase();
+  const puppyName = legacy[2].trim();
+  const names: Record<string, string> = {
+    "eyes-opening": "Eyes beginning to open",
+    "eyes-open": "Eyes open and adjusting",
+    "early-socialization": "Early socialization begins",
+    exploration: "Exploration and confidence milestone",
+    "social-skills": "Social skills are developing",
+    "go-home-foundation": "Go-home foundation work",
+  };
+  if (key.startsWith("deworm")) return "Dewormed";
+  const friendly = names[key] || "Puppy milestone";
+  return puppyName ? `${friendly} — ${puppyName}` : friendly;
 }
 
 export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
+  const config = await getBuyerMilestoneConfig();
+  const rules = config.milestones;
   const buyerFilter = buyerId && buyerId > 0 ? `&buyer_id=eq.${buyerId}` : "";
   const puppies = await rows(`rest/v1/puppies?select=*&birth_date=not.is.null${buyerFilter}`);
-  if (!puppies.length) return { puppies: 0, updatesCreated: 0, careItemsCreated: 0 };
+  if (!puppies.length) return { puppies: 0, updatesCreated: 0, updatesChanged: 0, updatesRemoved: 0 };
 
   const puppyIds = puppies.map((puppy) => Number(puppy.id)).filter((id) => Number.isInteger(id) && id > 0);
-  const [updates, events] = await Promise.all([
-    puppyIds.length ? rows(`rest/v1/puppy_updates?select=*&puppy_id=in.(${puppyIds.join(",")})`) : Promise.resolve([]),
-    puppyIds.length ? rows(`rest/v1/events?select=*&related_type=eq.puppies&related_id=in.(${puppyIds.join(",")})`) : Promise.resolve([]),
-  ]);
-
+  const updates = puppyIds.length ? await rows(`rest/v1/puppy_updates?select=*&puppy_id=in.(${puppyIds.join(",")})`) : [];
   const now = new Date();
-  const createdAt = now.toISOString();
+  const updatedAt = now.toISOString();
+  const configuredIds = new Set(rules.map((rule) => rule.id));
   let updatesCreated = 0;
-  let careItemsCreated = 0;
+  let updatesChanged = 0;
+  let updatesRemoved = 0;
 
   for (const puppy of puppies) {
     const puppyId = Number(puppy.id);
     const puppyName = text(puppy, "name") || `Puppy #${puppyId}`;
     const birthDate = text(puppy, "birth_date");
+    const assignedBuyerId = Number(puppy.buyer_id) || 0;
     if (!puppyId || !birthDate) continue;
     const daysOld = ageDays(birthDate, now);
     const existingUpdates = updates.filter((existingUpdate) => Number(existingUpdate.puppy_id) === puppyId);
-    const existingEvents = events.filter((event) => Number(event.related_id) === puppyId);
 
-    for (const milestone of developmentalMilestones) {
-      if (daysOld < milestone.day) continue;
-      const legacyTitle = legacyAutomatedTitle(milestone.key, puppyName);
-      const title = milestoneUpdateTitle(milestone.title, puppyName);
-      const existing = existingUpdates.find((existingUpdate) => [legacyTitle, title].includes(text(existingUpdate, "title")));
+    for (const existing of existingUpdates) {
+      const ruleId = managedRuleId(text(existing, "title"));
+      if (!ruleId) continue;
+      const rule = rules.find((candidate) => candidate.id === ruleId);
+      const shouldExist = Boolean(
+        rule
+        && configuredIds.has(ruleId)
+        && rule.enabled
+        && daysOld >= rule.week * 7
+        && (!assignedBuyerId || !rule.excludedBuyerIds.includes(assignedBuyerId)),
+      );
+      if (!shouldExist) {
+        await remove("puppy_updates", Number(existing.id));
+        updatesRemoved += 1;
+      }
+    }
 
-      if (existing) {
-        if (text(existing, "title") === legacyTitle) {
-          await update("puppy_updates", Number(existing.id), {
-            title,
-            created_at: createdAt,
-            updated_at: createdAt,
-          });
+    for (const rule of rules) {
+      const due = daysOld >= rule.week * 7;
+      const excluded = Boolean(assignedBuyerId && rule.excludedBuyerIds.includes(assignedBuyerId));
+      const existing = existingUpdates.find((candidate) => matchesRule(candidate, rule, puppyName));
+
+      if (!rule.enabled || !due || excluded) {
+        if (existing && (managedRuleId(text(existing, "title")) || legacyRuleId(text(existing, "title")))) {
+          await remove("puppy_updates", Number(existing.id));
+          updatesRemoved += 1;
         }
         continue;
       }
 
-      await insert("puppy_updates", {
-        puppy_id: puppyId,
+      const milestoneDate = addDays(birthDate, rule.week * 7);
+      const createdAt = `${milestoneDate}T12:00:00.000Z`;
+      const title = storedMilestoneTitle(rule, puppyName);
+      const payload = {
         title,
-        body: milestone.body,
-        week_number: Math.max(1, Math.ceil(milestone.day / 7)),
+        body: rule.body,
+        week_number: rule.week,
         weight: null,
         published: true,
         created_at: createdAt,
-        updated_at: createdAt,
-      });
-      updatesCreated += 1;
-    }
+        updated_at: updatedAt,
+      };
 
-    for (const day of dewormingDays) {
-      const week = Math.ceil(day / 7);
-      const milestoneDate = addDays(birthDate, day);
-      const eventTitle = dewormingEventTitle(puppyName, week);
-
-      if (!existingEvents.some((event) => text(event, "title") === eventTitle)) {
-        await insert("events", {
-          title: eventTitle,
-          event_type: "Health & Care",
-          event_date: milestoneDate,
-          event_time: null,
-          related_type: "puppies",
-          related_id: puppyId,
-          location: "Breeder care schedule",
-          status: daysOld >= day ? "Completed" : "Scheduled",
-          notes: `Automatic ${week}-week deworming milestone.`,
-          created_at: createdAt,
-          updated_at: createdAt,
-        });
-        careItemsCreated += 1;
-      }
-
-      if (daysOld < day) continue;
-
-      const existing = existingUpdates.find((existingUpdate) => dewormingUpdateMatch(existingUpdate, week, puppyName));
-      const dewormedAt = `${milestoneDate}T12:00:00.000Z`;
       if (existing) {
-        if (
-          text(existing, "title") !== "Dewormed" ||
-          text(existing, "body") !== "" ||
-          Number(existing.week_number) !== week ||
-          text(existing, "created_at") !== dewormedAt
-        ) {
-          await update("puppy_updates", Number(existing.id), {
-            title: "Dewormed",
-            body: "",
-            week_number: week,
-            published: true,
-            created_at: dewormedAt,
-            updated_at: createdAt,
-          });
+        const needsUpdate = text(existing, "title") !== title
+          || text(existing, "body") !== rule.body
+          || Number(existing.week_number) !== rule.week
+          || existing.published !== true
+          || text(existing, "created_at") !== createdAt;
+        if (needsUpdate) {
+          await update("puppy_updates", Number(existing.id), payload);
+          updatesChanged += 1;
         }
         continue;
       }
 
-      await insert("puppy_updates", {
-        puppy_id: puppyId,
-        title: "Dewormed",
-        body: "",
-        week_number: week,
-        weight: null,
-        published: true,
-        created_at: dewormedAt,
-        updated_at: createdAt,
-      });
+      await insert("puppy_updates", { puppy_id: puppyId, ...payload });
       updatesCreated += 1;
     }
   }
 
-  return { puppies: puppies.length, updatesCreated, careItemsCreated };
+  return { puppies: puppies.length, updatesCreated, updatesChanged, updatesRemoved };
 }
 
 function projectionMultiplier(ageWeeks: number) {
@@ -274,34 +247,23 @@ export function projectAdultWeight(input: { birthDate: string; currentWeight: nu
   };
 }
 
-export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], _events: Row[]) {
+export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], rules: BuyerMilestoneRule[]) {
   const birthDate = text(puppy, "birthDate") || text(puppy, "birth_date");
   if (!birthDate) return [];
   const puppyId = Number(puppy.id);
+  const buyerId = Number(puppy.buyerId ?? puppy.buyer_id) || 0;
   const daysOld = ageDays(birthDate);
   const relatedUpdates = updates.filter((update) => Number(update.puppyId ?? update.puppy_id) === puppyId);
 
-  const development = developmentalMilestones.map((milestone) => ({
-    key: milestone.key,
-    title: milestone.title,
-    date: addDays(birthDate, milestone.day),
-    status: daysOld >= milestone.day ? "Reached" : "Upcoming",
-    detail: milestone.body,
-  }));
-
-  const deworming = dewormingDays.flatMap((day) => {
-    if (daysOld < day) return [];
-    const week = Math.ceil(day / 7);
-    return [{
-      key: `deworming-week-${week}`,
-      title: "Dewormed",
-      date: addDays(birthDate, day),
-      status: "Completed",
-      detail: "",
-    }];
-  });
-
-  return [...development, ...deworming]
-    .sort((left, right) => left.date.localeCompare(right.date))
-    .map((item) => ({ ...item, visibleUpdate: relatedUpdates.some((update) => text(update, "title").toLowerCase().includes(item.title.toLowerCase().split(" — ")[0])) }));
+  return rules
+    .filter((rule) => rule.enabled && (!buyerId || !rule.excludedBuyerIds.includes(buyerId)))
+    .map((rule) => ({
+      key: rule.id,
+      title: rule.title,
+      date: addDays(birthDate, rule.week * 7),
+      status: daysOld >= rule.week * 7 ? "Reached" : "Upcoming",
+      detail: rule.body,
+      visibleUpdate: relatedUpdates.some((update) => managedRuleId(text(update, "title")) === rule.id || matchesRule(update, rule, text(puppy, "name") || `Puppy #${puppyId}`)),
+    }))
+    .sort((left, right) => left.date.localeCompare(right.date));
 }
