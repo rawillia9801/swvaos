@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { getPuppyPortalForBuyer } from "../../../../db/contracts";
 import { supabaseRequest } from "../../../../db/supabase";
+import { getBuyerMilestoneConfig } from "../../../../lib/milestone-config";
 import { PORTAL_SESSION_COOKIE } from "../../../../lib/portal-session";
 import { verifyPortalToken } from "../../../../lib/portal-token";
 import { journeyMilestonesForPuppy, projectAdultWeight, syncPuppyJourneyMilestones } from "../../../../lib/puppy-journey";
@@ -40,15 +41,17 @@ export async function GET(request: Request) {
     if (!claims) return Response.json({ error: "Your Puppy Portal session is not available." }, { status: 401 });
 
     await syncPuppyJourneyMilestones(claims.buyerId);
-    const portal = await getPuppyPortalForBuyer(claims.buyerId);
+    const [portal, milestoneConfig] = await Promise.all([
+      getPuppyPortalForBuyer(claims.buyerId),
+      getBuyerMilestoneConfig(),
+    ]);
     if (!portal) return Response.json({ error: "The family account was not found." }, { status: 404 });
 
     const portalContracts = portal.contracts.filter((item): item is NonNullable<typeof item> => Boolean(item));
     const puppyIds = portal.puppies.map((puppy) => puppy.id);
-    const [rawUpdates, rawEvents] = await Promise.all([
-      puppyIds.length ? rows(`rest/v1/puppy_updates?select=*&puppy_id=in.(${puppyIds.join(",")})&order=created_at.desc`) : Promise.resolve([]),
-      puppyIds.length ? rows(`rest/v1/events?select=*&related_type=eq.puppies&related_id=in.(${puppyIds.join(",")})&order=event_date.desc`) : Promise.resolve([]),
-    ]);
+    const rawUpdates = puppyIds.length
+      ? await rows(`rest/v1/puppy_updates?select=*&puppy_id=in.(${puppyIds.join(",")})&order=created_at.desc`)
+      : [];
 
     const agreements = [
       { key: "deposit", title: "Deposit Agreement", required: true, status: agreementStatus(portal.documents, portalContracts, ["deposit agreement", "reservation agreement"]) },
@@ -75,7 +78,7 @@ export async function GET(request: Request) {
         currentWeight,
         weightEntries,
         projection: projectAdultWeight({ birthDate: puppy.birthDate, currentWeight, weightEntries }),
-        milestones: journeyMilestonesForPuppy(puppy as unknown as Row, rawUpdates, rawEvents),
+        milestones: journeyMilestonesForPuppy({ ...puppy, buyerId: claims.buyerId } as unknown as Row, rawUpdates, milestoneConfig.milestones),
       };
     });
 
