@@ -14,6 +14,7 @@ import "./command-dashboard-cards.css";
 import "./navigation-group-enhancer.css";
 import "./buyer-edit-enhancer.css";
 import "./portal-journey-enhancer.css";
+import "./milestone-manager.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
