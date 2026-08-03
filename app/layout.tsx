@@ -7,6 +7,7 @@ import { CommandDashboardEnhancer } from "../components/command-dashboard-enhanc
 import { NavigationGroupEnhancer } from "../components/navigation-group-enhancer";
 import { BuyerEditEnhancer } from "../components/buyer-edit-enhancer";
 import { PortalJourneyEnhancer } from "../components/portal-journey-enhancer";
+import { PuppyPacketDesignEnhancer } from "../components/puppy-packet-design-enhancer";
 import "./globals.css";
 import "./breeder-os.css";
 import "./breeder-os-sidebar.css";
@@ -15,6 +16,7 @@ import "./navigation-group-enhancer.css";
 import "./buyer-edit-enhancer.css";
 import "./portal-journey-enhancer.css";
 import "./milestone-manager.css";
+import "./puppy-packet-design.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -36,5 +38,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body className={`${geistSans.variable} ${geistMono.variable}`}><ApplicationStatusSelectEnhancer /><PuppyStatusSelectEnhancer /><CommandDashboardEnhancer /><NavigationGroupEnhancer /><BuyerEditEnhancer /><PortalJourneyEnhancer />{children}</body></html>;
+  return <html lang="en"><body className={`${geistSans.variable} ${geistMono.variable}`}><ApplicationStatusSelectEnhancer /><PuppyStatusSelectEnhancer /><CommandDashboardEnhancer /><NavigationGroupEnhancer /><BuyerEditEnhancer /><PortalJourneyEnhancer /><PuppyPacketDesignEnhancer />{children}</body></html>;
 }
