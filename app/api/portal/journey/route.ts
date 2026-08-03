@@ -78,7 +78,7 @@ export async function GET(request: Request) {
         currentWeight,
         weightEntries,
         projection: projectAdultWeight({ birthDate: puppy.birthDate, currentWeight, weightEntries }),
-        milestones: journeyMilestonesForPuppy({ ...puppy, buyerId: claims.buyerId } as unknown as Row, rawUpdates, milestoneConfig.milestones),
+        milestones: journeyMilestonesForPuppy({ ...puppy, buyerId: claims.buyerId } as unknown as Row, rawUpdates, milestoneConfig),
       };
     });
 
