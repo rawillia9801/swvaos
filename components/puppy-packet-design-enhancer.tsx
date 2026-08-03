@@ -38,7 +38,7 @@ const guides: Array<[RegExp, Guide]> = [
   [/notes and records/i, { label: "YOUR FAMILY NOTES", summary: "A dedicated place for questions, instructions, registration details, insurance information, and important observations.", points: ["Write down questions before appointments.", "File receipts and reports behind this page.", "Record changes in routine or behavior."], symbol: "✎" }],
 ];
 
-const textOf = (element: Element | null) => element?.textContent?.trim() || "";
+const textOf = (element: Element | null | undefined) => element?.textContent?.trim() || "";
 const guideFor = (title: string) => guides.find(([pattern]) => pattern.test(title))?.[1] ?? defaultGuide;
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("") || "SW";
 const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
