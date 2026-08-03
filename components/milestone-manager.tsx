@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, CheckCircle2, Plus, Save, Search, Trash2, UserMinus } from "lucide-react";
-import type { BuyerMilestoneConfig, BuyerMilestoneRule } from "../lib/milestone-defaults";
+import { CalendarClock, CheckCircle2, Plus, Save, Search, ShieldCheck, Trash2, UserCheck, UserMinus } from "lucide-react";
+import { isPastAdoptionPuppyStatus, type BuyerMilestoneConfig, type BuyerMilestoneRule } from "../lib/milestone-defaults";
 
 type Buyer = {
   id: number;
@@ -10,6 +10,13 @@ type Buyer = {
   last_name?: string;
   email?: string;
   application_status?: string;
+};
+
+type Puppy = {
+  id: number;
+  name?: string;
+  buyer_id?: number | null;
+  status?: string;
 };
 
 const newMilestone = (): BuyerMilestoneRule => ({
@@ -27,6 +34,7 @@ export function MilestoneManager() {
   const [config, setConfig] = useState<BuyerMilestoneConfig | null>(null);
   const [original, setOriginal] = useState<BuyerMilestoneConfig | null>(null);
   const [buyers, setBuyers] = useState<Buyer[]>([]);
+  const [puppies, setPuppies] = useState<Puppy[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
@@ -42,15 +50,16 @@ export function MilestoneManager() {
         return payload;
       }),
       fetch("/api/data", { cache: "no-store" }).then(async (response) => {
-        const payload = await response.json() as { buyers?: Buyer[]; error?: string };
-        if (!response.ok) throw new Error(payload.error || "Unable to load buyers.");
-        return payload.buyers || [];
+        const payload = await response.json() as { buyers?: Buyer[]; puppies?: Puppy[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || "Unable to load buyers and puppies.");
+        return { buyers: payload.buyers || [], puppies: payload.puppies || [] };
       }),
-    ]).then(([milestones, buyerRows]) => {
+    ]).then(([milestones, records]) => {
       if (cancelled) return;
       setConfig(milestones);
       setOriginal(milestones);
-      setBuyers([...buyerRows].sort((a, b) => buyerName(a).localeCompare(buyerName(b))));
+      setBuyers([...records.buyers].sort((a, b) => buyerName(a).localeCompare(buyerName(b))));
+      setPuppies(records.puppies);
       setSelectedId(milestones.milestones[0]?.id || "");
     }).catch((failure) => {
       if (!cancelled) setError(failure instanceof Error ? failure.message : "Unable to load milestone automation.");
@@ -60,11 +69,36 @@ export function MilestoneManager() {
 
   const selected = config?.milestones.find((milestone) => milestone.id === selectedId) || null;
   const changed = Boolean(config && original && JSON.stringify(config) !== JSON.stringify(original));
+
+  const audience = useMemo(() => {
+    const activeBuyerIds = new Set<number>();
+    const pastBuyerIds = new Set<number>();
+    const assignedBuyerIds = new Set<number>();
+
+    for (const puppy of puppies) {
+      const buyerId = Number(puppy.buyer_id) || 0;
+      if (!buyerId) continue;
+      assignedBuyerIds.add(buyerId);
+      if (isPastAdoptionPuppyStatus(puppy.status)) pastBuyerIds.add(buyerId);
+      else activeBuyerIds.add(buyerId);
+    }
+
+    const pastOnlyBuyerIds = new Set([...pastBuyerIds].filter((buyerId) => !activeBuyerIds.has(buyerId)));
+    const activeBuyers = buyers.filter((buyer) => activeBuyerIds.has(buyer.id));
+    const pastBuyers = buyers.filter((buyer) => pastOnlyBuyerIds.has(buyer.id));
+    const assignedBuyers = buyers.filter((buyer) => assignedBuyerIds.has(buyer.id));
+    const manualCandidates = config?.excludePastAdoptions ? activeBuyers : assignedBuyers;
+    const manuallyExcluded = new Set(config?.excludedBuyerIds || []);
+    const includedBuyers = manualCandidates.filter((buyer) => !manuallyExcluded.has(buyer.id));
+
+    return { activeBuyers, pastBuyers, assignedBuyers, manualCandidates, includedBuyers };
+  }, [buyers, config?.excludePastAdoptions, config?.excludedBuyerIds, puppies]);
+
   const filteredBuyers = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return buyers;
-    return buyers.filter((buyer) => `${buyerName(buyer)} ${buyer.email || ""} ${buyer.application_status || ""}`.toLowerCase().includes(term));
-  }, [buyers, search]);
+    if (!term) return audience.manualCandidates;
+    return audience.manualCandidates.filter((buyer) => `${buyerName(buyer)} ${buyer.email || ""} ${buyer.application_status || ""}`.toLowerCase().includes(term));
+  }, [audience.manualCandidates, search]);
 
   function updateSelected(changes: Partial<BuyerMilestoneRule>) {
     if (!config || !selected) return;
@@ -72,6 +106,11 @@ export function MilestoneManager() {
       ...config,
       milestones: config.milestones.map((milestone) => milestone.id === selected.id ? { ...milestone, ...changes } : milestone),
     });
+  }
+
+  function updateAudience(changes: Partial<Pick<BuyerMilestoneConfig, "excludePastAdoptions" | "excludedBuyerIds">>) {
+    if (!config) return;
+    setConfig({ ...config, ...changes });
   }
 
   function addMilestone() {
@@ -92,11 +131,11 @@ export function MilestoneManager() {
   }
 
   function toggleExcludedBuyer(buyerId: number) {
-    if (!selected) return;
-    const excluded = selected.excludedBuyerIds.includes(buyerId)
-      ? selected.excludedBuyerIds.filter((id) => id !== buyerId)
-      : [...selected.excludedBuyerIds, buyerId];
-    updateSelected({ excludedBuyerIds: excluded });
+    if (!config) return;
+    const excludedBuyerIds = config.excludedBuyerIds.includes(buyerId)
+      ? config.excludedBuyerIds.filter((id) => id !== buyerId)
+      : [...config.excludedBuyerIds, buyerId];
+    updateAudience({ excludedBuyerIds });
   }
 
   async function save() {
@@ -115,7 +154,7 @@ export function MilestoneManager() {
       setConfig(payload);
       setOriginal(payload);
       setSelectedId((current) => payload.milestones.some((item) => item.id === current) ? current : payload.milestones[0]?.id || "");
-      setMessage("Milestones saved. The schedule will synchronize across eligible buyer profiles.");
+      setMessage("Milestones saved. Current placements will receive scheduled updates; past adoptions remain excluded.");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Unable to save milestones.");
     } finally {
@@ -127,12 +166,37 @@ export function MilestoneManager() {
 
   return <div className="milestone-manager">
     <div className="milestone-toolbar">
-      <div><span>AUTOMATED BUYER MILESTONES</span><h2>Scheduled puppy updates</h2><p>Add, edit, disable, or remove updates that appear at selected puppy ages. Exclusions apply to the buyer account, including every puppy connected to that buyer.</p></div>
+      <div><span>AUTOMATED BUYER MILESTONES</span><h2>Scheduled puppy updates</h2><p>Add, edit, disable, or remove updates that appear at selected puppy ages. The audience is controlled once for the entire schedule—not separately every week.</p></div>
       <button type="button" className="milestone-add" onClick={addMilestone}><Plus size={16}/> Add milestone</button>
     </div>
 
     {error && <div className="inline-error">{error}</div>}
     {message && <div className="template-success"><CheckCircle2 size={17}/>{message}</div>}
+
+    <section className="milestone-audience">
+      <div className="milestone-audience-summary">
+        <span className="audience-icon"><ShieldCheck size={22}/></span>
+        <div><span>AUTOMATIC AUDIENCE</span><h3>Current placements only</h3><p>Buyers whose puppy is marked Gone Home, Adopted, Delivered, Complete, Completed, Archived, or Closed are automatically excluded. You do not need to select them for every milestone.</p></div>
+        <label className="audience-toggle"><input type="checkbox" checked={config.excludePastAdoptions} onChange={(event) => updateAudience({ excludePastAdoptions: event.target.checked })}/><span>Exclude past adoptions automatically</span></label>
+      </div>
+      <div className="audience-metrics">
+        <div><UserCheck size={17}/><span><b>{audience.includedBuyers.length}</b><small>current buyers included</small></span></div>
+        <div><ShieldCheck size={17}/><span><b>{config.excludePastAdoptions ? audience.pastBuyers.length : 0}</b><small>past adoptions excluded automatically</small></span></div>
+        <div><UserMinus size={17}/><span><b>{config.excludedBuyerIds.length}</b><small>additional buyer exclusions</small></span></div>
+      </div>
+      {audience.pastBuyers.length > 0 && config.excludePastAdoptions && <div className="past-adoption-list"><b>Automatically excluded past adoptions:</b><span>{audience.pastBuyers.map((buyer) => <em key={buyer.id}>{buyerName(buyer)}</em>)}</span></div>}
+      <div className="buyer-exclusions global-exclusions">
+        <div className="buyer-exclusions-head"><div><span>OPTIONAL EXCEPTIONS</span><h3>Exclude an additional current buyer</h3><p>This is a one-time exclusion from all milestone automation. Past adoptions are already handled automatically above.</p></div><div className="exclusion-count"><UserMinus size={16}/>{config.excludedBuyerIds.length} excluded</div></div>
+        <label className="buyer-search"><Search size={15}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search current buyers by name, email, or status"/></label>
+        <div className="buyer-checklist">
+          {filteredBuyers.map((buyer) => <label key={buyer.id} className={config.excludedBuyerIds.includes(buyer.id) ? "excluded" : ""}>
+            <input type="checkbox" checked={config.excludedBuyerIds.includes(buyer.id)} onChange={() => toggleExcludedBuyer(buyer.id)}/>
+            <span><b>{buyerName(buyer)}</b><small>{[buyer.email, buyer.application_status].filter(Boolean).join(" · ") || `Buyer #${buyer.id}`}</small></span>
+          </label>)}
+          {!filteredBuyers.length && <div className="buyer-empty">No current assigned buyers match this search.</div>}
+        </div>
+      </div>
+    </section>
 
     <div className="milestone-workspace">
       <aside className="milestone-list">
@@ -140,14 +204,14 @@ export function MilestoneManager() {
           .slice()
           .sort((a, b) => a.week - b.week || a.title.localeCompare(b.title))
           .map((milestone) => <button type="button" key={milestone.id} className={selectedId === milestone.id ? "active" : ""} onClick={() => setSelectedId(milestone.id)}>
-            <CalendarClock size={17}/><span><b>Week {milestone.week}: {milestone.title}</b><small>{milestone.enabled ? "Active" : "Disabled"}{milestone.excludedBuyerIds.length ? ` · ${milestone.excludedBuyerIds.length} excluded` : ""}</small></span>
+            <CalendarClock size={17}/><span><b>Week {milestone.week}: {milestone.title}</b><small>{milestone.enabled ? "Active" : "Disabled"}</small></span>
           </button>)}
         {!config.milestones.length && <div className="milestone-empty">No milestones are configured.</div>}
       </aside>
 
       {selected ? <section className="milestone-editor">
         <header>
-          <div><span>MILESTONE RULE</span><h2>{selected.title}</h2><p>This update appears when an assigned puppy reaches week {selected.week}, except for the buyers excluded below.</p></div>
+          <div><span>MILESTONE RULE</span><h2>{selected.title}</h2><p>This update appears when an eligible current-placement puppy reaches week {selected.week}.</p></div>
           <button type="button" className="milestone-delete" onClick={deleteMilestone}><Trash2 size={15}/> Delete</button>
         </header>
 
@@ -155,19 +219,7 @@ export function MilestoneManager() {
           <label><span>Milestone title</span><input value={selected.title} onChange={(event) => updateSelected({ title: event.target.value })}/></label>
           <label><span>Puppy age</span><div className="week-input"><input type="number" min={1} max={52} value={selected.week} onChange={(event) => updateSelected({ week: Math.max(1, Math.min(52, Number(event.target.value) || 1)) })}/><b>weeks old</b></div></label>
           <label className="milestone-wide"><span>Buyer-facing message</span><textarea rows={6} value={selected.body} onChange={(event) => updateSelected({ body: event.target.value })} placeholder="Leave blank when the title alone is enough."/></label>
-          <label className="template-switch milestone-wide"><input type="checkbox" checked={selected.enabled} onChange={(event) => updateSelected({ enabled: event.target.checked })}/><span>Automatically publish this milestone to eligible buyer profiles</span></label>
-        </div>
-
-        <div className="buyer-exclusions">
-          <div className="buyer-exclusions-head"><div><span>BUYER EXCLUSIONS</span><h3>Do not publish this milestone for selected buyers</h3><p>Checked buyers are excluded only from this milestone. Their other scheduled updates continue normally.</p></div><div className="exclusion-count"><UserMinus size={16}/>{selected.excludedBuyerIds.length} excluded</div></div>
-          <label className="buyer-search"><Search size={15}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search buyers by name, email, or status"/></label>
-          <div className="buyer-checklist">
-            {filteredBuyers.map((buyer) => <label key={buyer.id} className={selected.excludedBuyerIds.includes(buyer.id) ? "excluded" : ""}>
-              <input type="checkbox" checked={selected.excludedBuyerIds.includes(buyer.id)} onChange={() => toggleExcludedBuyer(buyer.id)}/>
-              <span><b>{buyerName(buyer)}</b><small>{[buyer.email, buyer.application_status].filter(Boolean).join(" · ") || `Buyer #${buyer.id}`}</small></span>
-            </label>)}
-            {!filteredBuyers.length && <div className="buyer-empty">No matching buyers found.</div>}
-          </div>
+          <label className="template-switch milestone-wide"><input type="checkbox" checked={selected.enabled} onChange={(event) => updateSelected({ enabled: event.target.checked })}/><span>Automatically publish this milestone to eligible current buyer profiles</span></label>
         </div>
       </section> : <section className="milestone-editor milestone-empty-editor"><CalendarClock size={30}/><h3>Add a milestone to begin</h3></section>}
     </div>
