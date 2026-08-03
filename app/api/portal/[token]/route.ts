@@ -1,26 +1,7 @@
 import { getPuppyPortal } from "../../../../db/contracts";
-import { syncPuppyJourneyMilestones } from "../../../../lib/puppy-journey";
+import { cleanManagedMilestoneTitle, syncPuppyJourneyMilestones } from "../../../../lib/puppy-journey";
 
 export const dynamic = "force-dynamic";
-
-const milestoneNames: Record<string, string> = {
-  "eyes-opening": "Eyes beginning to open",
-  "eyes-open": "Eyes open and adjusting",
-  "early-socialization": "Early socialization begins",
-  exploration: "Exploration and confidence milestone",
-  "social-skills": "Social skills are developing",
-  "go-home-foundation": "Go-home foundation work",
-};
-
-function cleanUpdateTitle(value: string) {
-  const match = value.match(/^\[Automatic milestone:([^\]]+)\]\s*(.*)$/i);
-  if (!match) return value;
-  const key = match[1].trim().toLowerCase();
-  const puppyName = match[2].trim();
-  if (key.startsWith("deworm")) return "Dewormed";
-  const friendly = milestoneNames[key] || "Puppy milestone";
-  return puppyName ? `${friendly} — ${puppyName}` : friendly;
-}
 
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   try {
@@ -37,7 +18,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
       ...portal,
       updates: portal.updates.map((update) => ({
         ...update,
-        title: cleanUpdateTitle(update.title),
+        title: cleanManagedMilestoneTitle(update.title),
       })),
     };
 
