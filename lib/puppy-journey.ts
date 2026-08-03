@@ -2,7 +2,7 @@ import "server-only";
 
 import { supabaseRequest } from "../db/supabase";
 import { getBuyerMilestoneConfig } from "./milestone-config";
-import type { BuyerMilestoneRule } from "./milestone-defaults";
+import { isPastAdoptionPuppyStatus, type BuyerMilestoneConfig, type BuyerMilestoneRule } from "./milestone-defaults";
 
 type Row = Record<string, unknown>;
 
@@ -145,6 +145,8 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
     if (!puppyId || !birthDate) continue;
     const daysOld = ageDays(birthDate, now);
     const existingUpdates = updates.filter((existingUpdate) => Number(existingUpdate.puppy_id) === puppyId);
+    const pastAdoption = config.excludePastAdoptions && isPastAdoptionPuppyStatus(puppy.status);
+    const globallyExcluded = Boolean(assignedBuyerId && config.excludedBuyerIds.includes(assignedBuyerId));
 
     for (const existing of existingUpdates) {
       const ruleId = managedRuleId(text(existing, "title"));
@@ -163,12 +165,14 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
       }
     }
 
+    if (pastAdoption || globallyExcluded) continue;
+
     for (const rule of rules) {
       const due = daysOld >= rule.week * 7;
-      const excluded = Boolean(assignedBuyerId && rule.excludedBuyerIds.includes(assignedBuyerId));
+      const ruleExcluded = Boolean(assignedBuyerId && rule.excludedBuyerIds.includes(assignedBuyerId));
       const existing = existingUpdates.find((candidate) => matchesRule(candidate, rule, puppyName));
 
-      if (!rule.enabled || !due || excluded) {
+      if (!rule.enabled || !due || ruleExcluded) {
         if (existing && (managedRuleId(text(existing, "title")) || legacyRuleId(text(existing, "title")))) {
           await remove("puppy_updates", Number(existing.id));
           updatesRemoved += 1;
@@ -247,15 +251,19 @@ export function projectAdultWeight(input: { birthDate: string; currentWeight: nu
   };
 }
 
-export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], rules: BuyerMilestoneRule[]) {
+export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], config: BuyerMilestoneConfig) {
   const birthDate = text(puppy, "birthDate") || text(puppy, "birth_date");
   if (!birthDate) return [];
   const puppyId = Number(puppy.id);
   const buyerId = Number(puppy.buyerId ?? puppy.buyer_id) || 0;
+  const puppyStatus = text(puppy, "status");
+  if (config.excludePastAdoptions && isPastAdoptionPuppyStatus(puppyStatus)) return [];
+  if (buyerId && config.excludedBuyerIds.includes(buyerId)) return [];
+
   const daysOld = ageDays(birthDate);
   const relatedUpdates = updates.filter((update) => Number(update.puppyId ?? update.puppy_id) === puppyId);
 
-  return rules
+  return config.milestones
     .filter((rule) => rule.enabled && (!buyerId || !rule.excludedBuyerIds.includes(buyerId)))
     .map((rule) => ({
       key: rule.id,
