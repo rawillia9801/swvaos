@@ -1,9 +1,17 @@
 import { getCallerCrmProfile, logCallerEvent, normalizeCallerPhone } from "../../../../db/caller-crm";
 import { accountVoiceResponse, unavailableVoiceResponse } from "../../../../lib/caller-voice";
 import { verifyVoiceSession } from "../../../../lib/voice-session";
-import { readVoiceForm, validateVoiceRequest, voiceError, voiceXml } from "../../../../lib/voice-webhook";
+import { readVoiceForm, twilio, validateVoiceRequest, voiceError, voiceXml } from "../../../../lib/voice-webhook";
 
 export const runtime = "nodejs";
+
+function transportationRedirect(session: string, calledNumber: string) {
+  const response = new twilio.twiml.VoiceResponse();
+  const params = new URLSearchParams({ session });
+  if (calledNumber) params.set("line", calledNumber);
+  response.redirect(`/api/voice/transportation?${params.toString()}`);
+  return response;
+}
 
 export async function POST(request: Request) {
   const form = await readVoiceForm(request);
@@ -29,8 +37,10 @@ export async function POST(request: Request) {
       return voiceXml(unavailableVoiceResponse());
     }
 
+    if (form.Digits === "4") return voiceXml(transportationRedirect(sessionToken, calledNumber));
     return voiceXml(accountVoiceResponse(profile, form.Digits || "", calledNumber, sessionToken));
-  } catch {
+  } catch (error) {
+    console.error("Verified voice account menu failed", error instanceof Error ? error.message : error);
     return voiceXml(unavailableVoiceResponse());
   }
 }
