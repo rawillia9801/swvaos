@@ -2,7 +2,7 @@ import { isResource, ResourceValidationError, type ResourceInput } from "../../.
 import { createSupabaseResource, deleteSupabaseResource, getKennelDataFromSupabase, updateSupabaseResource } from "../../../db/supabase-kennel";
 import { requireAdminSession } from "../../../lib/admin-session";
 import { sendBuyerAutomation, sendPublishedUpdate, sendTransactionReceipt } from "../../../lib/automation-email";
-import { reconcileSupabaseDataOnce } from "../../../lib/data-reconciliation";
+import { repairImportedDataOnce } from "../../../lib/data-reconciliation";
 import { enrichProfileImages } from "../../../lib/profile-images";
 import { syncPuppyJourneyMilestones } from "../../../lib/puppy-journey";
 import { recordWeeklyPuppyWeight } from "../../../lib/puppy-weight-log";
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   const unauthorized = requireAdminSession(request);
   if (unauthorized) return unauthorized;
   try {
-    const reconciliation = await reconcileSupabaseDataOnce();
+    const reconciliation = await repairImportedDataOnce();
     try {
       await syncPuppyJourneyMilestones();
     } catch (milestoneError) {
