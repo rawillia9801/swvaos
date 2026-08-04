@@ -119,7 +119,11 @@ function buyerScore(buyer: Row) {
   return completeness + zipScore + importedPenalty + closedPenalty;
 }
 
-function chooseBuyer(candidates: Row[], preferredPostalCode?: string) {
+function chooseBuyer(candidates: Row[], preferredPostalCode?: string, preferredBuyerId?: number) {
+  if (preferredBuyerId) {
+    const exactBuyer = candidates.find((candidate) => id(candidate, "id") === preferredBuyerId);
+    if (exactBuyer) return exactBuyer;
+  }
   const preferred = fiveDigits(preferredPostalCode);
   const matching = preferred.length === 5
     ? candidates.filter((candidate) => postalCodes(candidate).includes(preferred))
@@ -128,7 +132,7 @@ function chooseBuyer(candidates: Row[], preferredPostalCode?: string) {
   return [...pool].sort((left, right) => buyerScore(right) - buyerScore(left) || id(left, "id") - id(right, "id"))[0] ?? null;
 }
 
-export async function getCallerCrmProfile(phone: string, preferredPostalCode?: string): Promise<CallerCrmProfile> {
+export async function getCallerCrmProfile(phone: string, preferredPostalCode?: string, preferredBuyerId?: number): Promise<CallerCrmProfile> {
   const data = await getKennelDataFromSupabase();
   const normalizedPhone = normalizeCallerPhone(phone);
   const buyers = data.buyers as Row[];
@@ -141,7 +145,7 @@ export async function getCallerCrmProfile(phone: string, preferredPostalCode?: s
   const matchingBuyers = normalizedPhone
     ? buyers.filter((candidate) => normalizeCallerPhone(text(candidate, "phone")) === normalizedPhone)
     : [];
-  const buyer = chooseBuyer(matchingBuyers, preferredPostalCode);
+  const buyer = chooseBuyer(matchingBuyers, preferredPostalCode, preferredBuyerId);
   const buyerId = buyer ? id(buyer, "id") : 0;
   const assignedPuppies = buyer ? puppies.filter((puppy) => id(puppy, "buyer_id") === buyerId) : [];
   const puppyIds = new Set(assignedPuppies.map((puppy) => id(puppy, "id")));
