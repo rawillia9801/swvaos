@@ -56,8 +56,32 @@ function ageDays(birthDate: string, now = new Date()) {
   return Math.max(0, Math.floor((now.getTime() - birth.getTime()) / 86_400_000));
 }
 
+function ruleDay(rule: BuyerMilestoneRule) {
+  return Math.max(1, Math.round(Number(rule.day) || 1));
+}
+
+function cleanBuyerWording(value: string) {
+  return value
+    .replace(/\bautomatically\b/gi, "on schedule")
+    .replace(/\bautomated\b/gi, "scheduled")
+    .replace(/\bautomatic\b/gi, "scheduled")
+    .replace(/\bautomation\b/gi, "schedule")
+    .trim();
+}
+
+function personalized(value: string, puppyName: string) {
+  return cleanBuyerWording(value.replace(/{{\s*puppy_name\s*}}/gi, puppyName));
+}
+
 function visibleMilestoneTitle(rule: BuyerMilestoneRule, puppyName: string) {
-  return rule.title.trim().toLowerCase() === "dewormed" ? "Dewormed" : `${rule.title.trim()} — ${puppyName}`;
+  const title = personalized(rule.title, puppyName) || "Puppy development update";
+  if (title.toLowerCase() === "dewormed") return "Dewormed";
+  if (title.toLowerCase().includes(puppyName.toLowerCase())) return title;
+  return `${title} — ${puppyName}`;
+}
+
+function visibleMilestoneBody(rule: BuyerMilestoneRule, puppyName: string) {
+  return personalized(rule.body, puppyName);
 }
 
 function storedMilestoneTitle(rule: BuyerMilestoneRule, puppyName: string) {
@@ -92,12 +116,13 @@ function legacyRuleId(title: string) {
 
 function matchesRule(updateRow: Row, rule: BuyerMilestoneRule, puppyName: string) {
   const title = text(updateRow, "title");
-  const updateWeek = Number(updateRow.week_number) || 0;
   const markerId = managedRuleId(title) || legacyRuleId(title);
   if (markerId) return markerId === rule.id;
   const visibleTitle = visibleMilestoneTitle(rule, puppyName);
-  if (title === visibleTitle && updateWeek === rule.week) return true;
-  if (rule.title.toLowerCase() === "dewormed" && /^(Dewormed|Deworming recorded|Deworming confirmation)/i.test(title) && updateWeek === rule.week) return true;
+  if (title === visibleTitle) return true;
+  const legacyWeek = Math.max(1, Math.ceil(ruleDay(rule) / 7));
+  const updateWeek = Number(updateRow.week_number) || 0;
+  if (rule.title.toLowerCase() === "dewormed" && /^(Dewormed|Deworming recorded|Deworming confirmation)/i.test(title) && (!updateWeek || updateWeek === legacyWeek)) return true;
   return false;
 }
 
@@ -105,7 +130,7 @@ export function cleanManagedMilestoneTitle(value: string) {
   const marker = value.lastIndexOf(MANAGED_SEPARATOR);
   const withoutMarker = marker >= 0 ? value.slice(0, marker) : value;
   const legacy = withoutMarker.match(/^\[Automatic milestone:([^\]]+)\]\s*(.*)$/i);
-  if (!legacy) return withoutMarker;
+  if (!legacy) return cleanBuyerWording(withoutMarker);
   const key = legacy[1].trim().toLowerCase();
   const puppyName = legacy[2].trim();
   const names: Record<string, string> = {
@@ -117,8 +142,8 @@ export function cleanManagedMilestoneTitle(value: string) {
     "go-home-foundation": "Go-home foundation work",
   };
   if (key.startsWith("deworm")) return "Dewormed";
-  const friendly = names[key] || "Puppy milestone";
-  return puppyName ? `${friendly} — ${puppyName}` : friendly;
+  const friendly = names[key] || "Puppy development update";
+  return cleanBuyerWording(puppyName ? `${friendly} — ${puppyName}` : friendly);
 }
 
 export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
@@ -143,8 +168,10 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
     const birthDate = text(puppy, "birth_date");
     const assignedBuyerId = Number(puppy.buyer_id) || 0;
     if (!puppyId || !birthDate) continue;
+
     const daysOld = ageDays(birthDate, now);
     const existingUpdates = updates.filter((existingUpdate) => Number(existingUpdate.puppy_id) === puppyId);
+    const removedIds = new Set<number>();
     const pastAdoption = config.excludePastAdoptions && isPastAdoptionPuppyStatus(puppy.status);
     const globallyExcluded = Boolean(assignedBuyerId && config.excludedBuyerIds.includes(assignedBuyerId));
 
@@ -156,11 +183,15 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
         rule
         && configuredIds.has(ruleId)
         && rule.enabled
-        && daysOld >= rule.week * 7
+        && daysOld >= ruleDay(rule)
+        && !pastAdoption
+        && !globallyExcluded
         && (!assignedBuyerId || !rule.excludedBuyerIds.includes(assignedBuyerId)),
       );
       if (!shouldExist) {
-        await remove("puppy_updates", Number(existing.id));
+        const existingId = Number(existing.id);
+        await remove("puppy_updates", existingId);
+        removedIds.add(existingId);
         updatesRemoved += 1;
       }
     }
@@ -168,25 +199,28 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
     if (pastAdoption || globallyExcluded) continue;
 
     for (const rule of rules) {
-      const due = daysOld >= rule.week * 7;
+      const due = daysOld >= ruleDay(rule);
       const ruleExcluded = Boolean(assignedBuyerId && rule.excludedBuyerIds.includes(assignedBuyerId));
-      const existing = existingUpdates.find((candidate) => matchesRule(candidate, rule, puppyName));
+      const existing = existingUpdates.find((candidate) => !removedIds.has(Number(candidate.id)) && matchesRule(candidate, rule, puppyName));
 
       if (!rule.enabled || !due || ruleExcluded) {
         if (existing && (managedRuleId(text(existing, "title")) || legacyRuleId(text(existing, "title")))) {
-          await remove("puppy_updates", Number(existing.id));
+          const existingId = Number(existing.id);
+          await remove("puppy_updates", existingId);
+          removedIds.add(existingId);
           updatesRemoved += 1;
         }
         continue;
       }
 
-      const milestoneDate = addDays(birthDate, rule.week * 7);
+      const milestoneDate = addDays(birthDate, ruleDay(rule));
       const createdAt = `${milestoneDate}T12:00:00.000Z`;
       const title = storedMilestoneTitle(rule, puppyName);
+      const body = visibleMilestoneBody(rule, puppyName);
       const payload = {
         title,
-        body: rule.body,
-        week_number: rule.week,
+        body,
+        week_number: null,
         weight: null,
         published: true,
         created_at: createdAt,
@@ -195,8 +229,8 @@ export async function syncPuppyJourneyMilestones(buyerId?: number | null) {
 
       if (existing) {
         const needsUpdate = text(existing, "title") !== title
-          || text(existing, "body") !== rule.body
-          || Number(existing.week_number) !== rule.week
+          || text(existing, "body") !== body
+          || existing.week_number !== null
           || existing.published !== true
           || text(existing, "created_at") !== createdAt;
         if (needsUpdate) {
@@ -256,6 +290,7 @@ export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], config: Bu
   if (!birthDate) return [];
   const puppyId = Number(puppy.id);
   const buyerId = Number(puppy.buyerId ?? puppy.buyer_id) || 0;
+  const puppyName = text(puppy, "name") || `Puppy #${puppyId}`;
   const puppyStatus = text(puppy, "status");
   if (config.excludePastAdoptions && isPastAdoptionPuppyStatus(puppyStatus)) return [];
   if (buyerId && config.excludedBuyerIds.includes(buyerId)) return [];
@@ -267,11 +302,11 @@ export function journeyMilestonesForPuppy(puppy: Row, updates: Row[], config: Bu
     .filter((rule) => rule.enabled && (!buyerId || !rule.excludedBuyerIds.includes(buyerId)))
     .map((rule) => ({
       key: rule.id,
-      title: rule.title,
-      date: addDays(birthDate, rule.week * 7),
-      status: daysOld >= rule.week * 7 ? "Reached" : "Upcoming",
-      detail: rule.body,
-      visibleUpdate: relatedUpdates.some((update) => managedRuleId(text(update, "title")) === rule.id || matchesRule(update, rule, text(puppy, "name") || `Puppy #${puppyId}`)),
+      title: visibleMilestoneTitle(rule, puppyName),
+      date: addDays(birthDate, ruleDay(rule)),
+      status: daysOld >= ruleDay(rule) ? "Reached" : "Upcoming",
+      detail: visibleMilestoneBody(rule, puppyName),
+      visibleUpdate: relatedUpdates.some((update) => managedRuleId(text(update, "title")) === rule.id || matchesRule(update, rule, puppyName)),
     }))
     .sort((left, right) => left.date.localeCompare(right.date));
 }
