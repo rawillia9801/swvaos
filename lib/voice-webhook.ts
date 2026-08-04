@@ -7,13 +7,37 @@ export async function readVoiceForm(request: Request) {
   return Object.fromEntries([...formData.entries()].map(([key, value]) => [key, String(value)])) as VoiceForm;
 }
 
-function validationUrl(request: Request) {
+function addDomainVariants(urls: Set<string>, value: string) {
+  try {
+    const url = new URL(value);
+    urls.add(url.toString());
+    if (url.hostname === "swvaos.site") {
+      url.hostname = "www.swvaos.site";
+      urls.add(url.toString());
+    } else if (url.hostname === "www.swvaos.site") {
+      url.hostname = "swvaos.site";
+      urls.add(url.toString());
+    }
+  } catch {
+    // Ignore invalid candidates and continue with the remaining trusted URLs.
+  }
+}
+
+function validationUrls(request: Request) {
   const incoming = new URL(request.url);
-  const configuredBase = process.env.TWILIO_WEBHOOK_BASE_URL?.trim().replace(/\/$/, "");
-  if (configuredBase) return `${configuredBase}${incoming.pathname}${incoming.search}`;
+  const urls = new Set<string>();
+  addDomainVariants(urls, request.url);
+
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
   const protocol = request.headers.get("x-forwarded-proto") ?? incoming.protocol.replace(":", "") ?? "https";
-  return host ? `${protocol}://${host}${incoming.pathname}${incoming.search}` : request.url;
+  if (host) addDomainVariants(urls, `${protocol}://${host}${incoming.pathname}${incoming.search}`);
+
+  const configuredBase = process.env.TWILIO_WEBHOOK_BASE_URL?.trim().replace(/\/$/, "");
+  if (configuredBase) addDomainVariants(urls, `${configuredBase}${incoming.pathname}${incoming.search}`);
+
+  addDomainVariants(urls, `https://www.swvaos.site${incoming.pathname}${incoming.search}`);
+  addDomainVariants(urls, `https://swvaos.site${incoming.pathname}${incoming.search}`);
+  return [...urls];
 }
 
 export function validateVoiceRequest(request: Request, form: VoiceForm) {
@@ -21,9 +45,8 @@ export function validateVoiceRequest(request: Request, form: VoiceForm) {
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   if (!authToken) return { valid: false as const, status: 503, error: "Voice request authentication is not configured." };
   const signature = request.headers.get("x-twilio-signature") ?? "";
-  if (!signature || !twilio.validateRequest(authToken, signature, validationUrl(request), form)) {
-    return { valid: false as const, status: 403, error: "Voice request signature is invalid." };
-  }
+  const valid = Boolean(signature) && validationUrls(request).some((url) => twilio.validateRequest(authToken, signature, url, form));
+  if (!valid) return { valid: false as const, status: 403, error: "Voice request signature is invalid." };
   return { valid: true as const };
 }
 
