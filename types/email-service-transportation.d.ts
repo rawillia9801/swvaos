@@ -6,5 +6,9 @@ declare module "../lib/email-service" {
     subject: string;
     body: string;
     buyerId?: number | null;
-  }): Promise<unknown>;
+  }): Promise<{
+    sent: boolean;
+    messageId?: string;
+    skipped?: string;
+  }>;
 }
