@@ -50,6 +50,7 @@ function identityKeys(row: Row) {
   const normalizedPostal = postal(row);
   const normalizedCityState = cityState(row);
   return [
+    normalizedName ? `name:${normalizedName}` : "",
     normalizedEmail ? `email:${normalizedEmail}` : "",
     normalizedName && normalizedPhone ? `name-phone:${normalizedName}|${normalizedPhone}` : "",
     normalizedName && normalizedPostal ? `name-zip:${normalizedName}|${normalizedPostal}` : "",
