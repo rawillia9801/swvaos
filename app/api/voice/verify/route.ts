@@ -1,5 +1,5 @@
 import { getCallerCrmProfile, logCallerEvent, normalizeCallerPhone } from "../../../../db/caller-crm";
-import { getKennelDataFromSupabase } from "../../../../db/supabase-kennel";
+import { supabaseRequest } from "../../../../db/supabase";
 import { issueVoiceSession } from "../../../../lib/voice-session";
 import { verificationFailedVoiceResponse, verificationPromptVoiceResponse, verificationSuccessVoiceResponse } from "../../../../lib/caller-voice";
 import { readVoiceForm, validateVoiceRequest, voiceError, voiceXml } from "../../../../lib/voice-webhook";
@@ -7,19 +7,75 @@ import { readVoiceForm, validateVoiceRequest, voiceError, voiceXml } from "../..
 export const runtime = "nodejs";
 
 type Row = Record<string, unknown>;
-const enteredZip = (value: string | null | undefined) => String(value ?? "").replace(/\D/g, "").slice(0, 5);
-const zipFields = ["postal_code", "zip", "zipcode", "zip_code", "billing_zip", "shipping_zip", "address_zip", "mailing_zip"];
+
+const enteredZip = (value: string | null | undefined) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits.length >= 5 ? digits.slice(0, 5) : "";
+};
+
+const zipFields = [
+  "postal_code",
+  "zip",
+  "zipcode",
+  "zip_code",
+  "billing_zip",
+  "shipping_zip",
+  "address_zip",
+  "mailing_zip",
+];
+
+const phoneFields = ["phone", "telephone", "phone_number", "mobile", "mobile_phone", "cell_phone"];
+const sourceTables = ["buyers", "bp_buyers", "core_buyers", "puppy_applications", "applications"];
+const missingRelation = /does not exist|schema cache|could not find the table|relation .* not found/i;
 
 function storedZips(row: Row) {
   const values = new Set<string>();
+
   for (const key of zipFields) {
-    const match = String(row[key] ?? "").match(/\b(\d{5})(?:-\d{4})?\b/);
-    if (match) values.add(match[1]);
+    const raw = String(row[key] ?? "").trim();
+    const formatted = raw.match(/\b(\d{5})(?:-\d{4})?\b/);
+    if (formatted) values.add(formatted[1]);
+    else {
+      const digits = raw.replace(/\D/g, "");
+      if (digits.length >= 5) values.add(digits.slice(0, 5));
+    }
   }
-  for (const key of ["address", "street_address", "mailing_address", "billing_address", "shipping_address", "household_notes", "notes"]) {
+
+  for (const key of [
+    "address",
+    "street_address",
+    "mailing_address",
+    "billing_address",
+    "shipping_address",
+    "household_notes",
+    "additional_notes",
+    "notes",
+  ]) {
     for (const match of String(row[key] ?? "").matchAll(/\b(\d{5})(?:-\d{4})?\b/g)) values.add(match[1]);
   }
+
   return values;
+}
+
+function storedPhone(row: Row) {
+  for (const key of phoneFields) {
+    const normalized = normalizeCallerPhone(String(row[key] ?? ""));
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+async function safeRows(table: string) {
+  try {
+    const response = await supabaseRequest(`rest/v1/${table}?select=*&limit=10000`, { cache: "no-store" });
+    const raw = await response.text();
+    if (!response.ok) throw new Error(raw || `Unable to read ${table}.`);
+    return raw ? JSON.parse(raw) as Row[] : [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (missingRelation.test(message)) return [];
+    throw error;
+  }
 }
 
 export async function POST(request: Request) {
@@ -33,43 +89,57 @@ export async function POST(request: Request) {
     const phone = form.From || form.Caller || "";
     const calledNumber = form.To || form.Called || url.searchParams.get("line") || "";
     const digits = enteredZip(form.Digits);
-    const initialProfile = await getCallerCrmProfile(phone);
+    const profile = await getCallerCrmProfile(phone);
 
-    if (digits.length !== 5) return voiceXml(verificationPromptVoiceResponse(initialProfile, calledNumber, attempt));
+    if (digits.length !== 5) return voiceXml(verificationPromptVoiceResponse(profile, calledNumber, attempt));
 
-    const data = await getKennelDataFromSupabase();
     const normalizedPhone = normalizeCallerPhone(phone);
-    const matchingBuyers = (data.buyers as Row[]).filter((buyer) => normalizeCallerPhone(String(buyer.phone ?? buyer.telephone ?? buyer.phone_number ?? "")) === normalizedPhone);
-    const matchedBuyer = matchingBuyers.find((buyer) => storedZips(buyer).has(digits));
-    const profile = matchedBuyer
-      ? await getCallerCrmProfile(phone, digits, Number(matchedBuyer.id) || undefined)
-      : await getCallerCrmProfile(phone, digits);
-    const verified = Boolean(matchedBuyer && profile.recognized && profile.buyer?.id);
+    const sourceRows = await Promise.all(sourceTables.map(async (table) => ({ table, rows: await safeRows(table) })));
+    const phoneMatchedRows = sourceRows.flatMap(({ table, rows }) => rows
+      .filter((row) => storedPhone(row) === normalizedPhone)
+      .map((row) => ({ table, row })));
+    const zipMatchedRecord = phoneMatchedRows.find(({ row }) => storedZips(row).has(digits));
+    const verified = Boolean(profile.recognized && profile.buyer?.id && zipMatchedRecord);
+
+    console.info("[voice/verify] ZIP verification evaluated", {
+      callSid: form.CallSid || "",
+      buyerId: profile.buyer?.id || null,
+      phoneMatchedRecords: phoneMatchedRows.length,
+      zipMatched: Boolean(zipMatchedRecord),
+      matchedSource: zipMatchedRecord?.table || null,
+      attempt,
+    });
 
     if (!verified) {
-      const zipCount = matchingBuyers.reduce((count, buyer) => count + storedZips(buyer).size, 0);
+      const zipCount = phoneMatchedRows.reduce((count, candidate) => count + storedZips(candidate.row).size, 0);
       await logCallerEvent({
         phone,
         callSid: form.CallSid,
-        buyerId: initialProfile.buyer?.id,
+        buyerId: profile.buyer?.id,
         title: "Voice account verification failed",
         status: "Failed",
-        details: `Attempt: ${attempt}\nZIP match: No\nStored ZIP values reviewed: ${zipCount}\nPrivate information was not provided.`,
+        details: `Attempt: ${attempt}\nPhone-matched records reviewed: ${phoneMatchedRows.length}\nStored ZIP values reviewed: ${zipCount}\nZIP match: No\nPrivate information was not provided.`,
       }).catch(() => null);
       return voiceXml(verificationFailedVoiceResponse(calledNumber, attempt));
     }
 
-    const session = issueVoiceSession({ buyerId: profile.buyer!.id, phone, callSid: form.CallSid || "unknown-call", ttlSeconds: 900 });
+    const session = issueVoiceSession({
+      buyerId: profile.buyer!.id,
+      phone,
+      callSid: form.CallSid || "unknown-call",
+      ttlSeconds: 900,
+    });
     await logCallerEvent({
       phone,
       callSid: form.CallSid,
       buyerId: profile.buyer!.id,
       title: "Voice account verified",
       status: "Completed",
-      details: "Caller phone matched and a five-digit ZIP code stored on the family account was verified. Private voice menu access granted for this call.",
+      details: `Caller phone and five-digit ZIP were verified against the family records. Verification source: ${zipMatchedRecord!.table}. Private voice menu access granted for this call.`,
     }).catch(() => null);
     return voiceXml(verificationSuccessVoiceResponse(profile, calledNumber, session));
   } catch (error) {
+    console.error("[voice/verify] Verification failed unexpectedly", error instanceof Error ? error.message : error);
     return voiceError(error instanceof Error ? error.message : "Unable to verify the family account.", 500);
   }
 }
