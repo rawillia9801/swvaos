@@ -36,8 +36,7 @@ export function ProfilePhotoEnhancer() {
   useEffect(() => {
     const decorated = new WeakSet<Element>();
     const decorate = () => {
-      const cards = document.querySelectorAll<HTMLElement>("article.record-card");
-      cards.forEach((card) => {
+      document.querySelectorAll<HTMLElement>("article.record-card").forEach((card) => {
         const link = card.querySelector<HTMLAnchorElement>('a.record-card-profile[href^="/dogs/"], a.record-card-profile[href^="/puppies/"]');
         if (!link) return;
         const dogMatch = link.getAttribute("href")?.match(/^\/dogs\/(\d+)/);
@@ -47,9 +46,10 @@ export function ProfilePhotoEnhancer() {
         if (!kind || !id) return;
         const row = index[kind].get(id);
         const avatar = link.querySelector<HTMLElement>(".avatar");
-        if (avatar && row?.photo_url) {
+        if (avatar && row?.photo_url && avatar.dataset.profilePhotoUrl !== row.photo_url) {
+          avatar.dataset.profilePhotoUrl = row.photo_url;
           avatar.classList.add("profile-photo-avatar");
-          avatar.innerHTML = "";
+          avatar.replaceChildren();
           const image = document.createElement("img");
           image.src = row.photo_url;
           image.alt = `${row.name || kind} profile`;
