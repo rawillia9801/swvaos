@@ -2,6 +2,8 @@ import { isResource, ResourceValidationError, type ResourceInput } from "../../.
 import { createSupabaseResource, deleteSupabaseResource, getKennelDataFromSupabase, updateSupabaseResource } from "../../../db/supabase-kennel";
 import { requireAdminSession } from "../../../lib/admin-session";
 import { sendBuyerAutomation, sendPublishedUpdate, sendTransactionReceipt } from "../../../lib/automation-email";
+import { reconcileSupabaseDataOnce } from "../../../lib/data-reconciliation";
+import { enrichProfileImages } from "../../../lib/profile-images";
 import { syncPuppyJourneyMilestones } from "../../../lib/puppy-journey";
 import { recordWeeklyPuppyWeight } from "../../../lib/puppy-weight-log";
 
@@ -16,12 +18,19 @@ export async function GET(request: Request) {
   const unauthorized = requireAdminSession(request);
   if (unauthorized) return unauthorized;
   try {
+    const reconciliation = await reconcileSupabaseDataOnce();
     try {
       await syncPuppyJourneyMilestones();
     } catch (milestoneError) {
       console.error("Puppy milestone synchronization failed", milestoneError instanceof Error ? milestoneError.message : milestoneError);
     }
-    return Response.json(await getKennelDataFromSupabase());
+    const data = await getKennelDataFromSupabase();
+    return Response.json({
+      ...data,
+      dogs: enrichProfileImages(data.dogs),
+      puppies: enrichProfileImages(data.puppies),
+      reconciliation,
+    }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to load kennel data." }, { status: 500 });
   }
@@ -44,7 +53,7 @@ export async function POST(request: Request) {
         await syncPuppyJourneyMilestones(Number(created.buyer_id) || null);
       }
     } catch (automationError) {
-      console.error("Automatic workflow failed after record creation", automationError instanceof Error ? automationError.message : automationError);
+      console.error("Workflow failed after record creation", automationError instanceof Error ? automationError.message : automationError);
     }
     return Response.json(created, { status: 201 });
   } catch (error) {
@@ -72,7 +81,7 @@ export async function PUT(request: Request) {
         await syncPuppyJourneyMilestones();
       }
     } catch (automationError) {
-      console.error("Automatic workflow failed after record update", automationError instanceof Error ? automationError.message : automationError);
+      console.error("Workflow failed after record update", automationError instanceof Error ? automationError.message : automationError);
     }
     return Response.json(updated);
   } catch (error) {
