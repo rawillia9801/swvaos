@@ -26,12 +26,12 @@ function privateSafeMainMenu(recognized: boolean, calledNumber: string) {
   if (recognized) {
     gather.say(
       voice,
-      "Thank you for calling Southwest Virginia Chihuahua. We found a family account associated with the phone number you are calling from. Press 1 to verify the account using the ZIP code on file and hear private puppy, application, payment, document, and transportation information. Press 2 for current puppy availability and the application process. Press 3 for general pickup, delivery, and transportation information. Press 4 for general payment and financing information. Press 5 for Pup-Lift information. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.",
+      "Thank you for calling Southwest Virginia Chihuahua. We found a family account connected to the phone number you are calling from. Press 1 if you are an existing applicant or buyer and would like to verify your account. Press 2 for puppy availability and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.",
     );
   } else {
     gather.say(
       voice,
-      "Thank you for calling Southwest Virginia Chihuahua. Press 1 if you are an existing applicant or buyer and need account help. Press 2 for current puppy availability and the application process. Press 3 for general pickup, delivery, and transportation information. Press 4 for general payment and financing information. Press 5 for Pup-Lift information. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.",
+      "Thank you for calling Southwest Virginia Chihuahua. Press 1 if you are an existing applicant or buyer. Press 2 for puppy availability and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.",
     );
   }
 
