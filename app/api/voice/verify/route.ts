@@ -17,18 +17,19 @@ export async function POST(request: Request) {
     const attempt = Math.max(1, Math.min(3, Number(url.searchParams.get("attempt")) || 1));
     const phone = form.From || form.Caller || "";
     const calledNumber = form.To || form.Called || url.searchParams.get("line") || "";
-    const profile = await getCallerCrmProfile(phone);
     const digits = fiveDigits(form.Digits);
+    const initialProfile = await getCallerCrmProfile(phone);
 
-    if (!digits) return voiceXml(verificationPromptVoiceResponse(profile, calledNumber, attempt));
+    if (!digits) return voiceXml(verificationPromptVoiceResponse(initialProfile, calledNumber, attempt));
 
+    const profile = await getCallerCrmProfile(phone, digits);
     const expectedZip = fiveDigits(profile.buyer?.postal_code);
     const verified = Boolean(profile.recognized && profile.buyer?.id && expectedZip && digits === expectedZip);
     if (!verified) {
       await logCallerEvent({
         phone,
         callSid: form.CallSid,
-        buyerId: profile.buyer?.id,
+        buyerId: initialProfile.buyer?.id,
         title: "Voice account verification failed",
         status: "Failed",
         details: `Attempt: ${attempt}\nZIP match: No\nPrivate information was not provided.`,
