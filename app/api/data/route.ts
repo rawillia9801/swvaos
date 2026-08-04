@@ -2,7 +2,7 @@ import { isResource, ResourceValidationError, type ResourceInput } from "../../.
 import { createSupabaseResource, deleteSupabaseResource, getKennelDataFromSupabase, updateSupabaseResource } from "../../../db/supabase-kennel";
 import { requireAdminSession } from "../../../lib/admin-session";
 import { sendBuyerAutomation, sendPublishedUpdate, sendTransactionReceipt } from "../../../lib/automation-email";
-import { repairImportedDataOnce } from "../../../lib/data-reconciliation";
+import { canonicalizeKennelData } from "../../../lib/canonical-display-data";
 import { enrichProfileImages } from "../../../lib/profile-images";
 import { syncPuppyJourneyMilestones } from "../../../lib/puppy-journey";
 import { recordWeeklyPuppyWeight } from "../../../lib/puppy-weight-log";
@@ -19,19 +19,19 @@ export async function GET(request: Request) {
   const unauthorized = requireAdminSession(request);
   if (unauthorized) return unauthorized;
   try {
-    const reconciliation = await repairImportedDataOnce();
     const strictRepair = await repairStrictBuyerDuplicatesOnce();
     try {
       await syncPuppyJourneyMilestones();
     } catch (milestoneError) {
       console.error("Puppy milestone synchronization failed", milestoneError instanceof Error ? milestoneError.message : milestoneError);
     }
-    const data = await getKennelDataFromSupabase();
+    const rawData = await getKennelDataFromSupabase();
+    const data = canonicalizeKennelData(rawData);
     return Response.json({
       ...data,
       dogs: enrichProfileImages(data.dogs),
       puppies: enrichProfileImages(data.puppies),
-      reconciliation,
+      reconciliation: null,
       strictRepair,
     }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
