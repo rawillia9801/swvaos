@@ -1,4 +1,4 @@
-import { getCallerCrmProfile, logCallerEvent } from "../../../../db/caller-crm";
+import { getCallerCrmProfile, logCallerEvent, type CallerCrmProfile } from "../../../../db/caller-crm";
 import { incomingVoiceResponse, isPupLiftLine, unavailableVoiceResponse } from "../../../../lib/caller-voice";
 import { readVoiceForm, twilio, validateVoiceRequest, voiceError, voiceXml } from "../../../../lib/voice-webhook";
 
@@ -38,6 +38,25 @@ function privateSafeMainMenu(recognized: boolean, calledNumber: string) {
   response.say(voice, "We did not receive a selection.");
   response.redirect(routeWithLine("/api/voice/incoming?repeat=1", calledNumber));
   return response;
+}
+
+const publicProfile: CallerCrmProfile = {
+  recognized: false,
+  phone: "",
+  buyer: null,
+  puppies: [],
+  updates: [],
+  payment_plans: [],
+  account: { paid_cents: 0, outstanding_cents: 0, overdue_count: 0, next_due_date: "" },
+  calls: [],
+  public_information: { available_puppy_count: 0, available_puppy_names: [] },
+};
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const calledNumber = url.searchParams.get("To") || url.searchParams.get("Called") || url.searchParams.get("line") || "";
+  console.info("[voice/incoming] Twilio used GET; serving public voice menu", { calledNumber: calledNumber || null });
+  return voiceXml(isPupLiftLine(calledNumber) ? incomingVoiceResponse(publicProfile, calledNumber) : privateSafeMainMenu(false, calledNumber));
 }
 
 export async function POST(request: Request) {
