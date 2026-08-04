@@ -34,16 +34,14 @@ const spokenDate = (value: string) => value ? new Intl.DateTimeFormat("en-US", {
 
 function publicMenu(response: InstanceType<typeof twilio.twiml.VoiceResponse>, profile: CallerCrmProfile, calledNumber: string | null | undefined) {
   const gather = response.gather({ action: routeWithContext("/api/voice/menu", calledNumber), method: "POST", input: ["dtmf"], numDigits: 1, timeout: 8, actionOnEmptyResult: true });
-  if (profile.recognized) {
-    gather.say(voice, "Thank you for calling Southwest Virginia Chihuahua. We found a family account connected to this phone number. Press 1 if you are an existing applicant or buyer and would like to verify your account. Press 2 for puppy availability and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.");
-  } else {
-    gather.say(voice, "Thank you for calling Southwest Virginia Chihuahua. Press 1 if you are an existing applicant or buyer. Press 2 for puppy availability and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.");
-  }
+  gather.say(voice, profile.recognized
+    ? "Thank you for calling Southwest Virginia Chihuahua. We found a family account associated with the phone number you are calling from. Press 1 to verify the account. Press 2 for available puppies and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift information. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu."
+    : "Thank you for calling Southwest Virginia Chihuahua. Press 1 if you are an existing applicant or buyer and need account help. Press 2 for available puppies and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift information. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.");
 }
 
 function pupLiftMenu(response: InstanceType<typeof twilio.twiml.VoiceResponse>, calledNumber: string | null | undefined) {
   const gather = response.gather({ action: routeWithContext("/api/voice/menu", calledNumber), method: "POST", input: ["dtmf"], numDigits: 1, timeout: 8, actionOnEmptyResult: true });
-  gather.say(voice, "Thank you for calling Pup-Lift, emergency support for tiny hearts. If a puppy is unresponsive, having a seizure, unable to swallow, or has blue or very pale gums, seek emergency veterinary care now. Press 1 for immediate hypoglycemia support steps. Press 2 for warning signs. Press 3 for how to use Pup-Lift. Press 4 for prevention and aftercare. Press 5 to leave a message. Press 6 to speak with someone. Press 9 to repeat this menu.");
+  gather.say(voice, "Thank you for calling Pup-Lift. If a puppy is unresponsive, having a seizure, unable to swallow, or has blue or very pale gums, seek emergency veterinary care now. Press 1 for immediate hypoglycemia support steps. Press 2 for warning signs. Press 3 for how to use Pup-Lift. Press 4 for prevention and aftercare. Press 5 to leave a message. Press 6 to speak with someone. Press 9 to repeat this menu.");
 }
 
 export function incomingVoiceResponse(profile: CallerCrmProfile, calledNumber?: string | null) {
@@ -71,8 +69,8 @@ function latestUpdateSpeech(profile: CallerCrmProfile) {
 function accountSpeech(profile: CallerCrmProfile) {
   const activePlans = profile.payment_plans.filter((plan) => plan.status === "Active");
   return [
-    `Your recorded outstanding balance is ${dollars(profile.account.outstanding_cents)}.`,
     `Your recorded payments total ${dollars(profile.account.paid_cents)}.`,
+    `Your recorded outstanding balance is ${dollars(profile.account.outstanding_cents)}.`,
     profile.account.next_due_date ? `Your next recorded due date is ${spokenDate(profile.account.next_due_date)}.` : "There is no upcoming payment date recorded.",
     activePlans.length ? `You have ${activePlans.length} active payment ${activePlans.length === 1 ? "plan" : "plans"}.` : "There is no active payment plan recorded.",
     profile.account.overdue_count ? `There ${profile.account.overdue_count === 1 ? "is" : "are"} ${profile.account.overdue_count} overdue ${profile.account.overdue_count === 1 ? "item" : "items"}.` : "There are no overdue items recorded.",
@@ -94,7 +92,7 @@ export function verificationPromptVoiceResponse(profile: CallerCrmProfile, calle
     return response;
   }
   const gather = response.gather({ action: routeWithContext("/api/voice/verify", calledNumber, { attempt }), method: "POST", input: ["dtmf"], numDigits: 5, timeout: 10, actionOnEmptyResult: true });
-  gather.say(voice, `${attempt > 1 ? "That ZIP code did not match. " : ""}For privacy, enter the five digit ZIP code from your application or family record.`);
+  gather.say(voice, `${attempt > 1 ? "That ZIP code did not match. " : ""}For privacy, enter the five digit ZIP code listed on your family account.`);
   response.say(voice, "We did not receive five digits.");
   response.redirect(routeWithContext("/api/voice/verify", calledNumber, { attempt: Math.min(3, attempt + 1) }));
   return response;
@@ -103,7 +101,7 @@ export function verificationPromptVoiceResponse(profile: CallerCrmProfile, calle
 export function verificationFailedVoiceResponse(calledNumber: string | null | undefined, attempt: number) {
   const response = new twilio.twiml.VoiceResponse();
   if (attempt >= 3) {
-    response.say(voice, "We could not verify the account after three attempts. No personal information was provided. Please leave a message or speak with our team so the account details can be reviewed.");
+    response.say(voice, "We could not verify the account after three attempts. No private information was provided. Please leave a message or speak with our team so the account ZIP code can be reviewed.");
     response.redirect(routeWithContext(incomingPath, calledNumber));
   } else {
     response.redirect(routeWithContext("/api/voice/verify", calledNumber, { attempt: attempt + 1 }));
@@ -122,7 +120,7 @@ export function verificationSuccessVoiceResponse(profile: CallerCrmProfile, call
 function secureMenu(response: InstanceType<typeof twilio.twiml.VoiceResponse>, profile: CallerCrmProfile, calledNumber: string | null | undefined, session: string) {
   const firstName = profile.buyer?.first_name || profile.buyer?.name || "there";
   const gather = response.gather({ action: routeWithContext("/api/voice/account", calledNumber, { session }), method: "POST", input: ["dtmf"], numDigits: 1, timeout: 9, actionOnEmptyResult: true });
-  gather.say(voice, `Welcome to your verified family account, ${firstName}. Press 1 for your assigned puppy and latest development update. Press 2 for application or placement status and next steps. Press 3 for payments, balance, and payment plan information. Press 4 to check transportation eligibility or request a meeting date. Press 5 for required document status. Press 6 to leave a message. Press 7 to speak with our team. Press 8 to return to the main menu. Press 9 to repeat this menu.`);
+  gather.say(voice, `Welcome, ${firstName}. Press 1 for your assigned puppy and latest update. Press 2 for your application or placement status. Press 3 for payments, balance, and payment-plan information. Press 4 to review transportation eligibility or reserve a meeting date. Press 5 to hear the latest puppy update. Press 6 to leave a message. Press 7 to speak with our team. Press 8 to return to the main menu. Press 9 to repeat this menu.`);
 }
 
 export function accountVoiceResponse(profile: CallerCrmProfile, digit: string, calledNumber: string | null | undefined, session: string) {
@@ -140,10 +138,10 @@ export function accountVoiceResponse(profile: CallerCrmProfile, digit: string, c
     return response;
   }
   if (digit === "1") response.say(voice, `${assignedPuppySpeech(profile)} ${latestUpdateSpeech(profile)}`);
-  else if (digit === "2") response.say(voice, `Your application or placement status is ${profile.buyer?.application_status || "not recorded"}. ${profile.puppies.length ? "A puppy is assigned to your account. Check the Puppy Portal for messages, documents, and the next placement steps." : "No puppy is assigned yet. Check the Puppy Portal for review decisions, messages, and placement updates."}`);
+  else if (digit === "2") response.say(voice, `Your application or approval status is ${profile.buyer?.application_status || "not recorded"}. ${profile.puppies.length ? "A puppy is assigned to your account. Continue checking the Puppy Portal for documents, messages, and placement steps." : "No puppy is assigned yet. Continue checking the Puppy Portal for review decisions, documents, and placement updates."}`);
   else if (digit === "3") response.say(voice, accountSpeech(profile));
   else if (digit === "4") response.say(voice, "Opening transportation eligibility.");
-  else if (digit === "5") response.say(voice, "Opening your document status.");
+  else if (digit === "5") response.say(voice, latestUpdateSpeech(profile));
   else response.say(voice, "That selection is not available.");
   response.pause({ length: 1 });
   response.redirect(routeWithContext("/api/voice/account", calledNumber, { session }));
@@ -212,9 +210,9 @@ export function menuVoiceResponse(profile: CallerCrmProfile, digit: string, call
     return response;
   }
   if (digit === "2") response.say(voice, publicPuppySpeech(profile));
-  else if (digit === "3") response.say(voice, "Transportation is arranged after a puppy is assigned. A meeting date is not confirmed until the account requirements are complete and the request is approved. Verified buyers can check eligibility and request a date through the private family menu.");
-  else if (digit === "4") response.say(voice, "Payment plans may be available for eligible standard-size puppies when approved in advance. Deposits, due dates, payment methods, and balances are recorded in the buyer account and agreements.");
-  else if (digit === "5") response.say(voice, "Pup-Lift provides emergency glucose support information for toy-breed puppies at risk of hypoglycemia. It does not replace veterinary care. For the dedicated Pup-Lift support line, call 715-888-9526.");
+  else if (digit === "3") response.say(voice, "Ground transportation is arranged after a puppy is assigned. Meeting dates are limited to one family per day across the program. Verified buyers can check eligibility and request an available date through the private account menu.");
+  else if (digit === "4") response.say(voice, "Payment plans may be available for eligible puppies when approved in advance. Deposits, due dates, balances, and payment methods are documented in the buyer agreement and family account.");
+  else if (digit === "5") response.say(voice, "Pup-Lift provides emergency glucose-support information for toy-breed puppies at risk of hypoglycemia. It does not replace veterinary care. For the dedicated Pup-Lift support line, call 715-888-9526.");
   else response.say(voice, "That selection is not available.");
   response.pause({ length: 1 });
   response.redirect(routeWithContext(incomingPath, calledNumber));
