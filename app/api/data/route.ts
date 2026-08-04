@@ -6,6 +6,7 @@ import { repairImportedDataOnce } from "../../../lib/data-reconciliation";
 import { enrichProfileImages } from "../../../lib/profile-images";
 import { syncPuppyJourneyMilestones } from "../../../lib/puppy-journey";
 import { recordWeeklyPuppyWeight } from "../../../lib/puppy-weight-log";
+import { repairStrictBuyerDuplicatesOnce } from "../../../lib/strict-data-repair";
 
 function writeError(error: unknown, fallback: string) {
   return Response.json(
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
   if (unauthorized) return unauthorized;
   try {
     const reconciliation = await repairImportedDataOnce();
+    const strictRepair = await repairStrictBuyerDuplicatesOnce();
     try {
       await syncPuppyJourneyMilestones();
     } catch (milestoneError) {
@@ -30,6 +32,7 @@ export async function GET(request: Request) {
       dogs: enrichProfileImages(data.dogs),
       puppies: enrichProfileImages(data.puppies),
       reconciliation,
+      strictRepair,
     }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to load kennel data." }, { status: 500 });
