@@ -47,8 +47,8 @@ export function BreedingDogRosterEnhancer() {
     const allPuppies = data.puppies || [];
     const allTransactions = data.transactions || [];
     const allMedical = data.dog_medical_records || [];
-
     const byDog = new Map<number, { litters: number; puppies: number; placed: number; revenue: number; costs: number; net: number }>();
+
     for (const dog of dogs) {
       const litters = allLitters.filter((litter) => Number(litter.dam_id) === dog.id || Number(litter.sire_id) === dog.id);
       const litterIds = new Set(litters.map((litter) => litter.id));
@@ -104,7 +104,11 @@ export function BreedingDogRosterEnhancer() {
           if (footer) card.insertBefore(strip, footer);
           else card.append(strip);
         }
-        strip.innerHTML = `<span><b>${values?.litters || 0}</b><small>litters</small></span><span><b>${values?.placed || 0}/${values?.puppies || 0}</b><small>placed</small></span><span><b>${money(values?.revenue || 0)}</b><small>sales</small></span><span><b>${money(values?.costs || 0)}</b><small>costs</small></span><span class="${(values?.net || 0) >= 0 ? "positive" : "negative"}"><b>${money(values?.net || 0)}</b><small>net</small></span>`;
+        const summary = `${values?.litters || 0}|${values?.placed || 0}|${values?.puppies || 0}|${values?.revenue || 0}|${values?.costs || 0}|${values?.net || 0}`;
+        if (strip.dataset.summary !== summary) {
+          strip.dataset.summary = summary;
+          strip.innerHTML = `<span><b>${values?.litters || 0}</b><small>litters</small></span><span><b>${values?.placed || 0}/${values?.puppies || 0}</b><small>placed</small></span><span><b>${money(values?.revenue || 0)}</b><small>sales</small></span><span><b>${money(values?.costs || 0)}</b><small>costs</small></span><span class="${(values?.net || 0) >= 0 ? "positive" : "negative"}"><b>${money(values?.net || 0)}</b><small>net</small></span>`;
+        }
       });
     };
     apply();
