@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       return voiceError("The verified voice session is missing or expired.", 403);
     }
 
-    const profile = await getCallerCrmProfile(phone);
+    const profile = await getCallerCrmProfile(phone, undefined, session.buyerId);
     if (!profile.recognized || profile.buyer?.id !== session.buyerId) return voiceError("The verified family account no longer matches this call.", 403);
     const eligibility = await getTransportationEligibility(session.buyerId);
     await logCallerEvent({
