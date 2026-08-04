@@ -13,10 +13,10 @@ type DataSet = { dogs?: DogRow[]; litters?: LitterRow[]; puppies?: PuppyRow[]; t
 type RosterMode = "active" | "all";
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100);
-const inactiveStatuses = new Set(["retired", "deceased", "dead", "archived", "inactive"]);
-const normalizedStatus = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ");
-const isActiveDog = (dog: DogRow) => !inactiveStatuses.has(normalizedStatus(dog.status));
-const countsAsRevenue = (transaction: TransactionRow) => ["payment", "deposit"].includes(normalizedStatus(transaction.type)) && ["paid", "complete", "completed"].includes(normalizedStatus(transaction.status));
+const normalizedStatus = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+const inactiveTerms = ["retired", "deceased", "dead", "passed away", "passed", "archived", "inactive", "memorial", "no longer breeding", "not breeding", "removed from program"];
+const isActiveDog = (dog: DogRow) => !inactiveTerms.some((term) => normalizedStatus(dog.status).includes(term));
+const countsAsRevenue = (transaction: TransactionRow) => ["payment", "deposit"].includes(normalizedStatus(transaction.type)) && ["paid", "complete", "completed", "cleared"].includes(normalizedStatus(transaction.status));
 
 export function BreedingDogRosterEnhancer() {
   const [data, setData] = useState<DataSet>({});
@@ -29,13 +29,13 @@ export function BreedingDogRosterEnhancer() {
       const payload = await response.json() as DataSet;
       if (response.ok) setData(payload);
     } catch {
-      // Existing SWVAOS error handling remains responsible for connection failures.
+      // The normal SWVAOS page handles connection errors.
     }
   }, []);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("swvaos-breeding-dog-roster");
-    if (saved === "all") setMode("all");
+    const saved = window.sessionStorage.getItem("swvaos-breeding-dog-roster");
+    setMode(saved === "all" ? "all" : "active");
     void load();
   }, [load]);
 
@@ -55,10 +55,10 @@ export function BreedingDogRosterEnhancer() {
       const puppies = allPuppies.filter((puppy) => litterIds.has(Number(puppy.litter_id)));
       const puppyIds = new Set(puppies.map((puppy) => puppy.id));
       const related = allTransactions.filter((transaction) => Number(transaction.dog_id) === dog.id || litterIds.has(Number(transaction.litter_id)) || puppyIds.has(Number(transaction.puppy_id)));
-      const revenue = related.filter(countsAsRevenue).reduce((sum, transaction) => sum + Number(transaction.amount_cents || 0), 0);
-      const transactionCosts = related.filter((transaction) => normalizedStatus(transaction.type) === "cost").reduce((sum, transaction) => sum + Number(transaction.amount_cents || 0), 0);
-      const medicalCosts = allMedical.filter((record) => Number(record.dog_id) === dog.id).reduce((sum, record) => sum + Number(record.cost_cents || 0), 0);
-      const costs = Number(dog.purchase_price_cents || 0) + transactionCosts + medicalCosts;
+      const revenue = related.filter(countsAsRevenue).reduce((sum, transaction) => sum + Math.abs(Number(transaction.amount_cents || 0)), 0);
+      const transactionCosts = related.filter((transaction) => normalizedStatus(transaction.type) === "cost").reduce((sum, transaction) => sum + Math.abs(Number(transaction.amount_cents || 0)), 0);
+      const medicalCosts = allMedical.filter((record) => Number(record.dog_id) === dog.id).reduce((sum, record) => sum + Math.abs(Number(record.cost_cents || 0)), 0);
+      const costs = Math.abs(Number(dog.purchase_price_cents || 0)) + transactionCosts + medicalCosts;
       byDog.set(dog.id, { litters: litters.length, puppies: puppies.length, placed: puppies.filter((puppy) => Boolean(puppy.buyer_id)).length, revenue, costs, net: revenue - costs });
     }
 
@@ -93,9 +93,9 @@ export function BreedingDogRosterEnhancer() {
         if (!dogId) return;
         const dog = stats.dogs.find((candidate) => candidate.id === dogId);
         const values = stats.byDog.get(dogId);
-        const hidden = mode === "active" && dog && !isActiveDog(dog);
-        card.hidden = Boolean(hidden);
-        card.classList.toggle("breeding-dog-inactive", Boolean(dog && !isActiveDog(dog)));
+        const inactive = Boolean(dog && !isActiveDog(dog));
+        card.hidden = mode === "active" && inactive;
+        card.classList.toggle("breeding-dog-inactive", inactive);
         let strip = card.querySelector<HTMLElement>(".dog-financial-strip");
         if (!strip) {
           strip = document.createElement("div");
@@ -119,23 +119,23 @@ export function BreedingDogRosterEnhancer() {
 
   function chooseMode(next: RosterMode) {
     setMode(next);
-    window.localStorage.setItem("swvaos-breeding-dog-roster", next);
+    window.sessionStorage.setItem("swvaos-breeding-dog-roster", next);
   }
 
   if (!host) return null;
 
   return createPortal(<div className="breeding-roster-toolbar">
-    <div className="breeding-roster-intro"><span><Dog size={20}/></span><div><b>Breeding dog roster</b><small>Active dogs are shown first. Historical dogs retain their complete cost, litter, puppy, and sales records.</small></div></div>
+    <div className="breeding-roster-intro"><span><Dog size={20}/></span><div><b>Breeding dog roster</b><small>The roster opens with active dogs only. Retired and deceased dogs remain preserved with their complete financial and breeding history.</small></div></div>
     <div className="breeding-roster-metrics">
-      <span><b>{stats.active.length}</b><small>active</small></span>
-      <span><b>{stats.inactive.length}</b><small>retired or deceased</small></span>
+      <span><b>{stats.active.length}</b><small>active dogs</small></span>
+      <span><b>{stats.inactive.length}</b><small>historical dogs</small></span>
       <span><b>{money(stats.totals.revenue)}</b><small>sales shown</small></span>
       <span><b>{money(stats.totals.costs)}</b><small>costs shown</small></span>
     </div>
     <div className="breeding-roster-toggle" role="group" aria-label="Breeding dog visibility">
-      <button type="button" className={mode === "active" ? "active" : ""} onClick={() => chooseMode("active")}><Eye size={15}/> Active dogs</button>
-      <button type="button" className={mode === "all" ? "active" : ""} onClick={() => chooseMode("all")}><Archive size={15}/> Include historical</button>
+      <button type="button" className={mode === "active" ? "active" : ""} onClick={() => chooseMode("active")}><Eye size={15}/> Active dogs only</button>
+      <button type="button" className={mode === "all" ? "active" : ""} onClick={() => chooseMode("all")}><Archive size={15}/> Include retired and deceased</button>
     </div>
-    <div className="breeding-roster-key"><span><CircleDollarSign size={14}/> Sales include recorded paid deposits and payments linked to the dog, its litters, or its puppies.</span><span><ReceiptText size={14}/> Costs include purchase price, medical costs, and recorded expenses.</span>{mode === "active" && stats.inactive.length > 0 && <span><EyeOff size={14}/> {stats.inactive.length} historical dog{stats.inactive.length === 1 ? " is" : "s are"} hidden.</span>}</div>
+    <div className="breeding-roster-key"><span><CircleDollarSign size={14}/> Sales include paid deposits and payments connected to the dog, its litters, or its puppies.</span><span><ReceiptText size={14}/> Costs include purchase price, medical care, and recorded expenses.</span>{mode === "active" && stats.inactive.length > 0 && <span><EyeOff size={14}/> {stats.inactive.length} historical dog{stats.inactive.length === 1 ? " is" : "s are"} hidden.</span>}</div>
   </div>, host);
 }
