@@ -76,7 +76,7 @@ export function ProfilePhotoEnhancer() {
       const kind: ProfileKind = detailMatch[1] === "dogs" ? "dog" : "puppy";
       const id = Number(detailMatch[2]);
       const row = index[kind].get(id);
-      const page = document.querySelector<HTMLElement>(kind === "dog" ? ".dog-profile-page" : ".puppy-profile-page");
+      const page = document.querySelector<HTMLElement>(kind === "dog" ? ".dog-profile-page" : ".puppy-record-page");
       if (!page || page.querySelector(".profile-photo-detail-card")) return;
       const card = document.createElement("button");
       card.type = "button";
