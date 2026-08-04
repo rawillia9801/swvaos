@@ -73,6 +73,7 @@ const id = (row: Row, key: string) => {
   return Number.isInteger(value) && value > 0 ? value : 0;
 };
 const published = (row: Row) => row.published === true || row.published === 1 || row.published === "1" || row.published === "true";
+const fiveDigits = (value: unknown) => String(value ?? "").replace(/\D/g, "").slice(-5);
 
 export function normalizeCallerPhone(value: string | null | undefined) {
   const digits = String(value ?? "").replace(/\D/g, "");
@@ -80,9 +81,54 @@ export function normalizeCallerPhone(value: string | null | undefined) {
   return digits.length > 10 ? digits.slice(-10) : digits;
 }
 
+function postalCodes(row: Row) {
+  const codes = new Set<string>();
+  for (const key of ["postal_code", "zip", "zipcode", "zip_code", "billing_zip", "shipping_zip"]) {
+    const value = fiveDigits(row[key]);
+    if (value.length === 5) codes.add(value);
+  }
+
+  const addressText = [
+    text(row, "street_address"),
+    text(row, "address"),
+    text(row, "mailing_address"),
+    text(row, "household_notes"),
+    text(row, "notes"),
+  ].filter(Boolean).join("\n");
+
+  const labeled = addressText.matchAll(/(?:zip|postal(?:\s+code)?|street\s+address|mailing\s+address|address)[^\d]{0,60}(\d{5})(?:-\d{4})?/gi);
+  for (const match of labeled) codes.add(match[1]);
+
+  const addressLines = addressText.split(/\n|\|/).filter((line) => /address|city|state|zip|postal/i.test(line));
+  for (const line of addressLines) {
+    const matches = [...line.matchAll(/\b(\d{5})(?:-\d{4})?\b/g)];
+    if (matches.length) codes.add(matches[matches.length - 1][1]);
+  }
+
+  return [...codes];
+}
+
 const fullName = (buyer: Row) => [text(buyer, "first_name"), text(buyer, "last_name")].filter(Boolean).join(" ") || text(buyer, "email") || `Family ${id(buyer, "id")}`;
 
-export async function getCallerCrmProfile(phone: string): Promise<CallerCrmProfile> {
+function buyerScore(buyer: Row) {
+  const fields = ["first_name", "last_name", "email", "phone", "city", "state", "application_status", "household_notes", "notes"];
+  const completeness = fields.reduce((score, key) => score + (text(buyer, key).trim() ? 1 : 0), 0);
+  const zipScore = postalCodes(buyer).length ? 5 : 0;
+  const importedPenalty = /\[SWVAOS import:/i.test(text(buyer, "notes")) ? -4 : 0;
+  const closedPenalty = ["declined", "archived", "closed"].includes(text(buyer, "application_status").toLowerCase()) ? -2 : 0;
+  return completeness + zipScore + importedPenalty + closedPenalty;
+}
+
+function chooseBuyer(candidates: Row[], preferredPostalCode?: string) {
+  const preferred = fiveDigits(preferredPostalCode);
+  const matching = preferred.length === 5
+    ? candidates.filter((candidate) => postalCodes(candidate).includes(preferred))
+    : [];
+  const pool = matching.length ? matching : candidates;
+  return [...pool].sort((left, right) => buyerScore(right) - buyerScore(left) || id(left, "id") - id(right, "id"))[0] ?? null;
+}
+
+export async function getCallerCrmProfile(phone: string, preferredPostalCode?: string): Promise<CallerCrmProfile> {
   const data = await getKennelDataFromSupabase();
   const normalizedPhone = normalizeCallerPhone(phone);
   const buyers = data.buyers as Row[];
@@ -92,7 +138,10 @@ export async function getCallerCrmProfile(phone: string): Promise<CallerCrmProfi
   const plans = data.payment_plans as Row[];
   const transactions = data.transactions as Row[];
   const events = data.events as Row[];
-  const buyer = normalizedPhone ? buyers.find((candidate) => normalizeCallerPhone(text(candidate, "phone")) === normalizedPhone) ?? null : null;
+  const matchingBuyers = normalizedPhone
+    ? buyers.filter((candidate) => normalizeCallerPhone(text(candidate, "phone")) === normalizedPhone)
+    : [];
+  const buyer = chooseBuyer(matchingBuyers, preferredPostalCode);
   const buyerId = buyer ? id(buyer, "id") : 0;
   const assignedPuppies = buyer ? puppies.filter((puppy) => id(puppy, "buyer_id") === buyerId) : [];
   const puppyIds = new Set(assignedPuppies.map((puppy) => id(puppy, "id")));
@@ -104,6 +153,7 @@ export async function getCallerCrmProfile(phone: string): Promise<CallerCrmProfi
   const buyerPlans = buyer ? plans.filter((plan) => id(plan, "buyer_id") === buyerId) : [];
   const nextDueDates = [...unpaid.map((transaction) => text(transaction, "due_date")), ...buyerPlans.filter((plan) => text(plan, "status") === "Active").map((plan) => text(plan, "next_due_date"))].filter(Boolean).sort();
   const availablePuppies = puppies.filter((puppy) => !id(puppy, "buyer_id") && text(puppy, "status") === "Available");
+  const buyerPostalCode = buyer ? postalCodes(buyer)[0] || "" : "";
 
   return {
     recognized: Boolean(buyer),
@@ -117,7 +167,7 @@ export async function getCallerCrmProfile(phone: string): Promise<CallerCrmProfi
       phone: text(buyer, "phone"),
       city: text(buyer, "city"),
       state: text(buyer, "state"),
-      postal_code: text(buyer, "postal_code") || text(buyer, "zip"),
+      postal_code: buyerPostalCode,
       application_status: text(buyer, "application_status") || "Inquiry",
     } : null,
     puppies: assignedPuppies.map((puppy) => {
