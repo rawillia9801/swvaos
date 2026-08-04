@@ -7,7 +7,6 @@ import { CheckCircle2, FlaskConical, LoaderCircle, Mail, Send, UserRound, X } fr
 type Buyer = { id: number; first_name?: string; last_name?: string; email?: string };
 type Puppy = { id: number; name?: string; buyer_id?: number | null };
 type DataSet = { buyers?: Buyer[]; puppies?: Puppy[] };
-
 type SendMode = "buyer" | "test";
 
 const buyerName = (buyer: Buyer | null) => buyer ? [buyer.first_name, buyer.last_name].filter(Boolean).join(" ") || buyer.email || `Buyer #${buyer.id}` : "No buyer assigned";
@@ -18,6 +17,7 @@ export function PuppyPacketEmailEnhancer() {
   const [data, setData] = useState<DataSet | null>(null);
   const [mode, setMode] = useState<SendMode>("buyer");
   const [testEmail, setTestEmail] = useState("swvachihuahua@gmail.com");
+  const [selectedId, setSelectedId] = useState(0);
   const [loadingData, setLoadingData] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -42,7 +42,7 @@ export function PuppyPacketEmailEnhancer() {
     return () => observer.disconnect();
   }, []);
 
-  const selectedPuppyId = useCallback(() => {
+  const currentPuppyId = useCallback(() => {
     const select = document.querySelector<HTMLSelectElement>(".packet-page .toolbar select");
     const fromSelect = Number(select?.value);
     if (Number.isInteger(fromSelect) && fromSelect > 0) return fromSelect;
@@ -66,6 +66,7 @@ export function PuppyPacketEmailEnhancer() {
   }, []);
 
   function showDialog() {
+    setSelectedId(currentPuppyId());
     setOpen(true);
     setMode("buyer");
     setError("");
@@ -76,15 +77,13 @@ export function PuppyPacketEmailEnhancer() {
   }
 
   const selected = useMemo(() => {
-    const puppyId = typeof window === "undefined" ? 0 : selectedPuppyId();
-    const puppy = data?.puppies?.find((item) => item.id === puppyId) || null;
+    const puppy = data?.puppies?.find((item) => item.id === selectedId) || null;
     const buyer = puppy?.buyer_id ? data?.buyers?.find((item) => item.id === puppy.buyer_id) || null : null;
     return { puppy, buyer };
-  }, [data, open, selectedPuppyId]);
+  }, [data, selectedId]);
 
   async function sendPacket() {
-    const puppyId = selectedPuppyId();
-    if (!puppyId) {
+    if (!selectedId) {
       setError("Select a puppy before sending the packet.");
       return;
     }
@@ -101,9 +100,9 @@ export function PuppyPacketEmailEnhancer() {
       const response = await fetch("/api/puppy-packet/email", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ puppyId, recipient, testCopy: mode === "test" }),
+        body: JSON.stringify({ puppyId: selectedId, recipient, testCopy: mode === "test" }),
       });
-      const payload = await response.json() as { error?: string; recipient?: string; filename?: string };
+      const payload = await response.json() as { error?: string; recipient?: string };
       if (!response.ok) throw new Error(payload.error || "Unable to send the packet.");
       setSuccess(`${mode === "test" ? "Test copy" : "Complete packet"} sent to ${payload.recipient || recipient}.`);
     } catch (failure) {
@@ -123,27 +122,19 @@ export function PuppyPacketEmailEnhancer() {
           <div><span>COMPLETE PERSONALIZED PACKET</span><h2 id="packet-email-title">Email the puppy packet</h2><p>SWVAOS creates a personalized PDF and sends it through the connected Hostinger email account.</p></div>
           <button type="button" className="packet-email-close" aria-label="Close" disabled={sending} onClick={() => setOpen(false)}><X size={19}/></button>
         </header>
-
         <div className="packet-email-selection">
           <div><span>Puppy</span><b>{selected.puppy?.name || (loadingData ? "Loading…" : "No puppy selected")}</b></div>
           <div><span>Buyer</span><b>{loadingData ? "Loading…" : buyerName(selected.buyer)}</b></div>
           <div><span>Buyer email</span><b>{loadingData ? "Loading…" : selected.buyer?.email || "Not recorded"}</b></div>
         </div>
-
         <div className="packet-email-modes">
           <button type="button" className={mode === "buyer" ? "active" : ""} onClick={() => { setMode("buyer"); setError(""); setSuccess(""); }}><UserRound size={18}/><span><b>Send to buyer</b><small>Uses the buyer email stored in SWVAOS.</small></span></button>
           <button type="button" className={mode === "test" ? "active" : ""} onClick={() => { setMode("test"); setError(""); setSuccess(""); }}><FlaskConical size={18}/><span><b>Send a test copy</b><small>Choose any email address without changing the buyer record.</small></span></button>
         </div>
-
         {mode === "test" && <label className="packet-test-email"><span>Test email address</span><input type="email" value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder="name@example.com" autoFocus/></label>}
-
-        <div className="packet-email-preview">
-          <Mail size={20}/><div><b>{selected.puppy?.name || "Puppy"}&apos;s Personalized Puppy Care Packet</b><p>The email includes the complete branded PDF as an attachment. Test copies are clearly marked TEST COPY.</p></div>
-        </div>
-
+        <div className="packet-email-preview"><Mail size={20}/><div><b>{selected.puppy?.name || "Puppy"}&apos;s Personalized Puppy Care Packet</b><p>The email includes the complete branded PDF as an attachment. Test copies are clearly marked TEST COPY.</p></div></div>
         {error && <div className="packet-email-error">{error}</div>}
         {success && <div className="packet-email-success"><CheckCircle2 size={17}/>{success}</div>}
-
         <footer>
           <button type="button" className="packet-email-cancel" disabled={sending} onClick={() => setOpen(false)}>Close</button>
           <button type="button" className="packet-email-send" disabled={sending || loadingData} onClick={() => void sendPacket()}>{sending ? <LoaderCircle className="packet-email-spinner" size={17}/> : <Send size={17}/>} {sending ? "Preparing and sending…" : mode === "test" ? "Send Test Email" : "Send to Buyer"}</button>
