@@ -19,6 +19,7 @@ function buyerKeys(row: Row) {
   const normalizedZip = zip(row);
   const normalizedLocation = location(row);
   return [
+    normalizedName ? `name:${normalizedName}` : "",
     email(row) ? `email:${email(row)}` : "",
     normalizedName && normalizedPhone ? `name-phone:${normalizedName}|${normalizedPhone}` : "",
     normalizedName && normalizedZip ? `name-zip:${normalizedName}|${normalizedZip}` : "",
