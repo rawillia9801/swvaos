@@ -19,7 +19,8 @@ export async function POST(request: Request) {
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const webhookBase = process.env.TWILIO_WEBHOOK_BASE_URL?.trim().replace(/\/$/, "") || "https://swvaos.site";
+  const configuredBase = process.env.TWILIO_WEBHOOK_BASE_URL?.trim().replace(/\/$/, "");
+  const webhookBase = configuredBase === "https://swvaos.site" ? "https://www.swvaos.site" : configuredBase || "https://www.swvaos.site";
   if (!accountSid || !authToken) {
     return Response.json({ error: "Twilio credentials must be configured before syncing phone lines." }, { status: 503 });
   }
