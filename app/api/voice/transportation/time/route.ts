@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       return voiceError("The verified voice session is missing or expired.", 403);
     }
 
-    const profile = await getCallerCrmProfile(phone);
+    const profile = await getCallerCrmProfile(phone, undefined, session.buyerId);
     if (!profile.recognized || profile.buyer?.id !== session.buyerId) return voiceError("The verified family account no longer matches this call.", 403);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return voiceXml(restartTransportation(sessionToken, line));
 
