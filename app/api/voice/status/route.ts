@@ -1,7 +1,9 @@
+import { DEFAULT_MAIN_NUMBER, DEFAULT_PUP_LIFT_NUMBER } from "../../../../lib/caller-voice";
+
 export const runtime = "nodejs";
 
-const mainNumber = process.env.SWVAOS_CALLER_ID?.trim() || "+18555065425";
-const pupLiftNumber = process.env.SWVAOS_PUP_LIFT_NUMBER?.trim() || "+17158889526";
+const mainNumber = process.env.SWVAOS_MAIN_NUMBER?.trim() || DEFAULT_MAIN_NUMBER;
+const pupLiftNumber = process.env.SWVAOS_PUP_LIFT_NUMBER?.trim() || DEFAULT_PUP_LIFT_NUMBER;
 
 export async function GET() {
   return Response.json({
@@ -9,7 +11,7 @@ export async function GET() {
     voice_webhook_configured: Boolean(process.env.TWILIO_AUTH_TOKEN?.trim()),
     webhook_base_configured: Boolean(process.env.TWILIO_WEBHOOK_BASE_URL?.trim()),
     call_forwarding_configured: Boolean(process.env.SWVAOS_CALL_TEAM_NUMBERS?.trim()),
-    caller_id_configured: Boolean(process.env.SWVAOS_CALLER_ID?.trim()),
+    caller_id_configured: Boolean(mainNumber),
     caller_lookup_configured: Boolean(process.env.SWVAOS_CRM_API_KEY?.trim()),
     managed_lines: [
       { id: "main", label: "SWVAOS Main Line", phone: mainNumber },
