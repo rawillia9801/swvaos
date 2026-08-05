@@ -1,3 +1,4 @@
+import { DEFAULT_MAIN_NUMBER } from "../../../../../lib/caller-voice";
 import { readVoiceForm, twilio, validateVoiceRequest, voiceError, voiceXml } from "../../../../../lib/voice-webhook";
 
 export const runtime = "nodejs";
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   if (!validation.valid) return voiceError(validation.error, validation.status);
 
   const destination = normalizePhone(new URL(request.url).searchParams.get("to"));
-  const callerId = normalizePhone(process.env.SWVAOS_CALLER_ID);
+  const callerId = normalizePhone(process.env.SWVAOS_MAIN_NUMBER || DEFAULT_MAIN_NUMBER);
   if (!destination || !callerId) return voiceError("Outbound call routing is not configured.", 503);
 
   const response = new twilio.twiml.VoiceResponse();

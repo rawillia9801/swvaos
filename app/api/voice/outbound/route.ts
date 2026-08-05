@@ -1,6 +1,7 @@
 import twilio from "twilio";
 import { logCallerEvent } from "../../../../db/caller-crm";
 import { requireAdminSession } from "../../../../lib/admin-session";
+import { DEFAULT_MAIN_NUMBER } from "../../../../lib/caller-voice";
 
 export const runtime = "nodejs";
 
@@ -24,10 +25,11 @@ export async function POST(request: Request) {
 
     const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
     const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-    const callerId = normalizePhone(process.env.SWVAOS_CALLER_ID);
-    const webhookBase = process.env.TWILIO_WEBHOOK_BASE_URL?.trim().replace(/\/$/, "");
+    const callerId = normalizePhone(process.env.SWVAOS_MAIN_NUMBER || DEFAULT_MAIN_NUMBER);
+    const configuredBase = process.env.TWILIO_WEBHOOK_BASE_URL?.trim().replace(/\/$/, "");
+    const webhookBase = configuredBase === "https://swvaos.site" ? "https://www.swvaos.site" : configuredBase || "https://www.swvaos.site";
     const teamNumbers = (process.env.SWVAOS_CALL_TEAM_NUMBERS ?? "").split(",").map(normalizePhone).filter(Boolean);
-    if (!accountSid || !authToken || !callerId || !webhookBase || !teamNumbers.length) {
+    if (!accountSid || !authToken || !callerId || !teamNumbers.length) {
       return Response.json({ error: "Twilio outbound calling is not fully configured." }, { status: 503 });
     }
 
