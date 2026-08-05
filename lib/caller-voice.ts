@@ -109,10 +109,9 @@ export function verificationFailedVoiceResponse(calledNumber: string | null | un
   return response;
 }
 
-export function verificationSuccessVoiceResponse(profile: CallerCrmProfile, calledNumber: string | null | undefined, session: string) {
+export function verificationSuccessVoiceResponse(_profile: CallerCrmProfile, calledNumber: string | null | undefined, session: string) {
   const response = new twilio.twiml.VoiceResponse();
-  const firstName = profile.buyer?.first_name || profile.buyer?.name || "there";
-  response.say(voice, `Thank you, ${firstName}. Your family account is verified for this call.`);
+  response.say(voice, "Your family account is verified for this call.");
   response.redirect(routeWithContext("/api/voice/account", calledNumber, { session }));
   return response;
 }
