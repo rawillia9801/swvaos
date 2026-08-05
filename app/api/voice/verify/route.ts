@@ -101,6 +101,28 @@ async function safeRows(table: string) {
   }
 }
 
+async function saveMissingZipToBuyer(buyerId: number, digits: string, buyerRow?: Row) {
+  const updatePostal = await supabaseRequest(`rest/v1/buyers?id=eq.${buyerId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", prefer: "return=minimal" },
+    body: JSON.stringify({ postal_code: digits }),
+  });
+  if (updatePostal.ok) return;
+
+  const existingNotes = String(buyerRow?.notes ?? "").trim();
+  const marker = `Voice verification ZIP: ${digits}`;
+  const updateNotes = await supabaseRequest(`rest/v1/buyers?id=eq.${buyerId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", prefer: "return=minimal" },
+    body: JSON.stringify({ notes: [existingNotes, marker].filter(Boolean).join("\n") }),
+  });
+  if (updateNotes.ok) return;
+
+  const postalError = await updatePostal.text();
+  const notesError = await updateNotes.text();
+  throw new Error(postalError || notesError || "Unable to save the missing ZIP code to the buyer record.");
+}
+
 export async function POST(request: Request) {
   const form = await readVoiceForm(request);
   const validation = validateVoiceRequest(request, form);
@@ -132,10 +154,25 @@ export async function POST(request: Request) {
       })
       .map((row) => ({ table, row })));
 
-    const zipMatchedRecord = relatedRows.find(({ row }) => storedZips(row).has(digits));
-    const verified = Boolean(initialProfile.recognized && initialProfile.buyer?.id && zipMatchedRecord);
     const storedZipCount = relatedRows.reduce((count, candidate) => count + storedZips(candidate.row).size, 0);
     const sourcesWithZips = [...new Set(relatedRows.filter((candidate) => storedZips(candidate.row).size).map((candidate) => candidate.table))];
+    let zipMatchedRecord = relatedRows.find(({ row }) => storedZips(row).has(digits));
+    let enrolledMissingZip = false;
+
+    const exactBuyerPhoneMatch = Boolean(
+      initialProfile.recognized &&
+      initialProfile.buyer?.id &&
+      normalizeCallerPhone(initialProfile.buyer.phone) === normalizedPhone,
+    );
+
+    if (!zipMatchedRecord && storedZipCount === 0 && exactBuyerPhoneMatch && profileBuyerId > 0) {
+      const canonicalBuyer = sourceRows.find((source) => source.table === "buyers")?.rows.find((row) => Number(row.id) === profileBuyerId);
+      await saveMissingZipToBuyer(profileBuyerId, digits, canonicalBuyer);
+      zipMatchedRecord = { table: "buyers", row: { ...(canonicalBuyer || {}), postal_code: digits } };
+      enrolledMissingZip = true;
+    }
+
+    const verified = Boolean(initialProfile.recognized && initialProfile.buyer?.id && zipMatchedRecord);
 
     console.info("[voice/verify] ZIP verification evaluated", {
       callSid: form.CallSid || "",
@@ -143,6 +180,7 @@ export async function POST(request: Request) {
       relatedRecords: relatedRows.length,
       storedZipCount,
       sourcesWithZips,
+      enrolledMissingZip,
       zipMatched: Boolean(zipMatchedRecord),
       matchedSource: zipMatchedRecord?.table || null,
       attempt,
@@ -171,9 +209,11 @@ export async function POST(request: Request) {
       phone,
       callSid: form.CallSid,
       buyerId: verifiedProfile.buyer!.id,
-      title: "Voice account verified",
+      title: enrolledMissingZip ? "Voice account ZIP added and verified" : "Voice account verified",
       status: "Completed",
-      details: `Caller phone and five-digit ZIP were verified against linked family records. Verification source: ${zipMatchedRecord!.table}. Private voice menu access granted for this call.`,
+      details: enrolledMissingZip
+        ? "The caller telephone matched the buyer record, no ZIP was stored on any related record, and the entered five-digit ZIP was saved to the buyer account. Private voice menu access granted for this call."
+        : `Caller phone and five-digit ZIP were verified against linked family records. Verification source: ${zipMatchedRecord!.table}. Private voice menu access granted for this call.`,
     }).catch(() => null);
     return voiceXml(verificationSuccessVoiceResponse(verifiedProfile, calledNumber, session));
   } catch (error) {
