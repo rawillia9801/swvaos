@@ -229,6 +229,9 @@ test("ships the caller CRM and complete line-aware voice menus", async () => {
   assert.match(callerVoice, /DEFAULT_GOLDEN_NUMBER/);
   assert.match(callerVoice, /Cedar & Creek Goldens/);
   assert.match(callerVoice, /goldenMenuVoiceResponse/);
+  assert.match(callerVoice, /Polly\.Emma/);
+  assert.match(callerVoice, /digit === "8"/);
+  assert.match(callerVoice, /digit === "0"/);
   assert.match(callerVoice, /repeat tiny amounts every 3 to 5 minutes/i);
   assert.match(voiceConfig, /incomingPhoneNumbers/);
   assert.match(voiceConfig, /Pup-Lift Support/);
@@ -240,6 +243,8 @@ test("ships the caller CRM and complete line-aware voice menus", async () => {
   assert.match(incomingRoute, /Caller CRM event stored/);
   assert.match(incomingRoute, /Caller CRM event failed/);
   assert.match(incomingRoute, /available puppies and planned litters/);
+  assert.match(incomingRoute, /To leave a voicemail, press 8/);
+  assert.match(incomingRoute, /To speak with the breeder, press 0/);
   assert.doesNotMatch(incomingRoute, /catch\(\(\) => null\)/);
   assert.match(env, /TWILIO_AUTH_TOKEN/);
   assert.match(env, /SWVAOS_CRM_API_KEY/);
