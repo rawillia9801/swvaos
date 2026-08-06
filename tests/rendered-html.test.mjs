@@ -226,18 +226,26 @@ test("ships the caller CRM and complete line-aware voice menus", async () => {
   assert.match(callerVoice, /Press 6 to speak with someone/);
   assert.match(callerVoice, /Polly\.Joanna/);
   assert.match(callerVoice, /DEFAULT_PUP_LIFT_NUMBER/);
+  assert.match(callerVoice, /DEFAULT_GOLDEN_NUMBER/);
+  assert.match(callerVoice, /Cedar & Creek Goldens/);
+  assert.match(callerVoice, /goldenMenuVoiceResponse/);
   assert.match(callerVoice, /repeat tiny amounts every 3 to 5 minutes/i);
   assert.match(voiceConfig, /incomingPhoneNumbers/);
   assert.match(voiceConfig, /Pup-Lift Support/);
+  assert.match(voiceConfig, /golden-retriever/);
+  assert.match(voiceConfig, /Cedar & Creek Goldens/);
   assert.match(activityRoute, /requireAdminSession/);
   assert.match(activityRoute, /getCallerActivityFromSupabase/);
   assert.match(activityRoute, /no-store/);
   assert.match(incomingRoute, /Caller CRM event stored/);
   assert.match(incomingRoute, /Caller CRM event failed/);
+  assert.match(incomingRoute, /available puppies and planned litters/);
   assert.doesNotMatch(incomingRoute, /catch\(\(\) => null\)/);
   assert.match(env, /TWILIO_AUTH_TOKEN/);
   assert.match(env, /SWVAOS_CRM_API_KEY/);
   assert.match(env, /SWVAOS_PUP_LIFT_NUMBER/);
+  assert.match(env, /SWVAOS_MAIN_NUMBER=\+12762509512/);
+  assert.match(env, /SWVAOS_GOLDEN_NUMBER=\+12762762757/);
 });
 
 test("generates e-signature contracts and retains them in the puppy portal", async () => {
