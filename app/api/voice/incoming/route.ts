@@ -5,6 +5,7 @@ import { readVoiceForm, twilio, validateVoiceRequest, voiceError, voiceXml } fro
 export const runtime = "nodejs";
 
 const voice = { voice: "Polly.Joanna" as const, language: "en-US" as const };
+const goldenVoice = { voice: "Polly.Emma" as const, language: "en-GB" as const };
 
 function routeWithLine(path: string, calledNumber: string) {
   const url = new URL(path, "https://voice.swvaos.local");
@@ -25,8 +26,8 @@ function privateSafeMainMenu(recognized: boolean, calledNumber: string) {
 
   if (isGoldenLine(calledNumber)) {
     gather.say(
-      voice,
-      "Thank you for calling Cedar and Creek Goldens, a MyDogPortal Business Voice demonstration. Press 1 for available puppies and planned litters. Press 2 for health testing and parent dogs. Press 3 for applications and the reservation process. Press 4 for pickup and delivery. Press 5 to leave a message. Press 6 to speak with the breeder. Press 9 to repeat this menu.",
+      goldenVoice,
+      "Welcome to Cedar and Creek Goldens. For available puppies and planned litters, press 1. To meet our parent dogs and hear about health testing, press 2. To learn how our family matching process works, press 3. For visits, pickup, and delivery, press 4. For our website and breeder information, press 5. To leave a voicemail, press 8. To speak with the breeder, press 0. To hear this menu again, press 9.",
     );
   } else if (recognized) {
     gather.say(
@@ -40,7 +41,7 @@ function privateSafeMainMenu(recognized: boolean, calledNumber: string) {
     );
   }
 
-  response.say(voice, "We did not receive a selection.");
+  response.say(isGoldenLine(calledNumber) ? goldenVoice : voice, "We did not receive a selection.");
   response.redirect(routeWithLine("/api/voice/incoming?repeat=1", calledNumber));
   return response;
 }
