@@ -1,5 +1,5 @@
 import { getCallerCrmProfile, logCallerEvent, type CallerCrmProfile } from "../../../../db/caller-crm";
-import { incomingVoiceResponse, isPupLiftLine, unavailableVoiceResponse } from "../../../../lib/caller-voice";
+import { incomingVoiceResponse, isGoldenLine, isPupLiftLine, unavailableVoiceResponse, voiceBusinessNameForLine } from "../../../../lib/caller-voice";
 import { readVoiceForm, twilio, validateVoiceRequest, voiceError, voiceXml } from "../../../../lib/voice-webhook";
 
 export const runtime = "nodejs";
@@ -26,12 +26,12 @@ function privateSafeMainMenu(recognized: boolean, calledNumber: string) {
   if (recognized) {
     gather.say(
       voice,
-      "Thank you for calling Southwest Virginia Chihuahua. We found a family account connected to the phone number you are calling from. Press 1 if you are an existing applicant or buyer and would like to verify your account. Press 2 for puppy availability and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.",
+      `Thank you for calling ${voiceBusinessNameForLine(calledNumber)}. We found a family account connected to the phone number you are calling from. Press 1 if you are an existing applicant or buyer and would like to verify your account. Press 2 for puppy availability and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for ${isGoldenLine(calledNumber) ? "health testing and breeder information" : "Pup-Lift"}. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.`,
     );
   } else {
     gather.say(
       voice,
-      "Thank you for calling Southwest Virginia Chihuahua. Press 1 if you are an existing applicant or buyer. Press 2 for puppy availability and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.",
+      `Thank you for calling ${voiceBusinessNameForLine(calledNumber)}. Press 1 if you are an existing applicant or buyer. Press 2 for puppy availability and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for ${isGoldenLine(calledNumber) ? "health testing and breeder information" : "Pup-Lift"}. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.`,
     );
   }
 
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
     const calledNumber = form.To || form.Called || new URL(request.url).searchParams.get("line") || "";
     const profile = await getCallerCrmProfile(phone);
     const pupLift = isPupLiftLine(calledNumber);
+    const golden = isGoldenLine(calledNumber);
 
     if (new URL(request.url).searchParams.get("repeat") !== "1") {
       try {
@@ -78,9 +79,9 @@ export async function POST(request: Request) {
           buyerId: profile.buyer?.id,
           title: pupLift ? `Pup-Lift inbound call${profile.recognized ? ` - ${profile.buyer?.name}` : ""}` : profile.recognized ? `Inbound call - ${profile.buyer?.name}` : "Inbound call - unrecognized caller",
           status: "Completed",
-          details: `${pupLift ? "Line: Pup-Lift Support\n" : "Line: SWVAOS Main\n"}${profile.recognized ? "Caller matched to family account." : "Caller was not matched to a family account."}`,
+          details: `${pupLift ? "Line: Pup-Lift Support\n" : golden ? "Line: Cedar & Creek Goldens\n" : "Line: Willow Creek Chihuahuas\n"}${profile.recognized ? "Caller matched to family account." : "Caller was not matched to a family account."}`,
         });
-        console.info("[voice/incoming] Caller CRM event stored", { eventId: event?.id, callSid: form.CallSid, recognized: profile.recognized, line: pupLift ? "pup-lift" : "main" });
+        console.info("[voice/incoming] Caller CRM event stored", { eventId: event?.id, callSid: form.CallSid, recognized: profile.recognized, line: pupLift ? "pup-lift" : golden ? "golden-retriever" : "main" });
       } catch (eventError) {
         console.error("[voice/incoming] Caller CRM event failed", { callSid: form.CallSid, recognized: profile.recognized, error: eventError instanceof Error ? eventError.message : String(eventError) });
       }
