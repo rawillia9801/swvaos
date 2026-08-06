@@ -1,8 +1,9 @@
-import { DEFAULT_MAIN_NUMBER, DEFAULT_PUP_LIFT_NUMBER } from "../../../../lib/caller-voice";
+import { DEFAULT_GOLDEN_NUMBER, DEFAULT_MAIN_NUMBER, DEFAULT_PUP_LIFT_NUMBER } from "../../../../lib/caller-voice";
 
 export const runtime = "nodejs";
 
 const mainNumber = process.env.SWVAOS_MAIN_NUMBER?.trim() || DEFAULT_MAIN_NUMBER;
+const goldenNumber = process.env.SWVAOS_GOLDEN_NUMBER?.trim() || DEFAULT_GOLDEN_NUMBER;
 const pupLiftNumber = process.env.SWVAOS_PUP_LIFT_NUMBER?.trim() || DEFAULT_PUP_LIFT_NUMBER;
 
 export async function GET() {
@@ -14,7 +15,8 @@ export async function GET() {
     caller_id_configured: Boolean(mainNumber),
     caller_lookup_configured: Boolean(process.env.SWVAOS_CRM_API_KEY?.trim()),
     managed_lines: [
-      { id: "main", label: "SWVAOS Main Line", phone: mainNumber },
+      { id: "main", label: "Willow Creek Chihuahuas", phone: mainNumber },
+      { id: "golden-retriever", label: "Cedar & Creek Goldens", phone: goldenNumber },
       { id: "pup-lift", label: "Pup-Lift Support", phone: pupLiftNumber },
     ],
     pup_lift_number: pupLiftNumber,
