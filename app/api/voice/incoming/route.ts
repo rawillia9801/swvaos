@@ -23,7 +23,12 @@ function privateSafeMainMenu(recognized: boolean, calledNumber: string) {
     actionOnEmptyResult: true,
   });
 
-  if (recognized) {
+  if (isGoldenLine(calledNumber)) {
+    gather.say(
+      voice,
+      "Thank you for calling Cedar and Creek Goldens, a MyDogPortal Business Voice demonstration. Press 1 for available puppies and planned litters. Press 2 for health testing and parent dogs. Press 3 for applications and the reservation process. Press 4 for pickup and delivery. Press 5 to leave a message. Press 6 to speak with the breeder. Press 9 to repeat this menu.",
+    );
+  } else if (recognized) {
     gather.say(
       voice,
       `Thank you for calling ${voiceBusinessNameForLine(calledNumber)}. We found a family account connected to the phone number you are calling from. Press 1 if you are an existing applicant or buyer and would like to verify your account. Press 2 for puppy availability and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for ${isGoldenLine(calledNumber) ? "health testing and breeder information" : "Pup-Lift"}. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.`,
