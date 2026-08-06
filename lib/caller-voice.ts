@@ -202,7 +202,26 @@ function pupLiftMenuVoiceResponse(digit: string, calledNumber: string | null | u
   return response;
 }
 
+function goldenMenuVoiceResponse(profile: CallerCrmProfile, digit: string, calledNumber: string | null | undefined) {
+  if (digit === "5") return messageVoiceResponse(false);
+  if (digit === "6") return connectToTeamVoiceResponse(calledNumber);
+  const response = new twilio.twiml.VoiceResponse();
+  if (digit === "9" || !digit) {
+    response.redirect(routeWithContext(incomingPath, calledNumber));
+    return response;
+  }
+  if (digit === "1") response.say(voice, publicPuppySpeech(profile));
+  else if (digit === "2") response.say(voice, "Our Golden Retriever example highlights parent health testing, genetic screening, temperament, and clear health records. A live breeder can customize this option with the exact clearances and parent information maintained for their program.");
+  else if (digit === "3") response.say(voice, "Applications help the breeder learn about your household, timing, and puppy preferences before a placement is made. A live breeder can customize this option with wait-list, reservation, deposit, and matching details.");
+  else if (digit === "4") response.say(voice, "Pickup and delivery options are arranged with each family after a puppy is matched. A live breeder can customize this option with pickup locations, travel availability, delivery fees, and scheduling instructions.");
+  else response.say(voice, "That selection is not available.");
+  response.pause({ length: 1 });
+  response.redirect(routeWithContext(incomingPath, calledNumber));
+  return response;
+}
+
 export function menuVoiceResponse(profile: CallerCrmProfile, digit: string, calledNumber?: string | null) {
+  if (isGoldenLine(calledNumber)) return goldenMenuVoiceResponse(profile, digit, calledNumber);
   if (isPupLiftLine(calledNumber)) return pupLiftMenuVoiceResponse(digit, calledNumber);
   if (digit === "6") return messageVoiceResponse(profile.recognized);
   if (digit === "7") return connectToTeamVoiceResponse(calledNumber);
