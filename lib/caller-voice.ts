@@ -2,6 +2,7 @@ import type { CallerCrmProfile } from "../db/caller-crm";
 import { shortenSpeech, twilio } from "./voice-webhook";
 
 const voice = { voice: "Polly.Joanna" as const, language: "en-US" as const };
+const goldenVoice = { voice: "Polly.Emma" as const, language: "en-GB" as const };
 const incomingPath = "/api/voice/incoming?repeat=1";
 export const DEFAULT_MAIN_NUMBER = "+12762509512";
 export const DEFAULT_GOLDEN_NUMBER = "+12762762757";
@@ -158,19 +159,19 @@ export function accountVoiceResponse(profile: CallerCrmProfile, digit: string, c
   return response;
 }
 
-export function messageVoiceResponse(recognized: boolean) {
+export function messageVoiceResponse(recognized: boolean, speechVoice: typeof voice | typeof goldenVoice = voice) {
   const response = new twilio.twiml.VoiceResponse();
-  response.say(voice, `${recognized ? "After the tone, leave your message." : "After the tone, leave your name, phone number, and message."} Press pound when you are finished. Your recording will be saved for our team.`);
+  response.say(speechVoice, `${recognized ? "After the tone, leave your message." : "After the tone, leave your name, phone number, and message."} Press pound when you are finished. Your recording will be saved for our team.`);
   response.record({ action: "/api/voice/message", method: "POST", maxLength: 120, finishOnKey: "#", playBeep: true, recordingStatusCallback: "/api/voice/recording", recordingStatusCallbackMethod: "POST", recordingStatusCallbackEvent: ["completed"] });
   response.say(voice, "We did not receive a message. Goodbye.");
   return response;
 }
 
-function connectToTeamVoiceResponse(calledNumber?: string | null) {
+function connectToTeamVoiceResponse(calledNumber?: string | null, speechVoice: typeof voice | typeof goldenVoice = voice) {
   const response = new twilio.twiml.VoiceResponse();
   const numbers = (process.env.SWVAOS_CALL_TEAM_NUMBERS || "").split(",").map((number) => number.trim()).filter(Boolean);
-  if (!numbers.length) return messageVoiceResponse(false);
-  response.say(voice, "Please hold while we connect your call.");
+  if (!numbers.length) return messageVoiceResponse(false, speechVoice);
+  response.say(speechVoice, "Please hold while we connect your call.");
   const callerId = normalizePhone(calledNumber) || process.env.SWVAOS_MAIN_NUMBER?.trim() || DEFAULT_MAIN_NUMBER;
   const dial = response.dial({ timeout: 30, answerOnBridge: true, callerId });
   numbers.forEach((number) => dial.number(number));
@@ -203,18 +204,19 @@ function pupLiftMenuVoiceResponse(digit: string, calledNumber: string | null | u
 }
 
 function goldenMenuVoiceResponse(profile: CallerCrmProfile, digit: string, calledNumber: string | null | undefined) {
-  if (digit === "5") return messageVoiceResponse(false);
-  if (digit === "6") return connectToTeamVoiceResponse(calledNumber);
+  if (digit === "8") return messageVoiceResponse(false, goldenVoice);
+  if (digit === "0") return connectToTeamVoiceResponse(calledNumber, goldenVoice);
   const response = new twilio.twiml.VoiceResponse();
   if (digit === "9" || !digit) {
     response.redirect(routeWithContext(incomingPath, calledNumber));
     return response;
   }
-  if (digit === "1") response.say(voice, publicPuppySpeech(profile));
-  else if (digit === "2") response.say(voice, "Our Golden Retriever example highlights parent health testing, genetic screening, temperament, and clear health records. A live breeder can customize this option with the exact clearances and parent information maintained for their program.");
-  else if (digit === "3") response.say(voice, "Applications help the breeder learn about your household, timing, and puppy preferences before a placement is made. A live breeder can customize this option with wait-list, reservation, deposit, and matching details.");
-  else if (digit === "4") response.say(voice, "Pickup and delivery options are arranged with each family after a puppy is matched. A live breeder can customize this option with pickup locations, travel availability, delivery fees, and scheduling instructions.");
-  else response.say(voice, "That selection is not available.");
+  if (digit === "1") response.say(goldenVoice, publicPuppySpeech(profile));
+  else if (digit === "2") response.say(goldenVoice, "Meet the heart of our program. Our parent-dog and health section can describe each sire and dam, temperament, genetic screening, and health clearances. A breeder can customize this menu with the exact records they want families to hear.");
+  else if (digit === "3") response.say(goldenVoice, "Our matching process starts with learning about the family, home, timing, and the kind of companion they hope to welcome. A breeder can customize this option with their application, wait-list, reservation, and matching process.");
+  else if (digit === "4") response.say(goldenVoice, "Visits, pickup, and delivery can be explained right here on the phone. A breeder can provide visiting hours, pickup locations, delivery areas, travel fees, and scheduling instructions for their own program.");
+  else if (digit === "5") response.say(goldenVoice, "You can preview the Cedar and Creek Goldens website through MyDogPortal dot site. This phone menu is also a MyDogPortal Business Voice example, and the greeting, voice, menu choices, and call routing can all be customized for a breeder.");
+  else response.say(goldenVoice, "That option is not on this menu. Press 9 to hear the choices again.");
   response.pause({ length: 1 });
   response.redirect(routeWithContext(incomingPath, calledNumber));
   return response;
