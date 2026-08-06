@@ -3,7 +3,8 @@ import { shortenSpeech, twilio } from "./voice-webhook";
 
 const voice = { voice: "Polly.Joanna" as const, language: "en-US" as const };
 const incomingPath = "/api/voice/incoming?repeat=1";
-export const DEFAULT_MAIN_NUMBER = "+12762761669";
+export const DEFAULT_MAIN_NUMBER = "+12762509512";
+export const DEFAULT_GOLDEN_NUMBER = "+12762762757";
 export const DEFAULT_PUP_LIFT_NUMBER = "+17158889526";
 
 function normalizePhone(value: string | null | undefined) {
@@ -13,6 +14,16 @@ function normalizePhone(value: string | null | undefined) {
   if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
   if (raw.startsWith("+") && digits.length >= 8 && digits.length <= 15) return `+${digits}`;
   return "";
+}
+
+export function isGoldenLine(calledNumber: string | null | undefined) {
+  return normalizePhone(calledNumber) === normalizePhone(process.env.SWVAOS_GOLDEN_NUMBER || DEFAULT_GOLDEN_NUMBER);
+}
+
+export function voiceBusinessNameForLine(calledNumber: string | null | undefined) {
+  if (isGoldenLine(calledNumber)) return "Cedar & Creek Goldens";
+  if (normalizePhone(calledNumber) === normalizePhone(process.env.SWVAOS_MAIN_NUMBER || DEFAULT_MAIN_NUMBER)) return "Willow Creek Chihuahuas";
+  return "Southwest Virginia Chihuahua";
 }
 
 export function isPupLiftLine(calledNumber: string | null | undefined) {
@@ -35,8 +46,8 @@ const spokenDate = (value: string) => value ? new Intl.DateTimeFormat("en-US", {
 function publicMenu(response: InstanceType<typeof twilio.twiml.VoiceResponse>, profile: CallerCrmProfile, calledNumber: string | null | undefined) {
   const gather = response.gather({ action: routeWithContext("/api/voice/menu", calledNumber), method: "POST", input: ["dtmf"], numDigits: 1, timeout: 8, actionOnEmptyResult: true });
   gather.say(voice, profile.recognized
-    ? "Thank you for calling Southwest Virginia Chihuahua. We found a family account associated with the phone number you are calling from. Press 1 to verify the account. Press 2 for available puppies and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift information. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu."
-    : "Thank you for calling Southwest Virginia Chihuahua. Press 1 if you are an existing applicant or buyer and need account help. Press 2 for available puppies and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for Pup-Lift information. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.");
+    ? `Thank you for calling ${voiceBusinessNameForLine(calledNumber)}. We found a family account associated with the phone number you are calling from. Press 1 to verify the account. Press 2 for available puppies and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for ${isGoldenLine(calledNumber) ? "health testing and breeder information" : "Pup-Lift information"}. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.`
+    : `Thank you for calling ${voiceBusinessNameForLine(calledNumber)}. Press 1 if you are an existing applicant or buyer and need account help. Press 2 for available puppies and applications. Press 3 for pickup, delivery, and transportation. Press 4 for payments and financing. Press 5 for ${isGoldenLine(calledNumber) ? "health testing and breeder information" : "Pup-Lift information"}. Press 6 to leave a message. Press 7 to speak with our team. Press 9 to repeat this menu.`);
 }
 
 function pupLiftMenu(response: InstanceType<typeof twilio.twiml.VoiceResponse>, calledNumber: string | null | undefined) {
@@ -124,7 +135,7 @@ function secureMenu(response: InstanceType<typeof twilio.twiml.VoiceResponse>, p
 
 export function accountVoiceResponse(profile: CallerCrmProfile, digit: string, calledNumber: string | null | undefined, session: string) {
   if (digit === "6") return messageVoiceResponse(true);
-  if (digit === "7") return connectToTeamVoiceResponse();
+  if (digit === "7") return connectToTeamVoiceResponse(calledNumber);
   const response = new twilio.twiml.VoiceResponse();
   if (!digit || digit === "9") {
     secureMenu(response, profile, calledNumber, session);
@@ -155,12 +166,12 @@ export function messageVoiceResponse(recognized: boolean) {
   return response;
 }
 
-function connectToTeamVoiceResponse() {
+function connectToTeamVoiceResponse(calledNumber?: string | null) {
   const response = new twilio.twiml.VoiceResponse();
   const numbers = (process.env.SWVAOS_CALL_TEAM_NUMBERS || "").split(",").map((number) => number.trim()).filter(Boolean);
   if (!numbers.length) return messageVoiceResponse(false);
   response.say(voice, "Please hold while we connect your call.");
-  const callerId = process.env.SWVAOS_MAIN_NUMBER?.trim() || DEFAULT_MAIN_NUMBER;
+  const callerId = normalizePhone(calledNumber) || process.env.SWVAOS_MAIN_NUMBER?.trim() || DEFAULT_MAIN_NUMBER;
   const dial = response.dial({ timeout: 30, answerOnBridge: true, callerId });
   numbers.forEach((number) => dial.number(number));
   return response;
@@ -175,7 +186,7 @@ export function unavailableVoiceResponse() {
 
 function pupLiftMenuVoiceResponse(digit: string, calledNumber: string | null | undefined) {
   if (digit === "5") return messageVoiceResponse(false);
-  if (digit === "6") return connectToTeamVoiceResponse();
+  if (digit === "6") return connectToTeamVoiceResponse(calledNumber);
   const response = new twilio.twiml.VoiceResponse();
   if (digit === "9" || !digit) {
     response.redirect(routeWithContext(incomingPath, calledNumber));
@@ -194,7 +205,7 @@ function pupLiftMenuVoiceResponse(digit: string, calledNumber: string | null | u
 export function menuVoiceResponse(profile: CallerCrmProfile, digit: string, calledNumber?: string | null) {
   if (isPupLiftLine(calledNumber)) return pupLiftMenuVoiceResponse(digit, calledNumber);
   if (digit === "6") return messageVoiceResponse(profile.recognized);
-  if (digit === "7") return connectToTeamVoiceResponse();
+  if (digit === "7") return connectToTeamVoiceResponse(calledNumber);
   const response = new twilio.twiml.VoiceResponse();
   if (digit === "9" || !digit) {
     response.redirect(routeWithContext(incomingPath, calledNumber));
@@ -211,7 +222,7 @@ export function menuVoiceResponse(profile: CallerCrmProfile, digit: string, call
   if (digit === "2") response.say(voice, publicPuppySpeech(profile));
   else if (digit === "3") response.say(voice, "Ground transportation is arranged after a puppy is assigned. Meeting dates are limited to one family per day across the program. Verified buyers can check eligibility and request an available date through the private account menu.");
   else if (digit === "4") response.say(voice, "Payment plans may be available for eligible puppies when approved in advance. Deposits, due dates, balances, and payment methods are documented in the buyer agreement and family account.");
-  else if (digit === "5") response.say(voice, "Pup-Lift provides emergency glucose-support information for toy-breed puppies at risk of hypoglycemia. It does not replace veterinary care. For the dedicated Pup-Lift support line, call 715-888-9526.");
+  else if (digit === "5") response.say(voice, isGoldenLine(calledNumber) ? "Cedar and Creek Goldens provides parent health testing and breeder information with its puppy-placement process. Press 6 to leave a message or 7 to speak with our team for current litter, parent, and health-record details." : "Pup-Lift provides emergency glucose-support information for toy-breed puppies at risk of hypoglycemia. It does not replace veterinary care. For the dedicated Pup-Lift support line, call 715-888-9526.");
   else response.say(voice, "That selection is not available.");
   response.pause({ length: 1 });
   response.redirect(routeWithContext(incomingPath, calledNumber));
